@@ -1,0 +1,19 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yaml,yml,json}]
+indent_size = 2
+
+[*.toml]
+indent_size = 4
+
+[*.md]
+# Markdown 里两个空格是硬换行语法，去掉会把排版弄坏
+trim_trailing_whitespace = false

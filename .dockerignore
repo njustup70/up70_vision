@@ -1,0 +1,15 @@
+# 构建上下文里不该出现的东西：体积大、与本机构建无关、或含本地私有数据。
+# 少了这个文件，docker build 会把 .git、output、本地笔记一起打包进上下文，
+# 既拖慢构建，也可能把不该分发的内容带进镜像。
+
+.git
+.ai-memory
+.codebuddy
+.vscode
+output
+__pycache__
+*.pyc
+*.egg-info
+
+# 维护者的个人设计笔记，不进版本库，也不进镜像
+docs/removed_and_design_notes.md

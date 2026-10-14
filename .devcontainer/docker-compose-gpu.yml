@@ -1,0 +1,27 @@
+# up70-vision GPU 变体：在 CPU 版基础上把 NVIDIA GPU 透传进容器。
+#
+# 当前阶段没有任何 CUDA 依赖（没装 PyTorch / ultralytics），所以这个文件是预留——
+# 等接 YOLO 训练、镜像里装上 cu128 的 torch 时才派上用场。
+#
+# 宿主机前置（只需一次）：
+#   sudo apt-get install -y nvidia-container-toolkit
+#   sudo nvidia-ctk runtime configure
+#   sudo systemctl restart docker
+#
+# 用法与 CPU 版相同，只是换 -f 指向本文件：
+#   docker compose -f .devcontainer/docker-compose-gpu.yml run --rm up70-vision python scripts/demo.py
+
+services:
+  up70-vision:
+    # 复用 CPU 版的服务定义，只在这里追加 GPU 透传，避免两份配置各自漂移。
+    # file 相对本文件所在目录（.devcontainer/）解析。
+    extends:
+      file: ./docker-compose.yml
+      service: up70-vision
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

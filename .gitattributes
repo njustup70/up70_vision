@@ -1,0 +1,17 @@
+# 强制所有文本文件使用 LF 行尾。
+# 队友里有人在 Windows 上用默认的 CRLF，有人用 Linux，不统一会导致每次 diff
+# 整个文件都变红，真正的改动淹没在行尾噪音里。
+* text=auto eol=lf
+
+# 二进制文件不要做行尾转换，否则文件会被破坏
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.webp binary
+*.npy binary
+*.npz binary
+*.pt binary
+*.onnx binary
+*.engine binary
+*.trt binary

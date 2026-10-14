@@ -1,0 +1,49 @@
+# Python 编译与缓存产物
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 打包产物
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 运行产物：目录本身要保留（放了 .gitkeep），里面的内容不入库
+output/*
+!output/.gitkeep
+
+# 数据集与回放素材：体积大，不进版本库，只保留说明文件
+#   注意 data 下的子目录结构靠各人的本地约定，仓库里只有 README 描述规则
+data/*
+!data/README.md
+
+# 模型权重：大文件不进版本库
+*.pt
+*.onnx
+*.engine
+*.trt
+
+# 环境文件与密钥
+.env
+*.local.yaml
+
+# AI 协作内部目录：会话数据与项目记忆，不进版本库
+.workbuddy/
+.ai-memory/
+.codebuddy/
+
+# 编辑器
+.idea/
+.vscode/*
+!.vscode/settings.json.example

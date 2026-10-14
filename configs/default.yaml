@@ -1,0 +1,67 @@
+# 全局默认配置。
+#
+# 所有参数都可以用命令行覆盖，不需要改这个文件：
+#   python scripts/<入口> --set color.hit_ratio_min=0.6
+#   （命令行入口要等 cli.py 重建后才存在；当前改这些文件不会有任何效果）
+# 点分路径对应下面的层级，例如 detector.blob.min_area_px。
+#
+# 哪些改动会影响自检数字：
+#   input.synthetic.num_frames / blocks_per_frame —— 直接改变总色块数
+#   input.synthetic.seed            —— 改变色块位置与噪声，但总数不变
+#   color.*                         —— 改错会导致判色正确率下降
+#   detector.blob.min_area_px       —— 调太大会把真正的色块也过滤掉
+
+input:
+  # synthetic：读取用 OpenCV 合成的色块图，不需要任何素材文件
+  # replay：回放一个图片目录或视频文件（路径在 input.replay.path）
+  # camera：摄像头（本轮未实现，选了会报错）
+  source: synthetic
+
+  synthetic:
+    width: 640
+    height: 480
+    num_frames: 3
+    # 6 与内置颜色数一致，保证每帧 6 个块颜色互不相同。
+    # 自检的期望值「总色块 18 = 3 帧 x 6 块」就来自这两个参数。
+    blocks_per_frame: 6
+    seed: 2027
+    noise_sigma: 8.0
+    background_bgr: [30, 30, 30]
+
+  replay:
+    path: data/clips
+    kind: auto
+    frame_stride: 1
+    max_frames: 0
+
+color:
+  # 相对路径以本文件所在目录（configs/）为基准
+  thresholds_file: color_thresholds.yaml
+  # 饱和度与亮度下限：低于它们的像素视为"没有颜色"（灰、黑、白、背景），
+  # 不参与判色统计。这是颜色识别任务里最需要按场地光照重调的两个数。
+  min_saturation: 40
+  min_value: 40
+  # 命中率门槛，单位是比例不是百分比。设成 1.0 意味着"必须整块都是这个颜色"，
+  # 在有色噪声的合成图上会直接全部判成 unknown。
+  hit_ratio_min: 0.50
+  ignore_border_px: 3
+
+detector:
+  # blob：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重
+  name: blob
+
+  blob:
+    min_area_px: 400
+    morph_kernel: 5
+    max_detections: 32
+
+output:
+  enabled: true
+  dir: output/demo
+  save_overlay: true
+  save_json: true
+  save_csv: true
+
+log:
+  # DEBUG 会把每帧的候选框数与各颜色命中率都打出来，调阈值时开着很有用
+  level: INFO

@@ -1,0 +1,8 @@
+# up70-vision 运行依赖。
+#
+# 本文件是 pyproject.toml 依赖段的展开副本，给只熟悉 pip install -r 的队友用。
+# 改依赖时改 pyproject.toml，再同步这里。两者冲突时以 pyproject.toml 为准。
+
+numpy>=1.26,<3
+opencv-python>=4.10,<5
+PyYAML>=6.0

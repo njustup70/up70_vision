@@ -1,0 +1,38 @@
+# up70-vision 包元数据与依赖声明。
+#
+# 这是依赖的唯一真源：改依赖改这里，然后同步更新 requirements.txt（给只熟悉
+# pip install -r 的队友用）。两者不同步时，以本文件为准。
+#
+# 为什么用 PEP 621 而不是纯 requirements.txt：
+#   1. 能声明 requires-python，pip 会在版本不符时直接拒绝安装，而不是装到一半报错
+#   2. pip install -e . 之后，任何目录下都能 import up70_vision，不需要折腾 PYTHONPATH
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "up70-vision"
+version = "0.0.1"
+description = "UP70 战队视觉仓库：颜色识别与场上目标感知（2D 基础任务）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # numpy：所有图像数据的容器类型。上界 <3 是因为 numpy 3.x 尚未发布稳定版，
+    #   且 opencv-python 4.12 目前只保证适配到 numpy 2.x。
+    "numpy>=1.26,<3",
+    # opencv-python：图像读写、颜色空间转换、形态学、轮廓提取。
+    #   钉 4.x 是因为 YOLO 生态（ultralytics / onnxruntime）目前仍以 OpenCV 4 为基准；
+    #   严禁再装 opencv-python-headless 或 opencv-contrib-python，
+    #   三个包的顶层模块名都是 cv2，同时安装会互相覆盖（本机踩过这个坑）。
+    "opencv-python>=4.10,<5",
+    # PyYAML：读写 configs/*.yaml。选它而不是 Hydra 是因为队友能直接看懂 YAML 内容，
+    #   而 Hydra 会切换工作目录、与相对路径和未来的 ROS 2 节点冲突。
+    "PyYAML>=6.0",
+]
+
+[tool.setuptools.packages.find]
+# src 布局：包的源码放在 src/ 下，而不是仓库根。
+# 这样 pip install -e . 装的是"可编辑安装"，import 的一定是安装后的包，
+# 不会因为脚本自己的相对路径而误 import 到某个同名目录。
+where = ["src"]
