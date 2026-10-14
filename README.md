@@ -57,7 +57,31 @@ VS Code 用户可以直接 Reopen in Container，配置就在 `.devcontainer/dev
 docker compose -f .devcontainer/docker-compose-gpu.yml run --rm up70-vision python scripts/demo.py
 ```
 
-同理，接真相机时还要给容器传设备（`--device=/dev/video0`）并确保宿主机用户在 `video` 组，否则 `cv2.VideoCapture(0)` 打不开。
+### 真相机（海康 MV-CU013-A0UC）
+
+这颗相机走 **USB3 Vision（GenICam），不是 UVC**：宿主机上不会出现 `/dev/video*`，`cv2.VideoCapture` 打不开它，也没有"把用户加进 `video` 组"这回事。接它的正确姿势是：
+
+1. **宿主机配 udev 规则**给出 USB 访问权限（容器里改不了这个）：
+
+   ```bash
+   # /etc/udev/rules.d/99-hikrobot.rules
+   SUBSYSTEM=="usb", ATTRS{idVendor}=="2bdf", MODE="0666", SYMLINK+="hik_camera"
+   ```
+
+   写完 `sudo udevadm control --reload-rules && sudo udevadm trigger`，然后**重新插拔相机**。
+
+2. **把厂商 SDK 装进镜像**：MVS 是 deb 包（写不进 `pyproject.toml`），下载后放进 `.devcontainer/pkgs/` 再 `build` 镜像，Dockerfile 会自动装上（见该目录的 README）。
+
+3. **给容器透传 USB**：`.devcontainer/docker-compose.yml` 里已配好 `devices: ["/dev/bus/usb:/dev/bus/usb"]`——传的是 USB 总线，不是 `/dev/video0`。
+
+4. 跑起来：
+
+   ```bash
+   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+     python scripts/run.py --set input.source=camera --limit 10
+   ```
+
+**相机是独占资源**：同一时刻只有一个程序能用它（MVS 客户端、实时调参窗口、本仓库的 `camera` 源互斥），打不开时先关掉别的占用者。
 
 ### pip 源
 
@@ -73,9 +97,11 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ---
 
-## 当前状态：分层骨架，实现待补
+## 当前状态：核心算法与回归测试已就位
 
-`src/up70_vision/` 目前**只有分层骨架，没有任何实现**。每个子包的 `__init__.py` docstring 写明了它该放什么、不放什么、依赖谁、未来第一件事做什么。
+`src/up70_vision/` 已实现：`core/`（判色与管线）、`io/`（合成图 / 回放 / 真相机 MVS 源）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值），并配了 27 项回归测试（`tests/`）。进度、验证数字与踩过的坑见 `docs/progress.md`。
+
+**还没做**：ROS 2 对接（M4）、YOLO 接入（M5）、场地标定与阈值重调（M6）——都等外部条件确定，原因见 `progress.md` 第七节。
 
 删掉了什么、哪些契约不能破，记录在维护者本地的设计笔记里（`docs/removed_and_design_notes.md`，**属个人文档，不进版本库**）。团队协作以下方「团队约定」与各子包 `__init__.py` 的职责说明为准。
 
@@ -95,15 +121,16 @@ config ┘
 
 | 路径 | 放什么 |
 |---|---|
-| `src/up70_vision/core/` | 纯算法层：判色、管线、检测器（骨架，实现待补） |
-| `src/up70_vision/io/` | 输入源：合成图、回放、摄像头（骨架） |
-| `src/up70_vision/viz/` | 可视化与落盘：画框、写 JSON/CSV（骨架） |
-| `src/up70_vision/config/` | 配置加载与校验（骨架） |
-| `src/up70_vision/utils/` | 通用工具：图像读写、日志（骨架） |
-| `src/up70_vision/tools/` | 人用的工具脚本，如 HSV 交互调参（骨架） |
+| `src/up70_vision/core/` | 纯算法层：判色、管线、检测器（blob 占位检测器；YOLO 待接） |
+| `src/up70_vision/io/` | 输入源：合成图、回放、真相机（海康 MVS） |
+| `src/up70_vision/viz/` | 可视化与落盘：画框、写 JSON/CSV |
+| `src/up70_vision/config/` | 配置加载与校验 |
+| `src/up70_vision/utils/` | 通用工具：图像读写、日志 |
+| `src/up70_vision/tools/` | 人用的工具脚本：HSV 交互调参（`hsv_tuner.py`） |
 | `configs/` | 全部可调参数。阈值一律外置到 YAML，不硬编码在代码里 |
-| `scripts/` | 可直接运行的入口：`demo.py`（OpenCV 冒烟）、`check_env.py`（环境自检） |
-| `.devcontainer/` | 容器化配置全在这：`Dockerfile`、`docker-compose.yml`、`docker-compose-gpu.yml`、`devcontainer.json` |
+| `scripts/` | 可直接运行的入口：`run.py`（主入口）、`demo.py`（OpenCV 冒烟）、`check_env.py`（环境自检） |
+| `tests/` | 回归测试：断言带具体数字，可用 `python tests/test_xxx.py` 独立运行（镜像里没有 pytest） |
+| `.devcontainer/` | 容器化配置全在这：`Dockerfile`、`docker-compose.yml`、`docker-compose-gpu.yml`、`devcontainer.json`、`pkgs/`（本地投放的安装包，如 MVS 的 deb） |
 | `docs/` | `progress.md`：项目进度、里程碑与已知的坑（维护者的设计笔记在本地，不进版本库） |
 | `data/` | 数据集与回放素材（内容不进版本库） |
 | `assets/` | 资源落点：模型权重、字体、示例图（内容不进版本库） |
@@ -114,7 +141,7 @@ config ┘
 
 ## 团队约定
 
-- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交。
+- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交；有算法改动时再加跑 `python tests/test_types.py`、`test_color.py`、`test_pipeline.py`、`test_config.py`（共 27 项，用 `python` 直接跑，不依赖 pytest）。
 - 命名：模块/函数/变量小写下划线，类大驼峰，常量全大写；图像变量必须带颜色空间后缀（如 `frame_bgr`）。
 - 提交：中文祈使句，一句话说清改了什么；`main` 分支始终可运行。
 - 图像一律按 OpenCV 的 BGR 顺序处理；检测框用绝对像素坐标，右/下边界为开区间（半开上界）。

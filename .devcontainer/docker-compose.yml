@@ -21,5 +21,11 @@ services:
     volumes:
       # 宿主仓库根 -> 容器内固定路径，与 Dockerfile 的 WORKDIR 一致
       - ..:/opt/up70_vision
+    # 真相机透传：这颗海康相机走 USB3 Vision（GenICam），数据走 libusb 的
+    # /dev/bus/usb/...，**不是 UVC**，宿主机上根本没有 /dev/video* 可传。
+    # 权限在宿主机用 udev 规则给（见 README.md），容器里改不了。
+    # 不接相机时留着这一行也无害：它只是把 USB 总线暴露进来。
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"
     # 默认命令：环境自检
     command: python scripts/check_env.py
