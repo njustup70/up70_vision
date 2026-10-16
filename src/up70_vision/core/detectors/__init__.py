@@ -10,9 +10,13 @@
 依赖谁
     只依赖 core.types 与 core.color（占位检测器需要借用判色的阈值表生成前景掩码）。
 
-当前为空，未来第一件事
-    先写 base.py：抽象基类 + build_detector 工厂；
-    再写 blob.py：饱和度/亮度分割 + 轮廓提取，在 YOLO 就位前跑通链路。
-    两条约定：返回的 Detection.class_name 填 "unknown"、class_id 填 -1；
-    bbox 用绝对像素坐标，且右/下边界是半开上界。
+当前有什么
+    base.py（抽象基类 + build_detector 工厂）、blob.py（饱和度/亮度分割 + 轮廓提取，
+    返回 `list[Detection]`）、stub_aruco.py（按契约返回**假** `ArucoMarker`，
+    让输入源 / 可视化 / 入口先跑通）。真 ArUco 实现（aruco.py）由搭档交付；YOLO 待接。
+
+两种返回值（docs/interface.md 第 2、3 节）
+    · 判色族 `list[Detection]`：轴对齐 bbox，class_name 填 "unknown"、class_id 填 -1
+    · ArUco `list[ArucoMarker]`：四角点，按 `marker_id` 升序，无码返回 `[]`
+    两者都：无目标返回 `[]`、形参名固定 `image_bgr`、不读文件不开窗口。
 """

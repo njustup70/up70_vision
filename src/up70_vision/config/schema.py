@@ -111,17 +111,24 @@ class InputConfig:
         self.camera.validate()
 
 
+# 每个检测器的默认参数（configs/default.yaml 里也写了一份，这里只是兜底）
+DETECTOR_DEFAULT_PARAMS = {
+    "blob": {"min_area_px": 400, "morph_kernel": 5, "max_detections": 32},
+    "stub_aruco": {"ids": [0, 1, 2], "side_px": 90, "moving": True},
+}
+
+
 @dataclass
 class DetectorConfig:
     name: str = "blob"
-    params: dict = field(default_factory=lambda: {"min_area_px": 400, "morph_kernel": 5,
-                                                  "max_detections": 32})
+    params: dict = field(default_factory=lambda: dict(DETECTOR_DEFAULT_PARAMS["blob"]))
 
     def validate(self) -> None:
-        if not str(self.name).strip():
-            raise ConfigError("detector.name 不能为空")
+        if self.name not in DETECTOR_DEFAULT_PARAMS:
+            raise ConfigError(
+                f"detector.name 必须是 {sorted(DETECTOR_DEFAULT_PARAMS)} 之一，收到 {self.name!r}")
+        p = self.params
         if self.name == "blob":
-            p = self.params
             if int(p.get("min_area_px", 400)) < 0:
                 raise ConfigError(f"detector.blob.min_area_px 不能为负：{p.get('min_area_px')}")
             k = int(p.get("morph_kernel", 5))
@@ -129,6 +136,15 @@ class DetectorConfig:
                 raise ConfigError(f"detector.blob.morph_kernel 必须是正奇数：{k}")
             if int(p.get("max_detections", 32)) <= 0:
                 raise ConfigError(f"detector.blob.max_detections 必须为正：{p.get('max_detections')}")
+        elif self.name == "stub_aruco":
+            ids = p.get("ids", [0, 1, 2])
+            if not isinstance(ids, (list, tuple)) or len(ids) == 0:
+                raise ConfigError(f"detector.stub_aruco.ids 必须是非空列表，收到 {ids!r}")
+            for one in ids:
+                if not isinstance(one, int) or isinstance(one, bool):
+                    raise ConfigError(f"detector.stub_aruco.ids 只能是整数，收到 {one!r}")
+            if int(p.get("side_px", 90)) <= 0:
+                raise ConfigError(f"detector.stub_aruco.side_px 必须为正：{p.get('side_px')}")
 
 
 @dataclass
@@ -200,7 +216,7 @@ def from_dict(data: dict) -> AppConfig:
     log_cfg = data.get("log") or {}
 
     det_name = str(det.get("name", "blob"))
-    det_defaults = DetectorConfig(name=det_name).params
+    det_defaults = dict(DETECTOR_DEFAULT_PARAMS.get(det_name, DETECTOR_DEFAULT_PARAMS["blob"]))
     det_params = det.get(det_name) or det.get("params") or det_defaults
 
     cfg = AppConfig(

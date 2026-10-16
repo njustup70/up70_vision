@@ -65,13 +65,22 @@ color:
   ignore_border_px: 3
 
 detector:
-  # blob：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重
+  # blob      ：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重；返回 list[Detection]
+  # stub_aruco：按契约返回**假** ArUco 码的 stub（任务单第一节第 4 条），
+  #             返回 list[ArucoMarker]；等真实现 aruco.py 就位后直接换掉。
+  #             注意：stub 靠内部帧计数器决定"码转到哪"，**每帧只能调一次 detect**。
+  # 返回值结构见 docs/interface.md 第 2、3 节
   name: blob
 
   blob:
     min_area_px: 400
     morph_kernel: 5
     max_detections: 32
+
+  stub_aruco:
+    ids: [0, 1, 2]      # 伪造哪几个码 ID（也决定自检的期望个数）
+    side_px: 90         # 码边长（像素）
+    moving: true        # 第一个码转圈 + 自转，用于验证"移动 / 旋转时持续更新"
 
 output:
   enabled: true

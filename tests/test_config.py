@@ -164,6 +164,41 @@ def test_resolve_path_and_thresholds_relative_to_config():
         assert resolve_path("/base", "sub/x.yaml") == "/base/sub/x.yaml"
 
 
+def test_stub_aruco_detector_config():
+    """detector.name=stub_aruco 的默认值与显式参数（契约另见 docs/interface.md 3.2）。"""
+    default = from_dict({"detector": {"name": "stub_aruco"}})
+    assert default.detector.name == "stub_aruco"
+    assert default.detector.params == {"ids": [0, 1, 2], "side_px": 90, "moving": True}, \
+        f"默认参数应来自 DETECTOR_DEFAULT_PARAMS：{default.detector.params}"
+
+    cfg = from_dict({"detector": {"name": "stub_aruco",
+                                  "stub_aruco": {"ids": [3, 4], "side_px": 120, "moving": False}}})
+    assert cfg.detector.params["ids"] == [3, 4]
+    assert cfg.detector.params["side_px"] == 120
+    assert cfg.detector.params["moving"] is False
+
+
+def test_detector_name_and_stub_params_are_validated():
+    try:
+        from_dict({"detector": {"name": "yolo"}})
+    except ConfigError as exc:
+        assert "stub_aruco" in str(exc), f"报错应列出可用检测器，实际：{exc}"
+    else:
+        raise AssertionError("未知检测器名应当报错")
+
+    for bad, keyword in (({"ids": []}, "ids"),
+                         ({"ids": ["0"]}, "ids"),
+                         ({"side_px": 0}, "side_px")):
+        params = {"ids": [0], "side_px": 90}
+        params.update(bad)
+        try:
+            from_dict({"detector": {"name": "stub_aruco", "stub_aruco": params}})
+        except ConfigError as exc:
+            assert keyword in str(exc), f"报错应提到 {keyword!r}，实际：{exc}"
+        else:
+            raise AssertionError(f"应当报错：{bad}")
+
+
 def _run_standalone() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

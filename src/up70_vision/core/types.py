@@ -1,7 +1,11 @@
-"""核心数据结构：Frame 与 Detection，以及 IoU 等纯函数。
+"""核心数据结构：Frame、Detection、ArucoMarker，以及 IoU 等纯函数。
 
 这一层是整个包的地基，必须能被单独验证——没有相机、没有文件、不开窗口，
 给它 numpy 数组就能算出结果。
+
+两个"检出物"结构（别混用，契约见 docs/interface.md 第 2 节）
+    · `Detection`    判色族的产出：轴对齐 `bbox_xyxy`，中心 = bbox 中心，带颜色字段
+    · `ArucoMarker`  ArUco 码：四角点 `corners_px`，中心 = 四角算术平均，没有颜色
 
 约定（README「团队约定」）
     1. 图像一律 BGR 顺序，变量名带颜色空间后缀（image_bgr）
@@ -101,6 +105,76 @@ class Detection:
             "valid_pixels": int(self.valid_pixels),
             "center": [round(cx, 2), round(cy, 2)],
         }
+
+
+@dataclass(frozen=True)
+class ArucoMarker:
+    """一个 ArUco 码（契约见 docs/interface.md 第 2.2 节）。
+
+    为什么不复用 `Detection`
+        `Detection` 的核心是轴对齐的 `bbox_xyxy`，它的"中心"是 bbox 中心；
+        而 ArUco 的本质是四角点构成的任意四边形，中心是**四点算术平均**。
+        码一倾斜，两者就不是同一个位置——所以这是两种结构，不要混用。
+        码也没有颜色，故这里没有 color/color_ratio 字段。
+
+    四条必须一致的约定（stub 与真实现最容易分歧的四处）
+        1. 无码时检测器返回 `[]`，不返回 `None`、不返回 `[None]`
+        2. 按 `marker_id` **升序**排列（不排序时终端输出会抖动）
+        3. `center_px` 是四角**算术平均**，不是 bbox 中心
+        4. `corners_px` 顺时针、起点是「码自身坐标系」的左上角（直接沿用 OpenCV 原生顺序）
+
+    `corners_px` 存 float32 而不是 int：它是阶段二 `solvePnP` 的输入，
+    这里取整等于提前丢掉亚像素精度且不可逆。取整只发生在绘制那一刻。
+    """
+
+    marker_id: int
+    corners_px: np.ndarray                       # (4, 2) float32，像素坐标
+    center_px: tuple                             # (float, float)，像素坐标
+
+    def __post_init__(self):
+        if not isinstance(self.marker_id, int) or isinstance(self.marker_id, bool):
+            raise ValueError(f"marker_id 必须是 int，收到 {type(self.marker_id).__name__}")
+        corners = np.asarray(self.corners_px, dtype=np.float32)   # 归一成契约要求的 float32
+        if corners.shape != (4, 2):
+            raise ValueError(f"corners_px 必须是 (4, 2)，收到 {corners.shape}")
+        center = tuple(float(v) for v in self.center_px)
+        if len(center) != 2:
+            raise ValueError(f"center_px 必须是 (x, y)，收到 {self.center_px!r}")
+        # frozen dataclass 里改字段得走 object.__setattr__
+        object.__setattr__(self, "corners_px", corners)
+        object.__setattr__(self, "center_px", center)
+
+    @property
+    def bbox_xyxy(self) -> BBox:
+        """四角的外接框（半开上界）。判色 ROI、IoU、落盘都用它。
+
+        名字与 `Detection.bbox_xyxy` 一致，是为了让消费方能统一写 `det.bbox_xyxy`；
+        注意它是**派生**出来的，旋转过的码里它与四角并不等价。
+        """
+        pts = np.asarray(self.corners_px, dtype=np.float64)
+        x1, y1 = np.floor(pts.min(axis=0)).astype(int)
+        x2, y2 = np.ceil(pts.max(axis=0)).astype(int)
+        return (int(x1), int(y1), int(x2), int(y2))
+
+    @property
+    def center(self) -> tuple:
+        """`center_px` 的别名——让统一消费方写 `det.center`（含义按各自定义）。"""
+        return self.center_px
+
+    def to_dict(self) -> dict:
+        """转成可 JSON 序列化的 dict（下游/落盘用）。"""
+        cx, cy = self.center_px
+        return {
+            "marker_id": int(self.marker_id),
+            "corners_px": [[round(float(x), 2), round(float(y), 2)] for x, y in self.corners_px],
+            "center_px": [round(float(cx), 2), round(float(cy), 2)],
+            "bbox_xyxy": [int(v) for v in self.bbox_xyxy],
+        }
+
+
+def is_marker(det) -> bool:
+    """这个检测结果是 ArUco 码吗？（消费方用它分流判色/绘制/落盘）"""
+    return isinstance(det, ArucoMarker)
 
 
 def iou(a: BBox, b: BBox) -> float:

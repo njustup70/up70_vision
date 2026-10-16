@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from ..utils.logging import get_logger
 from .color import DEFAULT_MIN_VALID_PIXELS, judge_color
-from .types import Detection, Frame, iou
+from .types import ArucoMarker, Detection, Frame, iou
 
 log = get_logger("core.pipeline")
 
@@ -59,12 +59,23 @@ class FrameResult:
 
     @property
     def uncertain(self) -> int:
-        """没判出颜色的框数——这些要报"不确定"，不能当已知颜色用。"""
-        return sum(1 for d in self.detections if d.color is None)
+        """没判出颜色的框数——这些要报"不确定"，不能当已知颜色用。
+
+        只数判色族的 `Detection`：ArUco 码是黑白图形、没有颜色语义，
+        跳过判色也不算"不确定"（契约 docs/interface.md 第 2.2 / 3.2 节）。
+        """
+        return sum(1 for d in self.detections if isinstance(d, Detection) and d.color is None)
+
+    @property
+    def ids(self) -> list:
+        """本帧检出的 ArUco 码 ID（升序）。判色族的框没有 ID，返回 `[]`。"""
+        return sorted(int(d.marker_id) for d in self.detections if isinstance(d, ArucoMarker))
 
     def color_counts(self) -> dict:
         counts = {}
         for d in self.detections:
+            if not isinstance(d, Detection):
+                continue                      # 码没有颜色语义，不进颜色分布
             key = d.color if d.color is not None else "unknown"
             counts[key] = counts.get(key, 0) + 1
         return counts
@@ -73,6 +84,8 @@ class FrameResult:
         return {
             "index": self.index,
             "source": self.source,
+            "count": len(self.detections),
+            "ids": self.ids,
             "truth_total": self.truth_total,
             "matched": self.matched,
             "color_correct": self.color_correct,
@@ -92,6 +105,8 @@ def match_to_truth(detections, ground_truth, iou_min: float = DEFAULT_IOU_MIN):
         return 0, 0
     pairs = []
     for di, det in enumerate(detections):
+        if not isinstance(det, Detection):
+            continue                     # 真值是色块的框；ArUco 码不参与匹配
         for gi, (color, bbox) in enumerate(ground_truth):
             value = iou(det.bbox_xyxy, bbox)
             if value >= float(iou_min):
@@ -115,34 +130,40 @@ def process_frame(frame: Frame,
                   thresholds: dict,
                   color_cfg: ColorConfig | None = None,
                   iou_min: float = DEFAULT_IOU_MIN) -> FrameResult:
-    """检测 -> 判色 -> 与 ground truth 匹配计分。"""
+    """检测 -> 判色 -> 与 ground truth 匹配计分。
+
+    判色只对判色族的 `Detection` 做：ArUco 码是黑白图形、没有颜色语义，
+    跳过它（契约 docs/interface.md 第 2.2 / 3.2 节）。因此接 ArUco 检测器时
+    不需要阈值表也能跑，`color_counts()` 会是空的。
+    """
     cfg = color_cfg or ColorConfig()
-    import cv2  # 局部 import：保持模块导入期不做重活
+    detections = detector.detect(frame.image_bgr)
 
-    hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
-    detections: list[Detection] = detector.detect(frame.image_bgr)
-
-    for det in detections:
-        verdict = judge_color(
-            hsv, det.bbox_xyxy, thresholds,
-            min_saturation=cfg.min_saturation,
-            min_value=cfg.min_value,
-            hit_ratio_min=cfg.hit_ratio_min,
-            ignore_border_px=cfg.ignore_border_px,
-            min_valid_pixels=cfg.min_valid_pixels)
-        det.color = verdict.name
-        det.color_ratio = verdict.ratio
-        det.valid_pixels = verdict.valid_pixels
-        if verdict.name is None:
-            log.debug("帧%d 框%s 未判出颜色：%s（最高命中率 %.2f）",
-                      frame.index, det.bbox_xyxy, verdict.reason, verdict.ratio)
+    color_targets = [d for d in detections if isinstance(d, Detection)]
+    if color_targets:
+        import cv2  # 局部 import：保持模块导入期不做重活
+        hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
+        for det in color_targets:
+            verdict = judge_color(
+                hsv, det.bbox_xyxy, thresholds,
+                min_saturation=cfg.min_saturation,
+                min_value=cfg.min_value,
+                hit_ratio_min=cfg.hit_ratio_min,
+                ignore_border_px=cfg.ignore_border_px,
+                min_valid_pixels=cfg.min_valid_pixels)
+            det.color = verdict.name
+            det.color_ratio = verdict.ratio
+            det.valid_pixels = verdict.valid_pixels
+            if verdict.name is None:
+                log.debug("帧%d 框%s 未判出颜色：%s（最高命中率 %.2f）",
+                          frame.index, det.bbox_xyxy, verdict.reason, verdict.ratio)
 
     result = FrameResult(index=frame.index, source=frame.source, detections=detections)
     if frame.has_ground_truth():
         result.truth_total = len(frame.ground_truth)
         result.matched, result.color_correct = match_to_truth(
             detections, frame.ground_truth, iou_min=iou_min)
-    log.debug("帧%d 候选框%d 个（未判定 %d）", frame.index, len(detections), result.uncertain)
+    log.debug("帧%d 检出%d 个（未判定 %d）", frame.index, len(detections), result.uncertain)
     return result
 
 
@@ -167,13 +188,17 @@ def process_frames(frames,
 
 
 def summarize(results) -> dict:
-    """汇总多帧结果：总检出、颜色分布、未判定数、ground truth 命中情况。"""
+    """汇总多帧结果：总检出、id 集合、颜色分布、未判定数、ground truth 命中情况。"""
     total = sum(len(r.detections) for r in results)
     uncertain = sum(r.uncertain for r in results)
     counts: dict = {}
     ratios = []
+    ids = set()
     for r in results:
+        ids.update(r.ids)
         for d in r.detections:
+            if not isinstance(d, Detection):
+                continue                     # ArUco 码没有颜色，不进颜色分布
             key = d.color if d.color is not None else "unknown"
             counts[key] = counts.get(key, 0) + 1
             ratios.append(d.color_ratio)
@@ -183,6 +208,7 @@ def summarize(results) -> dict:
     return {
         "frames": len(results),
         "detections": total,
+        "ids": sorted(ids),
         "uncertain": uncertain,
         "color_counts": counts,
         "mean_ratio": round(sum(ratios) / len(ratios), 4) if ratios else 0.0,

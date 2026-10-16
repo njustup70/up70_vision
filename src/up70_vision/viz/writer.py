@@ -17,13 +17,17 @@ import csv
 import json
 import os
 
+from ..core.types import is_marker
 from ..utils.image_io import ensure_dir, write_image
 from ..utils.logging import get_logger
 
 log = get_logger("viz.writer")
 
+# 后两列是给 ArUco 加的（追加在末尾，老读者按列名取不受影响）：
+#   kind      = "detection"（判色族）或 "marker"（ArUco 码）
+#   marker_id = 码 ID；判色族的行留空
 CSV_HEADER = ["frame", "source", "color", "ratio", "valid_pixels", "score",
-              "x1", "y1", "x2", "y2", "cx", "cy"]
+              "x1", "y1", "x2", "y2", "cx", "cy", "kind", "marker_id"]
 
 
 class OutputWriter:
@@ -61,14 +65,20 @@ class OutputWriter:
         if self.save_csv:
             for det in result.detections:
                 cx, cy = det.center
+                x1, y1, x2, y2 = (int(v) for v in det.bbox_xyxy)
+                if is_marker(det):
+                    # ArUco 码没有颜色语义：color 写 "-"、ratio/valid_pixels 写 0，ID 进 marker_id 列
+                    row_color, ratio, valid, score = "-", 0.0, 0, 1.0
+                    kind, marker_id = "marker", int(det.marker_id)
+                else:
+                    row_color = det.color if det.color else "unknown"
+                    ratio = round(float(det.color_ratio), 4)
+                    valid = int(det.valid_pixels)
+                    score = round(float(det.score), 4)
+                    kind, marker_id = "detection", ""
                 self._rows.append([
-                    frame.index, frame.source,
-                    det.color if det.color else "unknown",
-                    round(float(det.color_ratio), 4), int(det.valid_pixels),
-                    round(float(det.score), 4),
-                    int(det.bbox_xyxy[0]), int(det.bbox_xyxy[1]),
-                    int(det.bbox_xyxy[2]), int(det.bbox_xyxy[3]),
-                    round(cx, 2), round(cy, 2),
+                    frame.index, frame.source, row_color, ratio, valid, score,
+                    x1, y1, x2, y2, round(cx, 2), round(cy, 2), kind, marker_id,
                 ])
         return paths
 

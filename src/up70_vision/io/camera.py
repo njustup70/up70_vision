@@ -60,19 +60,28 @@ class MvsCameraSource(FrameSource):
         self.max_frames = int(max_frames)
 
         self._index = 0
-        self._opened = False
+        self._sdk = False            # MV_CC_Initialize 已调用
+        self._opened = False         # 句柄已创建（close() 的守卫；语义见 _open()）
+        self._device_open = False    # MV_CC_OpenDevice 已成功
         self._grabbing = False
         self._frame_count_warned = False
         self.model = "unknown"
         self.width = self.height = 0
 
         self.mv = _load_mvs()                     # 失败时抛 RuntimeError（人话）
-        self._open()
+        try:
+            self._open()
+        except Exception:
+            # 半初始化失败也要释放：相机是**独占**资源，句柄没关掉下次必打不开
+            # （复核意见二.1 / docs/interface.md 欠账二）
+            self.close()
+            raise
 
     # ------------------------------------------------------------ 打开
     def _open(self) -> None:
         mv = self.mv
         mv.MvCamera.MV_CC_Initialize()
+        self._sdk = True
 
         dev_list = mv.MV_CC_DEVICE_INFO_LIST()
         ret = mv.MvCamera.MV_CC_EnumDevices(mv.MV_USB_DEVICE | mv.MV_GIGE_DEVICE, dev_list)
@@ -94,31 +103,40 @@ class MvsCameraSource(FrameSource):
         ret = self.cam.MV_CC_CreateHandle(dev_info)
         if ret != 0:
             raise RuntimeError(f"创建相机句柄失败：{self._err(ret)}")
-        ret = self.cam.MV_CC_OpenDevice(mv.MV_ACCESS_Exclusive, 0)
-        if ret != 0:
-            raise RuntimeError(
-                f"打开相机失败：{self._err(ret)}。相机是**独占**资源——"
-                f"MVS 客户端 / 探针 / 实时窗口同时只能开一个，先关掉占用者")
-
-        # 关触发 + 关自动曝光/增益（否则手动设的值会被自动算法改回去）
-        self.cam.MV_CC_SetEnumValue("TriggerMode", mv.MV_TRIGGER_MODE_OFF)
-        self.cam.MV_CC_SetEnumValue("ExposureAuto", mv.MV_EXPOSURE_AUTO_MODE_OFF)
-        self.cam.MV_CC_SetEnumValue("GainAuto", mv.MV_GAIN_MODE_OFF)
-        if self.exposure_us > 0:
-            self.cam.MV_CC_SetFloatValue("ExposureTime", self.exposure_us)
-        if self.gain_db >= 0:
-            self.cam.MV_CC_SetFloatValue("Gain", self.gain_db)
-
-        self.width = self._get_int("Width") or 0
-        self.height = self._get_int("Height") or 0
-        self.exposure_us = self._get_float("ExposureTime")
-        self.gain_db = self._get_float("Gain")
-
-        ret = self.cam.MV_CC_StartGrabbing()
-        if ret != 0:
-            raise RuntimeError(f"开始取流失败：{self._err(ret)}")
-        self._grabbing = True
+        # 句柄一旦创建就置位：此后任何一步失败，close() 都能把它收掉。
+        # 若把 _opened 留到"全部成功"再置位，StartGrabbing 失败时设备仍被独占占用，
+        # 而 close() 会因为 _opened=False 直接返回 → 句柄泄漏、下次必打不开（复核意见二.1）
         self._opened = True
+
+        try:
+            ret = self.cam.MV_CC_OpenDevice(mv.MV_ACCESS_Exclusive, 0)
+            if ret != 0:
+                raise RuntimeError(
+                    f"打开相机失败：{self._err(ret)}。相机是**独占**资源——"
+                    f"MVS 客户端 / 探针 / 实时窗口同时只能开一个，先关掉占用者")
+            self._device_open = True
+
+            # 关触发 + 关自动曝光/增益（否则手动设的值会被自动算法改回去）
+            self.cam.MV_CC_SetEnumValue("TriggerMode", mv.MV_TRIGGER_MODE_OFF)
+            self.cam.MV_CC_SetEnumValue("ExposureAuto", mv.MV_EXPOSURE_AUTO_MODE_OFF)
+            self.cam.MV_CC_SetEnumValue("GainAuto", mv.MV_GAIN_MODE_OFF)
+            if self.exposure_us > 0:
+                self.cam.MV_CC_SetFloatValue("ExposureTime", self.exposure_us)
+            if self.gain_db >= 0:
+                self.cam.MV_CC_SetFloatValue("Gain", self.gain_db)
+
+            self.width = self._get_int("Width") or 0
+            self.height = self._get_int("Height") or 0
+            self.exposure_us = self._get_float("ExposureTime")
+            self.gain_db = self._get_float("Gain")
+
+            ret = self.cam.MV_CC_StartGrabbing()
+            if ret != 0:
+                raise RuntimeError(f"开始取流失败：{self._err(ret)}")
+            self._grabbing = True
+        except Exception:
+            self.close()                 # 半初始化失败也要把设备释放掉
+            raise
 
         self.nbytes = int(self.width) * int(self.height) * 3
         self.buf = (c_ubyte * self.nbytes)()
@@ -156,18 +174,23 @@ class MvsCameraSource(FrameSource):
         return frame
 
     def close(self) -> None:
-        if not self._opened:
-            return
+        """释放相机与 SDK。**幂等**：半初始化失败、重复调用都安全。"""
         try:
             if self._grabbing:
                 self.cam.MV_CC_StopGrabbing()
                 self._grabbing = False
-            self.cam.MV_CC_CloseDevice()
-            self.cam.MV_CC_DestroyHandle()
+            if self._device_open:
+                self.cam.MV_CC_CloseDevice()       # 只在设备确实打开过时关
+                self._device_open = False
+            if self._opened:
+                self.cam.MV_CC_DestroyHandle()     # 句柄创建过就销毁
+                self._opened = False
         except Exception as exc:                      # noqa: BLE001
             log.warning("关闭相机时出错（忽略）：%s", exc)
         finally:
-            self.mv.MvCamera.MV_CC_Finalize()
+            if self._sdk:
+                self.mv.MvCamera.MV_CC_Finalize()
+                self._sdk = False
             self._opened = False
 
     # ------------------------------------------------------------ 小工具

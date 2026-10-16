@@ -13,10 +13,12 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.core.types import (Detection, Frame, bbox_from_xywh, clip_bbox, iou)
+    from up70_vision.core.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
+                                        clip_bbox, is_marker, iou)
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.types import (Detection, Frame, bbox_from_xywh, clip_bbox, iou)
+    from up70_vision.core.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
+                                        clip_bbox, is_marker, iou)
 
 import numpy as np
 
@@ -67,6 +69,50 @@ def test_frame_rejects_non_bgr():
         assert "HxWx3" in str(exc)
     else:
         raise AssertionError("单通道图应该被拒绝")
+
+
+def test_aruco_marker_normalizes_to_contract():
+    """ArucoMarker 的四条约定：float32、升序由检测器保证、中心是四角均值、可 JSON 化。
+
+    这里用一个**非对称四边形**，让"四角算术平均"与"bbox 中心"不相等（6, 4.5) vs (6, 5)），
+    这样断言才真的能钉住契约第 3 条。
+    """
+    corners = [[0, 0], [10, 0], [12, 8], [2, 10]]          # int 列表：应被归一成 float32
+    marker = ArucoMarker(marker_id=7, corners_px=corners, center_px=(6.0, 4.5))
+    assert marker.corners_px.dtype == np.float32, "契约要求 corners_px 是 float32"
+    assert marker.corners_px.shape == (4, 2), "契约要求 (4,2)"
+    assert marker.center_px == (6.0, 4.5)
+    assert marker.center == (6.0, 4.5), "center 是 center_px 的别名"
+    assert marker.bbox_xyxy == (0, 0, 12, 10), "派生外接框（半开上界）"
+    assert marker.bbox_xyxy != (0, 0, 13, 11), "不能多算 1px"
+    # bbox 中心是 (6.0, 5.0)，与四角均值 (6.0, 4.5) **不同**——这正是不能用 bbox 代替四角的原因
+    assert marker.center_px != (6.0, 5.0)
+    assert is_marker(marker) and not is_marker(Detection(bbox_xyxy=(0, 0, 1, 1)))
+
+    back = json.loads(json.dumps({"m": [marker.to_dict()]}))["m"][0]
+    assert back["marker_id"] == 7
+    assert back["center_px"] == [6.0, 4.5]
+    assert back["corners_px"][2] == [12.0, 8.0]
+
+
+def test_aruco_marker_rejects_bad_input():
+    good = [[0, 0], [10, 0], [10, 10], [0, 10]]
+    for kwargs, keyword in (
+            ({"marker_id": "7", "corners_px": good, "center_px": (5.0, 5.0)}, "marker_id"),
+            ({"marker_id": 7, "corners_px": [[0, 0], [1, 1]], "center_px": (0.0, 0.0)},
+             "corners_px"),
+            ({"marker_id": 7, "corners_px": good, "center_px": (5.0,)}, "center_px")):
+        try:
+            ArucoMarker(**kwargs)
+        except ValueError as exc:
+            assert keyword in str(exc), f"报错应提到 {keyword!r}，实际：{exc}"
+        else:
+            raise AssertionError(f"应当报错：{kwargs}")
+
+    # 输入是 float64 数组时也要归一成 float32（不能只接受 float32 输入）
+    f64 = np.asarray(good, dtype=np.float64)
+    assert ArucoMarker(marker_id=1, corners_px=f64, center_px=(5.0, 5.0)).corners_px.dtype \
+        == np.float32
 
 
 def _run_standalone() -> int:

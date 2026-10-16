@@ -12,7 +12,7 @@ try:
     from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
     from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import Detection
+    from up70_vision.core.types import ArucoMarker, Detection, is_marker
     from up70_vision.io.synthetic import SyntheticSource
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -20,7 +20,7 @@ except ModuleNotFoundError:
     from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
     from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import Detection
+    from up70_vision.core.types import ArucoMarker, Detection, is_marker
     from up70_vision.io.synthetic import SyntheticSource
 
 import numpy as np
@@ -128,6 +128,74 @@ def test_color_config_validation():
         assert "min_saturation" in str(exc)
     else:
         raise AssertionError("min_saturation > 255 应报错")
+
+
+# ---------------------------------------------------------------- ArUco（stub）
+def test_stub_aruco_returns_contract_markers():
+    """stub 必须按 docs/interface.md 第 2.2 节返回 ArucoMarker，且四条约定都成立。"""
+    detector = build_detector("stub_aruco", {"ids": [0, 1, 2], "side_px": 90, "moving": True})
+    assert detector.name == "stub_aruco"
+    frame = list(_source())[0]
+
+    markers = detector.detect(frame.image_bgr)
+    assert len(markers) == 3, f"应伪造 3 个码，实得 {len(markers)}"
+    assert all(isinstance(m, ArucoMarker) for m in markers), "返回的必须是 ArucoMarker"
+    assert [m.marker_id for m in markers] == [0, 1, 2], "契约 2.2 第 2 条：按 marker_id 升序"
+    for m in markers:
+        assert m.corners_px.dtype == np.float32 and m.corners_px.shape == (4, 2)
+        # 契约 2.2 第 3 条：center_px 是四角算术平均
+        mean = m.corners_px.astype(np.float64).mean(axis=0)
+        assert abs(m.center_px[0] - mean[0]) < 1e-3 and abs(m.center_px[1] - mean[1]) < 1e-3, \
+            f"中心应是四角均值：{m.center_px} vs {tuple(mean)}"
+
+    # 宽度 320 时三个码横排：中心 y 都在中线 120，第二个固定在 (160, 120)
+    assert markers[1].center_px == (160.0, 120.0), f"中间的码应居中：{markers[1].center_px}"
+    # moving=True：第一个码在两帧之间动过（stub 靠内部帧计数）
+    again = detector.detect(frame.image_bgr)
+    assert again[0].center_px != markers[0].center_px, "moving=True 时第一个码每帧应移动"
+
+
+def test_stub_aruco_moves_only_the_first_marker():
+    detector = build_detector("stub_aruco", {"ids": (0, 1, 2), "side_px": 90,
+                                            "moving": True, "radius_px": 60})
+    frame = list(_source())[0]
+    first = detector.detect(frame.image_bgr)
+    second = detector.detect(frame.image_bgr)
+    assert first[1].center_px == second[1].center_px == (160.0, 120.0), "第二个码不动"
+    assert first[2].center_px == second[2].center_px, "第三个码不动"
+    # 布局：宽 320、gap = 90*1.6 = 144、三个码 -> 基准 x = 16 / 160 / 304，y 都在 120。
+    # 第一个码每帧转 12°、半径 60：第 1 帧在 0°，第 2 帧在 12°。
+    assert abs(first[0].center_px[0] - (16.0 + 60.0)) < 1e-6, f"{first[0].center_px}"
+    assert abs(second[0].center_px[0] - (16.0 + 60.0 * np.cos(np.radians(12)))) < 1e-3
+    assert abs(second[0].center_px[1] - (120.0 + 60.0 * np.sin(np.radians(12)))) < 1e-3
+
+
+def test_pipeline_skips_color_for_markers():
+    """ArUco 码没有颜色语义：不应被判色、不该算"未判定"，也不参与色块真值匹配。"""
+    detector = build_detector("stub_aruco", {"ids": [0, 1, 2]})
+    thresholds = parse_thresholds(THRESHOLDS_RAW)
+    frame = list(_source())[0]                 # 合成帧带 6 个色块真值
+
+    result = process_frame(frame, detector, thresholds, ColorConfig())
+    assert result.ids == [0, 1, 2]
+    assert len(result.detections) == 3
+    assert result.color_counts() == {}, "码不该产生颜色分布"
+    assert result.uncertain == 0, "码不是'判不出颜色'，不该计入未判定"
+    assert (result.matched, result.color_correct) == (0, 0), "码不参与色块真值匹配"
+    assert result.truth_total == 6, "真值仍来自合成源"
+
+
+def test_pipeline_end_to_end_stub_aruco():
+    thresholds = parse_thresholds(THRESHOLDS_RAW)
+    detector = build_detector("stub_aruco", {"ids": [0, 1, 2]})
+    results = process_frames(_source(), detector, thresholds, ColorConfig())
+    summary = summarize(results)
+
+    assert summary["frames"] == 3
+    assert summary["detections"] == 9, f"3 帧 x 3 码 = 9，实得 {summary['detections']}"
+    assert summary["ids"] == [0, 1, 2]
+    assert summary["color_counts"] == {} and summary["uncertain"] == 0
+    assert summary["mean_ratio"] == 0.0, "没有判色就不该有命中率"
 
 
 def _run_standalone() -> int:

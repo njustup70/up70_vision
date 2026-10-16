@@ -15,12 +15,29 @@ from .config.loader import (load_config, load_thresholds, resolve_thresholds_pat
 from .config.schema import ConfigError
 from .core.detectors.base import build_detector
 from .core.pipeline import ColorConfig, process_frames, summarize
+from .core.types import is_marker
 from .io.base import build_source
 from .utils.logging import get_logger, setup_logging
 from .viz.draw import draw_detections, draw_hud
 from .viz.writer import OutputWriter
 
 log = get_logger("cli")
+
+
+def _format_centers(detections, limit: int = 8) -> str:
+    """把每个检出物的 "id@(x,y)" 拼成一行（超出 limit 个就截断）。
+
+    飞书任务单任务二第 4 条要求"在终端输出识别到的 ArUco 码信息，**包括 ID 和中心点坐标**"。
+    判色族的框没有码 ID，写成 `-@(x,y)`；一帧十几个框时截断，免得刷屏。
+    """
+    parts = []
+    for det in list(detections)[:limit]:
+        cx, cy = det.center
+        tag = str(int(det.marker_id)) if is_marker(det) else "-"
+        parts.append(f"{tag}@({int(round(cx))},{int(round(cy))})")
+    if len(detections) > limit:
+        parts.append(f"…+{len(detections) - limit}")
+    return "[" + " ".join(parts) + "]"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,58 +133,74 @@ def run(argv=None) -> int:
                           prefix="frame")
 
     # ---- 逐帧处理 ----
-    frame_counter = {"n": 0}
     overlays = []
 
     def on_result(frame, result):
         canvas = draw_detections(frame.image_bgr, result.detections)
-        draw_hud(canvas, [
+        hud = [
             f"{frame.source} #{frame.index}",
             f"det={len(result.detections)} uncertain={result.uncertain}",
             f"matched={result.matched}/{result.truth_total} correct={result.color_correct}",
-        ])
+        ]
+        if result.ids:
+            hud.insert(1, f"ids={result.ids}")
+        draw_hud(canvas, hud)
         overlays.append(canvas)
         writer.write_frame(frame, result, canvas)
-        frame_counter["n"] += 1
-        if args.limit and frame_counter["n"] >= args.limit:
-            raise StopIteration
+        # 终端输出（任务单要求：实时绘制 + 终端输出，且要带 ID 与中心点坐标）
+        print(f"[帧{frame.index:>3}] {frame.source} 目标={len(result.detections)} "
+              f"ids={result.ids} 中心={_format_centers(result.detections)} "
+              f"颜色={result.color_counts()} 未判定={result.uncertain}")
 
     frames = source
+    if args.limit:
+        def limited():
+            """只放行前 limit 帧。
+
+            **限帧只在这一处做**。以前 on_result 里还额外 `raise StopIteration` 想断流，
+            结果把 process_frames 打断、results 被外层 `except StopIteration` 清空，
+            于是 `--limit N` 一律报"一帧都没处理"并返回 1（复核意见一.1，见 progress.md 坑 30）。
+            """
+            for i, frame in enumerate(source):
+                if i >= args.limit:
+                    return
+                yield frame
+        frames = limited()
+
+    results: list = []
+    summary: dict | None = None
     try:
-        if args.limit:
-            def limited():
-                for i, frame in enumerate(source):
-                    if i >= args.limit:
-                        return
-                    yield frame
-            frames = limited()
         results = process_frames(frames, detector, thresholds, color_cfg, on_result=on_result)
-    except StopIteration:
-        results = []
+        if results:
+            summary = summarize(results)
     finally:
+        # 输入源与输出都要收尾。以前 writer.close(summary) 只在成功路径调用，
+        # 中途抛异常时 results.json / summary.json 会整个丢（复核意见二.5）。
         source.close()
+        written = writer.close(summary)
 
     if not results:
         print("❌ 一帧都没处理（输入源为空？）", file=sys.stderr)
-        writer.close()
         return 1
-
-    summary = summarize(results)
-    written = writer.close(summary)
 
     # ---- 汇总与自检 ----
     print("\n" + "=" * 62)
     print(f"  帧数        : {summary['frames']}")
-    print(f"  候选框总数  : {summary['detections']}（未判出颜色 {summary['uncertain']} 个）")
-    print(f"  颜色分布    : {summary['color_counts']}")
-    print(f"  平均命中率  : {summary['mean_ratio']}")
+    print(f"  检出总数    : {summary['detections']}（未判出颜色 {summary['uncertain']} 个）")
+    if summary["ids"]:
+        print(f"  出现过的 id : {summary['ids']}")
+    if summary["color_counts"]:
+        print(f"  颜色分布    : {summary['color_counts']}")
+        print(f"  平均命中率  : {summary['mean_ratio']}")
     if summary["truth_total"]:
         print(f"  与真值匹配  : {summary['matched']}/{summary['truth_total']}"
               f"  颜色正确 {summary['color_correct']}（正确率 {summary['color_accuracy']}）")
     print("=" * 62)
 
     ok = True
-    if cfg.input.source == "synthetic":
+    # 合成图自检只对 blob 有意义：那 18 个色块本来就是给 blob 找的。
+    # 换成 stub_aruco（伪造码）时不该拿色块数去要求它。
+    if cfg.input.source == "synthetic" and cfg.detector.name == "blob":
         expected = cfg.input.synthetic.num_frames * cfg.input.synthetic.blocks_per_frame
         got = summary["detections"]
         print(f"  自检(合成图): 期望 {expected} 个色块，实得 {got} 个 -> "
@@ -178,6 +211,17 @@ def run(argv=None) -> int:
             print(f"  自检(判色)  : 匹配 {summary['matched']} 个里判对 "
                   f"{summary['color_correct']} 个 -> {'✅ 通过' if all_right else '❌ 有判错'}")
             ok = ok and all_right
+    elif cfg.input.source == "synthetic" and cfg.detector.name != "blob":
+        print(f"  自检(合成图): 跳过节数检查（检测器是 {cfg.detector.name}，色块数不适用）")
+    if cfg.detector.name == "stub_aruco":
+        want_ids = list(cfg.detector.params.get("ids", [0, 1, 2]))
+        expected = summary["frames"] * len(want_ids)
+        got = summary["detections"]
+        ids_ok = set(summary["ids"]) == set(int(i) for i in want_ids) or not want_ids
+        print(f"  自检(stub)  : 期望 {expected} 个码、id 集合 {sorted(int(i) for i in want_ids)}，"
+              f"实得 {got} 个、id 集合 {summary['ids']} -> "
+              f"{'✅ 通过' if (got == expected and ids_ok) else '❌ 不一致'}")
+        ok = ok and got == expected and ids_ok
     if cfg.output.enabled:
         print(f"  落盘        : {written}")
     print(f"\n{'✅ 运行成功' if ok else '❌ 自检未通过'}")
