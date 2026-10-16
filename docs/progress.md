@@ -100,7 +100,7 @@
 
 | 环节 | 落点 | 说明 |
 |---|---|---|
-| 相机源 | `src/up70_vision/io/camera_mvs.py` | 实现 `FrameSource`；走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）。**MvImport 的 import 放在 `__init__` 里**，所以没装 MVS 的机器照样能 import 本包，只在真接相机时报一句带处理办法的人话 |
+| 相机源 | `src/up70_vision/io/camera.py` | 实现 `FrameSource`；走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）。**MvImport 的 import 放在 `__init__` 里**，所以没装 MVS 的机器照样能 import 本包，只在真接相机时报一句带处理办法的人话 |
 | SDK 进镜像 | `.devcontainer/pkgs/` + `Dockerfile` | MVS 是 deb 包、写不进 `pyproject.toml`，由 Dockerfile 单独一层安装；同时装 `libusb-1.0-0`（MVS 的库**运行时 dlopen** 它，基础镜像没有）。没放 deb 也能 build 成功，只是跳过相机 |
 | 设备透传 | `.devcontainer/docker-compose.yml` | `devices: ["/dev/bus/usb:/dev/bus/usb"]`。传的是 USB 总线，**不是 `/dev/video0`** |
 | 文档纠错 | `README.md`、`io/__init__.py` | 原文写的"摄像头（UVC）／用户要在 `video` 组／传 `--device=/dev/video0`"与事实不符，已改成 USB3 Vision + 宿主机 udev 规则 + MVS |
@@ -144,7 +144,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 
 **第 1 步：把相机接进来（M6，需要先定方案）**
 
-1. `src/up70_vision/io/camera_mvs.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
+1. `src/up70_vision/io/camera.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
 2. **MVS 怎么进镜像**（三选一，推荐 A）：
    - A：deb 放 `.devcontainer/pkgs/`（加进 `.gitignore`）+ Dockerfile `COPY` 后 `apt install`
    - B：镜像内下载——官方要登录，不可靠

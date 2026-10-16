@@ -7,12 +7,12 @@
     只依赖 core.types（Frame）。配置由上层拆成普通参数传进来，
     因此本模块不 import config，避免包级依赖打结。
 
-摄像头（camera_mvs.py）
+摄像头（camera.py）
     本节目的相机是海康 MV-CU013-A0UC，走 **USB3 Vision（GenICam）**，
     不是 UVC，也没有 /dev/video*，因此 cv2.VideoCapture 打不开它。
     已实测：Aravis 0.8.20 / 0.8.33 都取不到帧（相机 SIRM_PAYLOAD_SIZE 恒为 1MB、
     不随请求更新），只有官方 MVS SDK 能出帧。详见 docs/progress.md 第五节。
-    因此 camera 源实现在 io/camera_mvs.py（MVS SDK），**没有 MVS 的机器也能
+    因此 camera 源实现在 io/camera.py（MVS SDK），**没有 MVS 的机器也能
     import 本包**，只在真正接相机时报错并提示怎么装（见 .devcontainer/pkgs/README.md）。
 """
 
@@ -78,6 +78,6 @@ def build_source(source_type: str,
         from .replay import ReplaySource
         return ReplaySource(**dict(replay_params or {}))
     if key == "camera":
-        from .camera_mvs import MvsCameraSource
+        from .camera import MvsCameraSource
         return MvsCameraSource(**dict(camera_params or {}))
     raise ValueError(f"未知输入源 {source_type!r}；可用值：{list(SOURCE_NAMES)}")

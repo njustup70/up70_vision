@@ -46,8 +46,8 @@ class BlobDetector(Detector):
         if self.max_detections <= 0:
             raise ValueError(f"max_detections 必须为正：{self.max_detections}")
 
-    def detect(self, frame_bgr: np.ndarray) -> list:
-        hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    def detect(self, image_bgr: np.ndarray) -> list:
+        hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
         mask = valid_pixel_mask(hsv, self.min_saturation, self.min_value)
 
         kernel = np.ones((self.morph_kernel, self.morph_kernel), np.uint8)

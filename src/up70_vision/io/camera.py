@@ -30,7 +30,7 @@ from ..core.types import Frame
 from ..utils.logging import get_logger
 from .base import FrameSource
 
-log = get_logger("io.camera_mvs")
+log = get_logger("io.camera")
 
 DEFAULT_SDK_PATH = "/opt/MVS"
 

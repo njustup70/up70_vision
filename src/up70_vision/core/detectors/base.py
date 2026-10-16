@@ -21,10 +21,10 @@ class Detector(ABC):
     name: str = "base"
 
     @abstractmethod
-    def detect(self, frame_bgr) -> list:
+    def detect(self, image_bgr) -> list:
         """在 BGR 图上出候选框。
 
-        :param frame_bgr: HxWx3 uint8 BGR 图
+        :param image_bgr: HxWx3 uint8 BGR 图
         :return: Detection 列表；bbox 用绝对像素坐标、右/下半开上界；
                  class_name 填 "unknown"、class_id 填 -1（判色阶段才填颜色）
         """
