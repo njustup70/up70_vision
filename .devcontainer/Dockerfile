@@ -31,6 +31,34 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
+# ---- 1.5 相机 SDK 层（可选）----
+# 海康 MVS：只有「相机接入」阶段用得到。它是 deb 包而不是 pip 包（写不进
+# pyproject.toml 的 dependencies），所以单独占一层。
+#   libusb-1.0-0：libMvCameraControl.so 直接依赖里只有 glibc/libstdc++，
+#     libusb 是**运行时 dlopen** 的，缺了它相机根本打不开（基础镜像里没有）。
+#   deb 放 .devcontainer/pkgs/：184 MB，已被 .gitignore 排除，每个开发者各自下载一份。
+#   没放 deb 也能 build 成功，只是 input.source=camera 会报「MVS 未安装」；
+#   不接相机的开发（合成图 / 回放 / 判色调参 / 单测）完全不受影响。
+# 放在 COPY . . 之前：这一层很少变，放前面可以让改代码时不重建它。
+COPY .devcontainer/pkgs/ /tmp/mvs-pkgs/
+RUN if ls /tmp/mvs-pkgs/*.deb > /dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends libusb-1.0-0 \
+      && apt-get install -y --no-install-recommends /tmp/mvs-pkgs/*.deb \
+      && rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "[MVS] .devcontainer/pkgs/ 下没有 deb —— 跳过相机 SDK，input.source=camera 将不可用"; \
+    fi \
+ && rm -rf /tmp/mvs-pkgs
+
+# MVS 的运行时环境变量。MVS 的安装脚本会写进 ~/.bashrc，但非交互式 shell 不读它，
+# 所以显式写进镜像 ENV（src/up70_vision/io/camera.py 里也做了 setdefault 兜底）。
+ENV MVCAM_SDK_PATH=/opt/MVS \
+    MVCAM_COMMON_RUNENV=/opt/MVS/lib \
+    MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \
+    ALLUSERSPROFILE=/opt/MVS/MVFG \
+    LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32
+
 # ---- 2. 应用与依赖层 ----
 # 源码放到固定路径 /opt/up70_vision。compose 与 devcontainer 都把宿主仓库
 # bind mount 到这个路径，所以改宿主机代码在容器里立即生效，不必重建镜像。

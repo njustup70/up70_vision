@@ -1,8 +1,7 @@
 # 全局默认配置。
 #
 # 所有参数都可以用命令行覆盖，不需要改这个文件：
-#   python scripts/<入口> --set color.hit_ratio_min=0.6
-#   （命令行入口要等 cli.py 重建后才存在；当前改这些文件不会有任何效果）
+#   python scripts/run.py --set color.hit_ratio_min=0.6
 # 点分路径对应下面的层级，例如 detector.blob.min_area_px。
 #
 # 哪些改动会影响自检数字：
@@ -14,7 +13,8 @@
 input:
   # synthetic：读取用 OpenCV 合成的色块图，不需要任何素材文件
   # replay：回放一个图片目录或视频文件（路径在 input.replay.path）
-  # camera：摄像头（本轮未实现，选了会报错）
+  # camera：真相机（海康 MV-CU013-A0UC，走厂商 MVS SDK）。
+  #   需要镜像里装了 MVS —— deb 放 .devcontainer/pkgs/，见该目录的 README。
   source: synthetic
 
   synthetic:
@@ -34,6 +34,23 @@ input:
     frame_stride: 1
     max_frames: 0
 
+  # 真相机（input.source=camera 时生效）：海康 MV-CU013-A0UC，走厂商 MVS SDK。
+  # 需要镜像里装了 MVS（deb 放 .devcontainer/pkgs/，见该目录 README）。
+  camera:
+    # 多台相机时选第几台
+    index: 0
+    # 曝光（微秒）。**这是这颗相机最关键、也最需要按场地重调的参数**：
+    #   照度不足时优先加光 / 开大光圈，一味拉长曝光会掉帧率、在移动目标上留拖影。
+    #   本机实测：20ms 太暗（灰度均值 20）、80ms+10dB 合适（均值 180）、200ms 过曝。
+    #   设成 0 表示不改动相机当前值。
+    exposure_us: 80000.0
+    # 增益（dB），0 表示 0dB（不是"不设置"）
+    gain_db: 10.0
+    # 单次取帧等待上限（毫秒）；超时后本路输入结束（read 返回 None）
+    timeout_ms: 1000
+    # 最多取多少帧，0 = 不限（实时场景靠 Ctrl+C 或命令行 --limit 停）
+    max_frames: 0
+
 color:
   # 相对路径以本文件所在目录（configs/）为基准
   thresholds_file: color_thresholds.yaml
@@ -47,13 +64,22 @@ color:
   ignore_border_px: 3
 
 detector:
-  # blob：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重
+  # blob      ：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重；返回 list[Detection]
+  # stub_aruco：按契约返回**假** ArUco 码的 stub（任务单第一节第 4 条），
+  #             返回 list[ArucoMarker]；等真实现 aruco.py 就位后直接换掉。
+  #             注意：stub 靠内部帧计数器决定"码转到哪"，**每帧只能调一次 detect**。
+  # 返回值结构见 docs/interface.md 第 2、3 节
   name: blob
 
   blob:
     min_area_px: 400
     morph_kernel: 5
     max_detections: 32
+
+  stub_aruco:
+    ids: [0, 1, 2]      # 伪造哪几个码 ID（也决定自检的期望个数）
+    side_px: 90         # 码边长（像素）
+    moving: true        # 第一个码转圈 + 自转，用于验证"移动 / 旋转时持续更新"
 
 output:
   enabled: true
