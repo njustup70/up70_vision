@@ -99,7 +99,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 当前状态：核心算法与回归测试已就位
 
-`src/up70_vision/` 已实现：`core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / 真相机 MVS 源）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）、`core/detectors/stub_aruco.py`（按契约返回假码的 stub），并配了 **36 项**回归测试（`tests/`）。接口契约与"两种返回值"见 `docs/interface.md`；进度、验证数字与踩过的坑见 `docs/progress.md`。
+`src/up70_vision/` 已实现：`core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / 真相机 MVS 源）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）、`core/detectors/stub_aruco.py`（按契约返回假码的 stub）、**`core/detectors/aruco.py`（真 ArUco，DICT_4X4_50）**，并配了 **50 项**回归测试（`tests/`）。接口契约与"两种返回值"见 `docs/interface.md`；进度、验证数字与踩过的坑见 `docs/progress.md`。
 
 **还没做**：ROS 2 对接（M4）、YOLO 接入（M5）、场地标定与阈值重调（M6）——都等外部条件确定，原因见 `progress.md` 第七节。
 
@@ -121,19 +121,19 @@ config ┘
 
 | 路径 | 放什么 |
 |---|---|
-| `src/up70_vision/core/` | 纯算法层：判色、管线、检测器（blob 占位检测器；YOLO 待接） |
+| `src/up70_vision/core/` | 纯算法层：判色、管线、检测器（`blob` 判色占位 + `stub_aruco` 假码 stub + **`aruco` 真 ArUco（DICT_4X4_50）**；YOLO 待接）。两种检出物：`Detection`（判色族）与 `ArucoMarker`（码），见 `docs/interface.md` |
 | `src/up70_vision/io/` | 输入源：合成图、回放、真相机（海康 MVS） |
 | `src/up70_vision/viz/` | 可视化与落盘：画框、写 JSON/CSV |
 | `src/up70_vision/config/` | 配置加载与校验 |
 | `src/up70_vision/utils/` | 通用工具：图像读写、日志 |
-| `src/up70_vision/tools/` | 人用的工具脚本：HSV 交互调参（`hsv_tuner.py`） |
+| `src/up70_vision/tools/` | 人用 / 离线工具：HSV 交互调参（`hsv_tuner.py`）、实时判色窗口（`mvs_color_measure.py`）、**造 ArUco 测试图组（`gen_aruco.py`）**、**对真值自检（`aruco_check.py`）** |
 | `configs/` | 全部可调参数。阈值一律外置到 YAML，不硬编码在代码里 |
-| `scripts/` | 可直接运行的入口：`run.py`（主入口）、`demo.py`（OpenCV 冒烟）、`check_env.py`（环境自检） |
+| `scripts/` | 可直接运行的入口：`run.py`（主入口）、`demo.py`（OpenCV 冒烟）、`check_env.py`（环境自检）、`gen_aruco.py` / `check_aruco.py`（ArUco 图组与自检的薄入口） |
 | `tests/` | 回归测试：断言带具体数字，可用 `python tests/test_xxx.py` 独立运行（镜像里没有 pytest） |
 | `.devcontainer/` | 容器化配置全在这：`Dockerfile`、`docker-compose.yml`、`docker-compose-gpu.yml`、`devcontainer.json`、`pkgs/`（本地投放的安装包，如 MVS 的 deb） |
 | `docs/` | `progress.md`：项目进度、里程碑与已知的坑（维护者的设计笔记在本地，不进版本库） |
 | `data/` | 数据集与回放素材（内容不进版本库） |
-| `assets/` | 资源落点：模型权重、字体、示例图（内容不进版本库） |
+| `assets/` | 资源落点。**`assets/aruco/` 是 ArUco 测试图组 + 真值 JSON，随仓库分发**（小体积，单张 <10 MB）；权重、数据集这类大文件不进版本库 |
 | `output/` | 运行产物（不进版本库） |
 | `.dockerignore` | 构建上下文排除项，避免把 `.git`、缓存、本地笔记打进镜像 |
 
@@ -141,12 +141,13 @@ config ┘
 
 ## 团队约定
 
-- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交；有算法改动时再加跑全部回归测试（`tests/test_*.py`，共 **36** 项，用 `python` 直接跑，不依赖 pytest）：
+- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交；有算法改动时再加跑全部回归测试（`tests/test_*.py`，共 **50** 项，用 `python` 直接跑，不依赖 pytest）：
 
   ```bash
   for t in tests/test_*.py; do python "$t"; done
   ```
 
+- **碰 ArUco 相关代码后跑 `python scripts/check_aruco.py`**：期望 `通过 9/9`、中心最大误差 0.00 px、四角最大误差 ≤ 0.25 px。图组真值在 `assets/aruco/`，改了生成器就用 `python scripts/gen_aruco.py` 重新生成（同参数重跑逐字节一致）。
 - 命名：模块/函数/变量小写下划线，类大驼峰，常量全大写；图像变量必须带颜色空间后缀（如 `frame_bgr`）。
 - 提交：中文祈使句，一句话说清改了什么；`main` 分支始终可运行。
 - 图像一律按 OpenCV 的 BGR 顺序处理；检测框用绝对像素坐标，右/下边界为开区间（半开上界）。

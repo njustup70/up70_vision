@@ -13,10 +13,11 @@
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
 - `src/up70_vision/` 的 `core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）均已实现
-- 回归测试 **36 项**，在容器里全部通过（宿主 apt 版同样 36/36，`check_env.py` 会报 4 项版本不符，属预期）
+- 回归测试 **50 项**（判色/几何/配置 36 + ArUco 14）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
 - **2026-10-16 复核整改**：PR #3 的复核意见（针对 `a06df7f`）逐条处理 —— `--limit` 丢结果、相机半初始化句柄泄漏、白底白字标签、画框多 1px、中文滑条名、`writer.close` 只在成功路径；整改记录见第三节末
+- **2026-10-16 真 ArUco 落地**（飞书任务一）：`core/detectors/aruco.py`（DICT_4X4_50，同图多码 / 旋转可识别）+ `tools/gen_aruco.py`（造测试图组 + 真值）+ `tools/aruco_check.py`（对真值自检）+ `assets/aruco/`（9 张图 + 真值）；按契约返回 `list[ArucoMarker]`，实测 **9/9 张通过、中心最大误差 0.00 px、四角 0.23 px**
 - **还没做**：相机标定（像素 → 毫米）、场地 HSV 阈值重调——两者都要等场地与物块确定
 
 ---
@@ -30,6 +31,7 @@
 | M2 核心算法实现 | ✅ 完成（摄像头源除外） | `core/` 判色与管线、`io/` 合成图与回放、`viz/` 落盘、`config/` 加载、`cli/` 编排 | 摄像头接入见 M6 |
 | M3 回归测试 | ✅ 完成 | `tests/`：**36 项**（2026-10-16 复核整改后由 28 项增至 36）、断言带具体数字、双环境通过 | — |
 | M7 契约落地 | ✅ 完成 | `docs/interface.md` 定稿（`Frame`/`Detection`/`ArucoMarker`/`Detector`/`FrameSource`）；新增 `stub_aruco.py` 按契约返回假 `ArucoMarker`；真实现 `aruco.py` 由搭档交付 | 真实现见 ArUco 分支 |
+| M8 真 ArUco（飞书任务一） | ✅ 完成 | `core/detectors/aruco.py` + `tools/gen_aruco.py` + `tools/aruco_check.py` + `assets/aruco/`（9 张图 + 真值）+ 14 项测试；按契约返回 `list[ArucoMarker]` | 位姿估计（内参 + solvePnP，附加题）顺延阶段二 |
 | M4 ROS 2 对接 | ⬜ 阻塞 | 话题适配器 + 发布节点 + 自定义消息 | 机械臂组 / 电控组定话题名与消息字段 |
 | M5 模型接入 | ⬜ 阻塞 | YOLO 检测器 + 训练流水线 | 没有标注数据集、没有确定物块本体 |
 | M6 真相机与场地标定 | 🔵 部分完成 | 相机接入（✅ 已实现）+ 相机标定 + HSV 阈值按场地重调 | 阈值重调与标定都要等**物块与场地确定**；相机侧已无阻塞 |
@@ -88,13 +90,15 @@
 | `tests/test_pipeline.py` | 11 | 合成源同 seed 逐像素可复现；每帧 6 块且颜色不重复；blob 检出 6 个；`match_to_truth` 具体数值；**端到端 18 个色块、判色 18/18**；配置校验；**stub_aruco 契约与运动**（三个码中心 x = 16/160/304、每帧转 12° 的具体坐标）；**管线对码跳过判色**（`color_counts` 为空、`uncertain` 为 0） |
 | `tests/test_config.py` | 9 | 默认值来自 YAML；8 类非法值都报 `ConfigError` 且消息含字段路径；`--set` 类型转换（float/int/bool/列表）；错键报错列出可用键；阈值表按配置文件目录解析；**`detector.name=stub_aruco` 的默认值与 4 类非法参数** |
 
-**合计 36 项。**
+| `tests/test_aruco.py` | 14 | **真 ArUco**：多码/旋转/无码图对真值（中心与真值完全相等、四角 ≤ 0.25 px）；角点顺序（上边倾角 0°/−30°/−60°）；45° 单码；契约形状（ArucoMarker / float32 / 四角均值）；坏输入被拒；目录里 9 张图逐张对真值 |
+
+**合计 50 项**（36 + 14）。
 
 **双环境验证记录（2026-10-16，复核整改后复测）**
 
-| 环境 | cv2 / numpy | `check_env.py` | `demo.py` | 36 项测试 | 端到端自检 |
+| 环境 | cv2 / numpy | `check_env.py` | `demo.py` | 50 项测试 | 端到端自检 |
 |---|---|---|---|---|---|
-| 容器 `up70-vision:dev`（标准环境） | 4.14.0 / 2.2.6 | 结果：全部通过 | PASS | **36/36** | 18/18，判色全对 |
+| 容器 `up70-vision:dev`（标准环境） | 4.14.0 / 2.2.6 | 结果：全部通过 | PASS | **36/36**（ArUco 14 项见 M8） | 18/18，判色全对 |
 | 宿主 Ubuntu 22.04（apt） | 4.5.4 / 1.21.5 | 报 4 项版本不符（见坑 23） | PASS | 36/36 | 18/18，判色全对 |
 
 > 镜像里**没有装 pytest**，所以 4 个测试文件都同时支持 `python tests/test_xxx.py` 独立运行（内置 `_run_standalone`）。加 pytest 属于改依赖，留待确认。
@@ -142,6 +146,30 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 - `check_env.py` → 容器内**全部通过**；`demo.py` → PASS，退出码 0
 - 镜像 `up70-vision:dev` **已真实 build 成功**（862 MB）
 - 36 项回归测试在宿主与容器双环境全部通过；端到端自检 18/18
+- **2026-10-16 补 ArUco 14 项** -> 合计 50 项；`aruco_check` 9/9 张、四角最大误差 0.23 px（见 M8）
+
+### M8 真 ArUco 检测核心（飞书任务一）
+
+对应飞书《图像处理预备任务》里属于**任务一**的那几栏，也对应仓库任务单「搭档 Owner：检测核心」。
+
+| 飞书原文 | 落点 | 状态 |
+|---|---|---|
+| 任务一.2 用 OpenCV 生成多个不同 ID 的码图 | `tools/gen_aruco.py`（`cv2.aruco.generateImageMarker`）-> `assets/aruco/` | ✅ 3 个单码 + 多码 2 张 + 旋转 2 张 + 无码 2 张 |
+| 任务一.3 读取含码图片并识别 | `tools/aruco_check.py`、`tests/test_aruco.py`；命令行 `--set detector.name=aruco --set input.source=replay --set input.replay.path=<图片或目录>`（单张图片路径也能用） | ✅ |
+| 任务一.4 取 ID / 四角像素坐标 / 中心点 | `core/detectors/aruco.py` 的 `detect() -> list[ArucoMarker]`，契约见 `docs/interface.md` 2.2 / 3.2 | ✅ |
+| 任务一.5 画边框 + 标注 ID 和中心点 | `viz/draw.py`（Aruco 走 `corners_px` 画四边形，旋转的码也贴合；标签 `id=N`；中心红十字） | ✅ |
+
+**自检命令与数字**（协作规范第 4 条要求"具体数字"）：
+
+```bash
+python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
+# 期望：通过 9/9；中心最大误差 0.00 px；四角最大误差 0.23 px
+```
+
+整条管线也跑过（真检测器 + 回放图组）：4 帧共 9 个码、id `[0..5]`、退出码 0。
+
+**真值是怎么算准的**：`gen_aruco.py` 贴图时用的仿射矩阵**就是**算真值四角与中心的那个矩阵，
+所以误差只来自插值（实测 ≤ 0.23 px）。同一参数重跑**逐字节一致**（`diff -r` 验过）。
 
 ---
 
@@ -195,6 +223,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 | 26 | 镜像里相机打不开：枚举不到设备 / 权限错 | `libMvCameraControl.so` 的直接依赖只有 glibc 与 libstdc++，**libusb 是运行时 dlopen 的**，而 `ubuntu:22.04` 基础镜像没装它 | Dockerfile 里显式 `apt-get install libusb-1.0-0`（与 MVS 同一层） |
 | 27 | MVS 装不进依赖声明 | 它是 **deb 包**，不是 pip 包，`pyproject.toml` 的 `dependencies` 表达不了 | 走镜像层：deb 放 `.devcontainer/pkgs/`（已被 `.gitignore` 排除，184 MB 不进版本库），Dockerfile `COPY` + `apt-get install`；`check_env.py` 不检查它 |
 | 28 | 相机程序退出时打印 `*******XOpenDisplay Fail*******` | MVS 的库在收尾时会尝试连 X 显示，容器 / 无显示环境里必然失败 | 无害，可忽略：退出码仍为 0，取帧与落盘都不受影响 |
+| 34 | `AttributeError: module 'cv2.aruco' has no attribute 'DetectorParameters_create'`（或 `detectMarkers` 用法对不上） | ArUco 自 OpenCV **4.7** 起进主包并改版 API：老教程的 `DetectorParameters_create()` + `cv2.aruco.detectMarkers(...)` 换成 `DetectorParameters()` + `cv2.aruco.ArucoDetector(dictionary, params).detectMarkers(gray)` | 只认新 API（`pyproject` 钉 `opencv-python>=4.10`）；**不要**为了迁就老教程装 `opencv-contrib-python`（会与 `opencv-python` 争 `cv2` 顶层模块）。`aruco.py` 在旧版本上抛一句带处理办法的 `RuntimeError`，`tests/test_aruco.py` 自动跳过 |
 
 ### 代码类
 
@@ -210,6 +239,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 | 30 | `--limit N` 一旦真正生效就丢结果：打印「❌ 一帧都没处理」并返回退出码 1，可帧确实处理了、图也落了盘 | `cli.py` 的 `on_result` 里额外 `raise StopIteration` 想断流，而 `process_frames` 是普通函数，异常直接冒泡到外层 `except StopIteration: results = []`，把算好的结果清空；限帧其实已由 `limited()` 生成器做过一遍 | 限帧只留 `limited()` 一处，删掉 `on_result` 里的 raise 与外层 except（复核意见一.1）。**触发条件是 `limit ≤ 可用帧数`**，所以相机那条无限流命令 `--limit 10` 必中 |
 | 31 | 相机在某次失败后"打不开"了（`LIBUSB_ERROR_BUSY` / 枚举不到），要重启程序甚至重插 | `io/camera.py` 里 `_opened` 原本只在**全部成功**后才置位；`MV_CC_OpenDevice` 成功后若 `MV_CC_StartGrabbing` 失败就抛异常，此时设备已被**独占**打开，而 `close()` 开头 `if not self._opened: return` 直接返回 → 句柄泄漏 | `_opened` 语义改为「句柄已创建」（CreateHandle 成功即置位），构造函数里 `try: self._open() except: self.close(); raise`；`close()` 做成幂等，且 `CloseDevice` 只在设备确实打开过时调用（复核意见二.1 / 契约欠账二） |
 | 32 | 叠加图上"什么都没画"：ID/颜色标签一个也看不见，左上角 HUD 也几乎读不出 | `put_text` 默认写**白字**、HUD 用亮黄字，落在**白底**素材上等于没画——不报错、就是看不见（与坑 11"画问号"同一类"看不出问题的问题"） | `put_text` 加 `outline=True`：先用黑色厚一档描边再写字，白底/黑底/彩色底都读得清（复核意见二.2）。教训：**画完要真的打开图看**，只看 `count/ids` 会以为画对了 |
+| 35 | ArUco 四角误差稳定卡在 ~0.55 px，怎么调都下不去 | 测试图组的真值把码边界当成了「最外侧黑像素的**中心**」（`0` 与 `side-1`）；而检测器报的是黑框**最外沿**，正好差半个像素 | 真值改用像素边界 `[-0.5, side-0.5]`：误差立刻降到 0.14~0.23 px。教训：**真值必须和贴图用同一个仿射矩阵算**，别事后目测标点 |
 
 ### 工具与工程类
 
@@ -222,6 +252,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 | 16 | 删了模块但 `__pycache__` 里还有它的 `.pyc` | Python 不会自动清理已删源文件的字节码缓存 | `find src -name __pycache__ -type d -exec rm -rf {} +` |
 | 17 | `*.egg-info/SOURCES.txt` 列着已删文件 | `pip install -e .` 生成的元数据不会随源码变更自动同步 | 删掉 `src/up70_vision.egg-info` 后重装；该目录已被 gitignore |
 | 33 | `cv2.createTrackbar` 报 `NULL window handler`（或滑条看不见） | 滑条名 / 窗口标题传了中文：OpenCV 的 highgui 在某些后端上不接受非 ASCII 名字 | 滑条名与窗口标题一律 ASCII（`tools/mvs_color_measure.py` 原来有个「面积下限」，已改 `min_area`，复核意见二.4） |
+| 37 | `python -m up70_vision.tools.aruco_check` 报 `ModuleNotFoundError: up70_vision` | 在宿主 venv 里跑但没 `pip install -e .` | 走薄入口 `python scripts/check_aruco.py`（自带 `src` 路径兜底），或 `PYTHONPATH=src python -m up70_vision.tools.aruco_check` |
 
 > 注：上表编号 17 与「环境类」新增的 17~23 重复，下次整理时统一重排。
 

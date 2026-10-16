@@ -38,7 +38,7 @@ class Frame:
 - `__post_init__` 只校验 `ndim == 3 且 shape[2] == 3`；**不校验 dtype、不校验通道顺序**。
 - 属性：`height`、`width`、`size`（返回 `(宽, 高)`）、`has_ground_truth()`。
 
-### 2.2 `ArucoMarker` ⬜（任务二新增）
+### 2.2 `ArucoMarker` ✅（任务二新增）
 
 ```python
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class Detector(ABC):
 - 工厂 `build_detector(name, params)`：未知名字抛 `ValueError`，报错里列出可用值。
 - `detect` **只收图**：不收帧号、不收 `Frame`、不读文件、不开窗口。
 
-### 3.2 `ArucoDetector` ⬜（任务二）
+### 3.2 `ArucoDetector` ✅（任务二）
 
 同名同签名的两个实现：`core/detectors/aruco.py`（真，搭档交付）、`core/detectors/stub_aruco.py`（假，脚本化场景）。
 
@@ -165,3 +165,4 @@ class FrameSource(ABC):
 | 2026-10-16 | 建文件 | 契约以已落地的实现为基线，不以计划书里的设想为基线 |
 | 2026-10-16 | 复核：补 `utils` 与 `viz` 的规矩，标注 `input.camera` 尚未进 main | 逐文件对照源码 |
 | 2026-10-16 | 精简：9 节压到 6 节；判色族内容收进 2.3 一张表；配置字段、依赖方向、运行平台各压成一两句 | 当前只有 ArUco 部分是待建的，其余是已实现的事实登记；将来要用的等用得到时再展开 |
+| 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`stub_aruco.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
