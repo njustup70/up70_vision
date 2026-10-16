@@ -68,6 +68,7 @@ detector:
   # stub_aruco：按契约返回**假** ArUco 码的 stub（任务单第一节第 4 条），
   #             返回 list[ArucoMarker]；等真实现 aruco.py 就位后直接换掉。
   #             注意：stub 靠内部帧计数器决定"码转到哪"，**每帧只能调一次 detect**。
+  # aruco     ：真 ArUco 检测器（DICT_4X4_50），返回 list[ArucoMarker]；测试图组见 assets/aruco/
   # 返回值结构见 docs/interface.md 第 2、3 节
   name: blob
 
@@ -80,6 +81,16 @@ detector:
     ids: [0, 1, 2]      # 伪造哪几个码 ID（也决定自检的期望个数）
     side_px: 90         # 码边长（像素）
     moving: true        # 第一个码转圈 + 自转，用于验证"移动 / 旋转时持续更新"
+
+  # aruco：真 ArUco 检测（任务单「搭档 Owner：检测核心」的产出）
+  #   用法：--set detector.name=aruco 配合图片回放/相机；测试图组见 assets/aruco/
+  #   自检：python -m up70_vision.tools.aruco_check --dir assets/aruco
+  aruco:
+    dictionary: DICT_4X4_50   # 任务单指定；换字典会让已有测试图组的真值全部作废
+    corner_refine: subpix     # none / subpix / contour。subpix 把角点做到亚像素，
+                              # 位姿估计（solvePnP）阶段直接吃这个精度
+    min_perimeter_rate: 0.03  # 检出码的最小周长占图像周长比例；调小能捞小码、也更容易误报
+    max_detections: 0         # 单帧最多返回几个（0=不限）；超限时保留面积最大的几个
 
 output:
   enabled: true
