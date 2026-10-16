@@ -99,7 +99,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 当前状态：核心算法与回归测试已就位
 
-`src/up70_vision/` 已实现：`core/`（判色与管线）、`io/`（合成图 / 回放 / 真相机 MVS 源）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值），并配了 27 项回归测试（`tests/`）。进度、验证数字与踩过的坑见 `docs/progress.md`。
+`src/up70_vision/` 已实现：`core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / 真相机 MVS 源）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）、`core/detectors/stub_aruco.py`（按契约返回假码的 stub），并配了 **36 项**回归测试（`tests/`）。接口契约与"两种返回值"见 `docs/interface.md`；进度、验证数字与踩过的坑见 `docs/progress.md`。
 
 **还没做**：ROS 2 对接（M4）、YOLO 接入（M5）、场地标定与阈值重调（M6）——都等外部条件确定，原因见 `progress.md` 第七节。
 
@@ -141,7 +141,12 @@ config ┘
 
 ## 团队约定
 
-- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交；有算法改动时再加跑 `python tests/test_types.py`、`test_color.py`、`test_pipeline.py`、`test_config.py`（共 27 项，用 `python` 直接跑，不依赖 pytest）。
+- **改 `src/` 前先跑 `python scripts/demo.py` 与 `python scripts/check_env.py`**，两个都通过再提交；有算法改动时再加跑全部回归测试（`tests/test_*.py`，共 **36** 项，用 `python` 直接跑，不依赖 pytest）：
+
+  ```bash
+  for t in tests/test_*.py; do python "$t"; done
+  ```
+
 - 命名：模块/函数/变量小写下划线，类大驼峰，常量全大写；图像变量必须带颜色空间后缀（如 `frame_bgr`）。
 - 提交：中文祈使句，一句话说清改了什么；`main` 分支始终可运行。
 - 图像一律按 OpenCV 的 BGR 顺序处理；检测框用绝对像素坐标，右/下边界为开区间（半开上界）。

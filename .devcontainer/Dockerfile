@@ -52,7 +52,7 @@ RUN if ls /tmp/mvs-pkgs/*.deb > /dev/null 2>&1; then \
  && rm -rf /tmp/mvs-pkgs
 
 # MVS 的运行时环境变量。MVS 的安装脚本会写进 ~/.bashrc，但非交互式 shell 不读它，
-# 所以显式写进镜像 ENV（src/up70_vision/io/camera_mvs.py 里也做了 setdefault 兜底）。
+# 所以显式写进镜像 ENV（src/up70_vision/io/camera.py 里也做了 setdefault 兜底）。
 ENV MVCAM_SDK_PATH=/opt/MVS \
     MVCAM_COMMON_RUNENV=/opt/MVS/lib \
     MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \

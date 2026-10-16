@@ -2,9 +2,9 @@
 
 配置是参数的唯一真源。代码里不硬编码任何阈值、尺寸或路径。
 
-> **当前状态**：`src/` 还是空骨架，读取这些配置的代码尚未就位。
-> 因此本目录现在是「目标参数面」参考——它描述的是实现就位后应该长成的样子，
-> 现在改这些文件不会有任何效果。
+> **当前状态**：读取这些配置的代码**已就位**（`config/loader.py` + `config/schema.py`）。
+> 改这里的值会直接生效；`python scripts/run.py --set a.b=c` 可临时覆盖单次运行。
+> 字段路径写错或取值非法，启动时报 `ConfigError`，消息里带字段路径与合法取值。
 
 ---
 
@@ -62,10 +62,13 @@ HSV 阈值表。加颜色只需在这里加一项，代码自动识别。
 
 ### 怎么调
 
-不要对着代码猜数字。用调参工具（**`tools/hsv_tuner.py` 重建后生效**）：
+不要对着代码猜数字。用调参工具（`tools/hsv_tuner.py`，已就位；需要 GUI）：
 
 ```bash
-python -m up70_vision.tools.hsv_tuner --image data/clips/sample.jpg --color red --segment 0
+# 只调红色：--colors 后面跟阈值表里的颜色名（可以给多个）
+python -m up70_vision.tools.hsv_tuner --image data/clips/sample.jpg --colors red
+# 没有实拍图也可以对着合成图调
+python -m up70_vision.tools.hsv_tuner --source synthetic
 ```
 
 拖滑条时看中间那幅叠加图：目标颜色被红色半透明覆盖、背景干净，就是对了。

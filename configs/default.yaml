@@ -1,8 +1,7 @@
 # 全局默认配置。
 #
 # 所有参数都可以用命令行覆盖，不需要改这个文件：
-#   python scripts/<入口> --set color.hit_ratio_min=0.6
-#   （命令行入口要等 cli.py 重建后才存在；当前改这些文件不会有任何效果）
+#   python scripts/run.py --set color.hit_ratio_min=0.6
 # 点分路径对应下面的层级，例如 detector.blob.min_area_px。
 #
 # 哪些改动会影响自检数字：
