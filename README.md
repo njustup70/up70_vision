@@ -131,7 +131,7 @@ config ┘
 | `scripts/` | 可直接运行的入口：`run.py`（主入口）、`demo.py`（OpenCV 冒烟）、`check_env.py`（环境自检）、`gen_aruco.py` / `check_aruco.py`（ArUco 图组与自检的薄入口） |
 | `tests/` | 回归测试：断言带具体数字，可用 `python tests/test_xxx.py` 独立运行（镜像里没有 pytest） |
 | `.devcontainer/` | 容器化配置全在这：`Dockerfile`、`docker-compose.yml`、`docker-compose-gpu.yml`、`devcontainer.json`、`pkgs/`（本地投放的安装包，如 MVS 的 deb） |
-| `docs/` | `progress.md`：项目进度、里程碑与已知的坑（维护者的设计笔记在本地，不进版本库） |
+| `docs/` | `progress.md`：项目进度与已知的坑；`代码注释规范.md`：注释写到什么程度；`提交信息规范.md`：git 提交信息怎么写（维护者的设计笔记在本地，不进版本库） |
 | `data/` | 数据集与回放素材（内容不进版本库） |
 | `assets/` | 资源落点。**`assets/aruco/` 是 ArUco 测试图组 + 真值 JSON，随仓库分发**（小体积，单张 <10 MB）；权重、数据集这类大文件不进版本库 |
 | `output/` | 运行产物（不进版本库） |
@@ -149,6 +149,7 @@ config ┘
 
 - **碰 ArUco 相关代码后跑 `python scripts/check_aruco.py`**：期望 `通过 9/9`、中心最大误差 0.00 px、四角最大误差 ≤ 0.25 px。图组真值在 `assets/aruco/`，改了生成器就用 `python scripts/gen_aruco.py` 重新生成（同参数重跑逐字节一致）。
 - 命名：模块/函数/变量小写下划线，类大驼峰，常量全大写；图像变量必须带颜色空间后缀（如 `frame_bgr`）。
+- 注释按 `docs/代码注释规范.md`：每个模块/类/函数（含私有）都要 docstring，类属性与配置字段要说明含义和取值；注释写「为什么、边界、症状」，不复述代码。
 - 提交：中文祈使句，一句话说清改了什么；`main` 分支始终可运行。
 - 图像一律按 OpenCV 的 BGR 顺序处理；检测框用绝对像素坐标，右/下边界为开区间（半开上界）。
 - 新增算法功能要配「断言带具体数字」的验证，不要写 `assert x > 0`——判色错了不会抛异常，只会让结果"看起来不太准"。
