@@ -73,5 +73,17 @@ RUN pip3 install --no-cache-dir --upgrade pip -i "$PIP_INDEX_URL" \
 # 仓库文档里的命令统一写 python，补一个软链接，免得在容器里要记 python3
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
+# ---- 4. 图形界面（容器内开窗口用）----
+# cv2.imshow 走 Qt 的 xcb 插件，它 dlopen 这两个 X11 会话库：
+#   缺 libSM.so.6 / libICE.so.6 时，报的是
+#   "Could not load the Qt platform plugin xcb ... even though it was found"
+#   —— 报错不提缺哪个库，很容易误判成"OpenCV 没编 GUI 支持"。
+# 装了这两个包 + 宿主 xhost +local:root + 挂 /tmp/.X11-unix 与 DISPLAY，
+# 就能在容器里 imshow；不装也不影响 --headless（落盘看图）那条路。
+# 放在最后一层：前面的 pip 层缓存不受影响，重建只花几秒。
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libsm6 libice6 \
+ && rm -rf /var/lib/apt/lists/*
+
 # 默认跑环境自检：docker run 不带 command 时就知道环境是否正常
 CMD ["python", "scripts/check_env.py"]

@@ -122,31 +122,107 @@ DETECTOR_DEFAULT_PARAMS = {
 
 @dataclass
 class DetectorConfig:
+    """检测器选择与它的参数。
+
+    用大白话说
+        配置里"用哪个检测器、它的参数怎么调"这一段。比如用假码（stub_aruco），
+        就写要伪造几个码、边长多少、要不要动；用真识别的名字由任务一提供。
+
+    属性
+        name (str)    检测器名，必须是 `DETECTOR_DEFAULT_PARAMS` 的键之一
+                      （当前 `blob` / `stub_aruco` / `aruco`）
+        params (dict) 该检测器的参数，来自 `configs/default.yaml` 的 `detector.<name>` 段；
+                      整段缺省时用 `DETECTOR_DEFAULT_PARAMS[name]` 兜底
+
+    参数速查（只列会被 `validate()` 检查的项；其余交给检测器自己报错）
+        ┌────────────┬──────────────┬─────────┬──────────────────────────────┐
+        │ 检测器      │ 键            │ 类型    │ 合法值 / 默认                │
+        ├────────────┼──────────────┼─────────┼──────────────────────────────┤
+        │ blob       │ min_area_px   │ int     │ >= 0，默认 400               │
+        │            │ morph_kernel  │ int     │ 正奇数，默认 5               │
+        │            │ max_detections│ int     │ >= 1，默认 32                │
+        ├────────────┼──────────────┼─────────┼──────────────────────────────┤
+        │ stub_aruco │ ids           │ list[int]│ 非空，默认 [0, 1, 2]         │
+        │            │ side_px       │ int     │ >= 1，默认 90                │
+        │            │ moving        │ bool    │ 默认 true                    │
+        │            │ mode          │ str     │ "normal" / "none"，默认 normal│
+        │            │ empty_after   │ int     │ >= 0，默认 0（不启用）       │
+        └────────────┴──────────────┴─────────┴──────────────────────────────┘
+
+        aruco（真 ArUco，实现见 `core/detectors/aruco.py`；这张表放不下，单列）
+            dictionary          str    `DICT_` 开头，默认 DICT_4X4_50
+            corner_refine       str    none / subpix / contour，默认 subpix
+            min_perimeter_rate  float  (0, 1]，默认 0.03（占图像周长的比例）
+            max_detections      int    >= 0，默认 0（不限）
+    """
+
     name: str = "blob"
     params: dict = field(default_factory=lambda: dict(DETECTOR_DEFAULT_PARAMS["blob"]))
 
     def validate(self) -> None:
+        """校验检测器名与它自己的参数；越界的值在这里就报 `ConfigError`。
+
+        用大白话说
+            这里是配置的"安检口"：名字写错、参数写成负数/奇数不合法，就在门口拦下，
+            直接告诉你"哪个字段、错在哪、合法值是什么"，不用等程序跑起来才看到英文崩溃。
+            比如 mode 写成 "NONEE"，这里会说"只能是 normal / none"，而不是运行到一半才奇怪。
+
+        校验放在配置层而不是等检测器构造时再报，是为了让 `--dump-config` / 启动阶段
+        就能给出带字段路径的中文提示（构造期才报往往只剩一句英文异常）。
+
+        校验清单
+            1. `name` 在工厂认识的名单里（不在 → 报错并列出全部可用值）
+            2. 按 `name` 分支校验各自的参数（见类文档的"参数速查"表）
+            3. 未列入的键不在这里拦：检测器构造时会报"未知参数"，
+               保证新增参数时不用同时改两处（但也绝不静默忽略）
+        """
+        # ---- 名字：必须在工厂认识的名单里，报错时列出全部可用值 ----
         if self.name not in DETECTOR_DEFAULT_PARAMS:
             raise ConfigError(
                 f"detector.name 必须是 {sorted(DETECTOR_DEFAULT_PARAMS)} 之一，收到 {self.name!r}")
         p = self.params
+        # ---- 各检测器的参数：只校验已知项，未知项留给检测器自己报（不静默忽略）----
         if self.name == "blob":
+            # 最小框面积：负值会让所有候选框都被过滤掉，表现为"什么都检测不到"
             if int(p.get("min_area_px", 400)) < 0:
                 raise ConfigError(f"detector.blob.min_area_px 不能为负：{p.get('min_area_px')}")
+            # 形态学核边长：必须正奇数，偶数/非正会让 cv2.morphologyEx 直接抛错
             k = int(p.get("morph_kernel", 5))
             if k <= 0 or k % 2 == 0:
                 raise ConfigError(f"detector.blob.morph_kernel 必须是正奇数：{k}")
+            # 单帧最多保留多少个框：0 或负数等于永远不输出任何框
             if int(p.get("max_detections", 32)) <= 0:
                 raise ConfigError(f"detector.blob.max_detections 必须为正：{p.get('max_detections')}")
         elif self.name == "stub_aruco":
+            # ids：伪造哪些码。空列表会让 stub 每帧返回 []，与"无码"混在一起没法区分，
+            # 所以这里要求非空；元素必须是整数（True/False 是 int 子类，要排掉）
             ids = p.get("ids", [0, 1, 2])
             if not isinstance(ids, (list, tuple)) or len(ids) == 0:
                 raise ConfigError(f"detector.stub_aruco.ids 必须是非空列表，收到 {ids!r}")
             for one in ids:
                 if not isinstance(one, int) or isinstance(one, bool):
                     raise ConfigError(f"detector.stub_aruco.ids 只能是整数，收到 {one!r}")
+            # side_px：码边长，非正会让四角重合、画不出码
             if int(p.get("side_px", 90)) <= 0:
                 raise ConfigError(f"detector.stub_aruco.side_px 必须为正：{p.get('side_px')}")
+            # mode / empty_after：任务单第 6 条"无码时正常运行"的定量输入源。
+            #   不写进 DETECTOR_DEFAULT_PARAMS：默认就是 normal / 0，
+            #   写进去只会让默认参数字典变长、还得多改一处断言。
+            #   mode=none  → 每帧都返回 []（恒无码）
+            #   empty_after>0 → 前 N 帧正常出码，第 N 帧起返回 []（演"码移出画面"）
+            mode = str(p.get("mode", "normal")).strip().lower()
+            if mode not in ("normal", "none"):
+                raise ConfigError(
+                    f"detector.stub_aruco.mode 只能是 'normal' / 'none'，收到 {p.get('mode')!r}")
+            if "empty_after" in p and p["empty_after"] is not None:
+                try:
+                    empty_after = int(p["empty_after"])
+                except (TypeError, ValueError) as exc:
+                    raise ConfigError(
+                        f"detector.stub_aruco.empty_after 必须是整数，收到 {p['empty_after']!r}") from exc
+                if empty_after < 0:
+                    raise ConfigError(
+                        f"detector.stub_aruco.empty_after 不能为负：{empty_after}")
         elif self.name == "aruco":
             dictionary = str(p.get("dictionary", "DICT_4X4_50")).strip()
             if not dictionary.upper().startswith("DICT_"):
