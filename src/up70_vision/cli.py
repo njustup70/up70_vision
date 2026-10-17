@@ -211,6 +211,13 @@ def run(argv=None) -> int:
             print(f"  自检(判色)  : 匹配 {summary['matched']} 个里判对 "
                   f"{summary['color_correct']} 个 -> {'✅ 通过' if all_right else '❌ 有判错'}")
             ok = ok and all_right
+    elif cfg.input.source == "synthetic" and cfg.detector.name == "aruco":
+        # 合成图里只有色块、一个 ArUco 码都没有：这一条顺手验了验收清单第 3 条
+        # （画面无码时程序正常运行、不误报）
+        got = summary["detections"]
+        print(f"  自检(无码)  : 合成图里没有 ArUco 码，期望 0 个，实得 {got} 个 -> "
+              f"{'✅ 通过' if got == 0 else '❌ 误报'}")
+        ok = ok and got == 0
     elif cfg.input.source == "synthetic" and cfg.detector.name != "blob":
         print(f"  自检(合成图): 跳过节数检查（检测器是 {cfg.detector.name}，色块数不适用）")
     if cfg.detector.name == "stub_aruco":
@@ -222,6 +229,12 @@ def run(argv=None) -> int:
               f"实得 {got} 个、id 集合 {summary['ids']} -> "
               f"{'✅ 通过' if (got == expected and ids_ok) else '❌ 不一致'}")
         ok = ok and got == expected and ids_ok
+    if cfg.detector.name == "aruco" and cfg.input.source != "synthetic":
+        # 回放/相机源没有 ground truth，CLI 这边只能报"检出了什么"；
+        # 要按真值逐张核 ID / 四角 / 中心，那是 tools/aruco_check.py 的活。
+        print(f"  自检(aruco) : 本次共 {summary['detections']} 个码、id 集合 {summary['ids']}"
+              f"（本输入源无真值，不做对错判定）")
+        print("              按真值逐张核 ID/四角/中心：python scripts/check_aruco.py")
     if cfg.output.enabled:
         print(f"  落盘        : {written}")
     print(f"\n{'✅ 运行成功' if ok else '❌ 自检未通过'}")

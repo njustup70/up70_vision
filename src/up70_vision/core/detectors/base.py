@@ -11,14 +11,14 @@
 
 返回值结构按检测器族分两种（docs/interface.md 第 3 节）
     · 判色族（`blob`）：`list[Detection]`，轴对齐 bbox，中心 = bbox 中心，带颜色字段
-    · ArUco（`stub_aruco`，将来有 `aruco`）：`list[ArucoMarker]`，四角点，中心 = 四角算术平均
+    · ArUco（`aruco` / `stub_aruco`）：`list[ArucoMarker]`，四角点，中心 = 四角算术平均
     两者都：**无目标返回 `[]`**（不是 None，不抛异常）；形参名固定 `image_bgr`。
 """
 
 from abc import ABC, abstractmethod
 
 # 工厂认识的名字（configs/default.yaml 的 detector.name 只能填这些）
-DETECTOR_NAMES = ("blob", "stub_aruco")
+DETECTOR_NAMES = ("blob", "stub_aruco", "aruco")
 
 
 class Detector(ABC):
@@ -42,9 +42,11 @@ class Detector(ABC):
 def build_detector(name: str, params: dict | None = None) -> Detector:
     """工厂：按名字构造检测器。
 
-    :param name: "blob"（判色占位检测器）或 "stub_aruco"（按契约返回假码的 stub）
+    :param name: "blob"（判色占位检测器）、"stub_aruco"（按契约返回假码的 stub）
+                 或 "aruco"（真 ArUco，DICT_4X4_50）
     :param params: 该检测器的参数字典（来自 configs/default.yaml 的 detector.<name> 段）
     :raises ValueError: 名字未知（报错里列出可用值）
+    :raises RuntimeError: 选了 aruco 但当前 OpenCV 没有新版 aruco API（需 >= 4.7）
     """
     params = dict(params or {})
     key = str(name).strip().lower()
@@ -54,4 +56,7 @@ def build_detector(name: str, params: dict | None = None) -> Detector:
     if key in ("stub_aruco", "stub"):
         from .stub_aruco import StubArucoDetector
         return StubArucoDetector(**params)
+    if key == "aruco":
+        from .aruco import ArucoDetector
+        return ArucoDetector(**params)
     raise ValueError(f"未知检测器 {name!r}；当前可用：{list(DETECTOR_NAMES)}")

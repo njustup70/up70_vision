@@ -115,6 +115,8 @@ class InputConfig:
 DETECTOR_DEFAULT_PARAMS = {
     "blob": {"min_area_px": 400, "morph_kernel": 5, "max_detections": 32},
     "stub_aruco": {"ids": [0, 1, 2], "side_px": 90, "moving": True},
+    "aruco": {"dictionary": "DICT_4X4_50", "corner_refine": "subpix",
+              "min_perimeter_rate": 0.03, "max_detections": 0},
 }
 
 
@@ -145,6 +147,23 @@ class DetectorConfig:
                     raise ConfigError(f"detector.stub_aruco.ids 只能是整数，收到 {one!r}")
             if int(p.get("side_px", 90)) <= 0:
                 raise ConfigError(f"detector.stub_aruco.side_px 必须为正：{p.get('side_px')}")
+        elif self.name == "aruco":
+            dictionary = str(p.get("dictionary", "DICT_4X4_50")).strip()
+            if not dictionary.upper().startswith("DICT_"):
+                raise ConfigError(
+                    f"detector.aruco.dictionary 需要 OpenCV 预定义字典名（形如 DICT_4X4_50）："
+                    f"{p.get('dictionary')!r}")
+            refine = str(p.get("corner_refine", "subpix")).strip().lower()
+            if refine not in ("none", "subpix", "contour"):
+                raise ConfigError(
+                    f"detector.aruco.corner_refine 必须是 none/subpix/contour，收到 {refine!r}")
+            rate = float(p.get("min_perimeter_rate", 0.03))
+            if not 0.0 < rate <= 1.0:
+                raise ConfigError(
+                    f"detector.aruco.min_perimeter_rate 必须在 (0, 1]（占图像周长的比例）：{rate}")
+            if int(p.get("max_detections", 0)) < 0:
+                raise ConfigError(
+                    f"detector.aruco.max_detections 不能为负（0 表示不限）：{p.get('max_detections')}")
 
 
 @dataclass
