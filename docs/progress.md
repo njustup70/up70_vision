@@ -223,6 +223,7 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 25 | 在受限开发沙箱 / 精简容器里 MVS 枚举不到相机，可 `lsusb` 又列得出设备 | 沙箱的 `/dev` 是精简 devfs（**没有 `/dev/bus/usb`**），而 `lsusb` 走 sysfs 照样列设备——两者结论会打架 | 判断"相机到底可用吗"必须在**能看到 `/dev/bus/usb` 的环境**里跑（容器加 `--device`，或宿主机终端），别信 `lsusb` 单方面 |
 | 26 | 镜像里相机打不开：枚举不到设备 / 权限错 | `libMvCameraControl.so` 的直接依赖只有 glibc 与 libstdc++，**libusb 是运行时 dlopen 的**，而 `ubuntu:22.04` 基础镜像没装它 | Dockerfile 里显式 `apt-get install libusb-1.0-0`（与 MVS 同一层） |
 | 27 | MVS 装不进依赖声明 | 它是 **deb 包**，不是 pip 包，`pyproject.toml` 的 `dependencies` 表达不了 | 走镜像层：deb 放 `.devcontainer/pkgs/`（已被 `.gitignore` 排除，184 MB 不进版本库），Dockerfile `COPY` + `apt-get install`；`check_env.py` 不检查它 |
+| 28 | 手举 ArUco 码**晃动或快速移动时识别不出来**，静置却稳定 | **运动模糊**：80 ms 曝光的整个期间，码在画面里移动的距离都会被拖成一条影。手以 20 cm/s 挥动、1 m 距离时拖影约 20 px，而 4x4 码的单格也只有 15~20 px，格子边界直接糊掉（2026-10-17 实测）。帧率低（11.6 fps）是同一原因的另一种表现，**不是检测算法慢** | 降曝光优先于提增益：40 ms 下拖影减半、帧率上限 25 fps，实测静置仍稳定识别；增益只换噪声。**首选加光**（补光灯/台灯），既不丢帧率也不加噪声。这是物理限制，任何视觉系统快速运动都会丢，验收要求是"停下来能立刻恢复"，不是"每帧必检出" |
 | 28 | 相机程序退出时打印 `*******XOpenDisplay Fail*******` | MVS 的库在收尾时会尝试连 X 显示，容器 / 无显示环境里必然失败 | 无害，可忽略：退出码仍为 0，取帧与落盘都不受影响 |
 | 34 | `AttributeError: module 'cv2.aruco' has no attribute 'DetectorParameters_create'`（或 `detectMarkers` 用法对不上） | ArUco 自 OpenCV **4.7** 起进主包并改版 API：老教程的 `DetectorParameters_create()` + `cv2.aruco.detectMarkers(...)` 换成 `DetectorParameters()` + `cv2.aruco.ArucoDetector(dictionary, params).detectMarkers(gray)` | 只认新 API（`pyproject` 钉 `opencv-python>=4.10`）；**不要**为了迁就老教程装 `opencv-contrib-python`（会与 `opencv-python` 争 `cv2` 顶层模块）。`aruco.py` 在旧版本上抛一句带处理办法的 `RuntimeError`，`tests/test_aruco.py` 自动跳过 |
 
@@ -241,6 +242,7 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 31 | 相机在某次失败后"打不开"了（`LIBUSB_ERROR_BUSY` / 枚举不到），要重启程序甚至重插 | `io/camera.py` 里 `_opened` 原本只在**全部成功**后才置位；`MV_CC_OpenDevice` 成功后若 `MV_CC_StartGrabbing` 失败就抛异常，此时设备已被**独占**打开，而 `close()` 开头 `if not self._opened: return` 直接返回 → 句柄泄漏 | `_opened` 语义改为「句柄已创建」（CreateHandle 成功即置位），构造函数里 `try: self._open() except: self.close(); raise`；`close()` 做成幂等，且 `CloseDevice` 只在设备确实打开过时调用（复核意见二.1 / 契约欠账二） |
 | 32 | 叠加图上"什么都没画"：ID/颜色标签一个也看不见，左上角 HUD 也几乎读不出 | `put_text` 默认写**白字**、HUD 用亮黄字，落在**白底**素材上等于没画——不报错、就是看不见（与坑 11"画问号"同一类"看不出问题的问题"） | `put_text` 加 `outline=True`：先用黑色厚一档描边再写字，白底/黑底/彩色底都读得清（复核意见二.2）。教训：**画完要真的打开图看**，只看 `count/ids` 会以为画对了 |
 | 35 | ArUco 四角误差稳定卡在 ~0.55 px，怎么调都下不去 | 测试图组的真值把码边界当成了「最外侧黑像素的**中心**」（`0` 与 `side-1`）；而检测器报的是黑框**最外沿**，正好差半个像素 | 真值改用像素边界 `[-0.5, side-0.5]`：误差立刻降到 0.14~0.23 px。教训：**真值必须和贴图用同一个仿射矩阵算**，别事后目测标点 |
+| 36 | 用 `--limit 300` 测实时循环，实际只跑了 **3 帧**就结束 | `--limit` 只限制**循环消费**多少帧，供给端是 `input.source`：默认 `synthetic` 只配了 `num_frames: 3`，源自己 3 帧就结束了，`--limit` 根本轮不到 | 跑长序列要同时放大源帧数：`--set input.synthetic.num_frames=300`；相机源天然无限，不受影响。**验收第 6 条（无码不异常退出）必须跑满上百帧才有说服力**——3 帧只能证明"没崩"，证明不了"持续运行" |
 
 ### 工具与工程类
 
@@ -254,6 +256,8 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 17 | `*.egg-info/SOURCES.txt` 列着已删文件 | `pip install -e .` 生成的元数据不会随源码变更自动同步 | 删掉 `src/up70_vision.egg-info` 后重装；该目录已被 gitignore |
 | 33 | `cv2.createTrackbar` 报 `NULL window handler`（或滑条看不见） | 滑条名 / 窗口标题传了中文：OpenCV 的 highgui 在某些后端上不接受非 ASCII 名字 | 滑条名与窗口标题一律 ASCII（`tools/mvs_color_measure.py` 原来有个「面积下限」，已改 `min_area`，复核意见二.4） |
 | 37 | `python -m up70_vision.tools.aruco_check` 报 `ModuleNotFoundError: up70_vision` | 在宿主 venv 里跑但没 `pip install -e .` | 走薄入口 `python scripts/check_aruco.py`（自带 `src` 路径兜底），或 `PYTHONPATH=src python -m up70_vision.tools.aruco_check` |
+| 38 | `docker compose build` 重建镜像很慢（几分钟到十几分钟，几乎全卡在 `pip` 下载） | Dockerfile 默认 `PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`，**2026-10-17 实测只有 304 KB/s**：`numpy`（16.8 MB）用了 56 s，`opencv-python`（**77.4 MB**）按这个速度要 4 分钟以上；`apt` 那层走 Ubuntu 官方源，国内同样慢 | **换清华源重建**：`docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`（README 第 91 行给的是中科大源，同样可用）。注意两种改动的代价完全不同：改这个 build-arg 只让 pip 层失效重下、前面 apt/MVS 层仍走缓存；**改 Dockerfile 里的 apt 层会让它后面所有层重跑**——所以新增系统库请追加到 Dockerfile 最后一层 |
+| 39 | 容器里 `cv2.imshow` 报 `Could not load the Qt platform plugin "xcb" ... even though it was found`，而 `--headless` 落盘那条路完全正常 | `opencv-python` 的 GUI 走 Qt，`libqxcb.so` 运行时 dlopen `libSM.so.6` 与 `libICE.so.6`，`ubuntu:22.04` 基础镜像里没有；**报错完全不提缺哪个库**，极易误判成"OpenCV 没编 GUI 支持"而去重装 opencv | 镜像补 `apt-get install -y --no-install-recommends libsm6 libice6`（已加进 Dockerfile 最后一层）；宿主侧还需 `xhost +local:root`、`-e DISPLAY`、挂载 `/tmp/.X11-unix`。排查命令：`ldd $CV2PATH/qt/plugins/platforms/libqxcb.so \| grep "not found"` |
 
 > 注：上表编号 17 与「环境类」新增的 17~23 重复，下次整理时统一重排。
 
