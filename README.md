@@ -49,7 +49,7 @@ UP70 战队视觉组仓库。目标是把 2D 视觉的基础链路跑通：**从
 | 输入源 | `io/`：synthetic / replay / camera | `--set input.source=...` |
 | 配置系统 | `config/`：YAML + `--set` 点分覆盖 + 校验 | 写错字段启动即报错，返回 2 |
 | 交互工具 | `tools/`：hsv_tuner、mvs_color_measure、gen_aruco、aruco_check | 各工具 `--help` |
-| 回归测试 | `tests/`（73 项） | `for t in tests/test_*.py; do python "$t"; done` |
+| 回归测试 | `tests/`（76 项） | `for t in tests/test_*.py; do python "$t"; done` |
 
 两种检出物分开定义，见 `docs/interface.md`：`Detection`（判色族，带颜色与命中率）与
 `ArucoMarker`（码族，带 ID、四角、中心）。改契约要先改文档、再改实现。
@@ -70,6 +70,11 @@ UP70 战队视觉组仓库。目标是把 2D 视觉的基础链路跑通：**从
 | 图像顺序 | 一律 BGR（OpenCV 原生顺序），变量名带颜色空间后缀 |
 
 OpenCV 需要的系统库（`libgl1` / `libglib2.0-0`）已在镜像里装好，本机不用单独装。
+
+**Windows 原生跑脚本时注意控制台编码**：`cmd` / PowerShell 默认是 GBK（`cp936`），而工具会打印 `✅ / ⚠️`，
+直接跑会抛 `UnicodeEncodeError` 并把退出码变成 1，看起来像崩溃。`scripts/pose_check.py`、
+`pose_sweep.py`、`gen_pose_scenes.py` 三个入口已自带 `ensure_utf8_stdout()`；其余入口请先设
+`$env:PYTHONIOENCODING="utf-8"`（或直接用容器）。
 
 ---
 
@@ -177,7 +182,7 @@ read() 取一帧
 | 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（打印后要量实际边长） |
 | 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填尺子量到的实际值；本机标称 15 实测 23） |
 | 批处理识别 | `python scripts/run.py --set detector.name=aruco --set input.source=replay --set input.replay.path=assets/aruco/scenes` |
-| 回归测试（73 项） | `for t in tests/test_*.py; do python "$t"; done` |
+| 回归测试（76 项） | `for t in tests/test_*.py; do python "$t"; done` |
 | 看全部参数 | `python scripts/run.py --help` / `python scripts/run_aruco_live.py --help` |
 
 ---
@@ -204,7 +209,7 @@ up70_vision/
 ├── assets/              随仓库分发的素材
 │   ├── aruco/           9 张测试图 + 真值 JSON
 │   └── readme/          README 用的截图
-├── tests/               回归测试 73 项，可 python tests/test_xxx.py 独立跑
+├── tests/               回归测试 76 项，可 python tests/test_xxx.py 独立跑
 ├── docs/                进度 / 契约 / 三个规范 / ArUco 教程
 ├── .devcontainer/       Dockerfile、CPU/GPU compose、pkgs/
 ├── data/                数据集与回放素材（不进版本库）
@@ -384,7 +389,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 | 环境 | `python scripts/check_env.py` | 末行「结果：全部通过」 |
 | OpenCV 冒烟 | `python scripts/demo.py` | `OpenCV 冒烟测试 -> PASS` |
 | ArUco 图组 | `python scripts/check_aruco.py` | `通过 9/9`，中心误差 0.00 px，四角 ≤ 0.23 px |
-| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **73 项**全过（判色/几何/配置 36 + ArUco 14 + 标定 9 + 位姿 11）；Windows 上 `test_config` 有 1 项路径断言按 POSIX 写，会失败 |
+| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **76 项：75 通过 / 1 项失败**（判色/几何/配置 39 + ArUco 14 + 标定 10 + 位姿 13）；失败那项是 `test_config` 的 POSIX 路径断言，`origin/main` 上就有，与本次无关 |
 
 几个约定：
 
@@ -412,7 +417,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 团队约定
 
-- 改 `src/` 前先跑 `check_env.py` 与 `demo.py`，两个都通过再提交；有算法改动加跑 73 项回归：
+- 改 `src/` 前先跑 `check_env.py` 与 `demo.py`，两个都通过再提交；有算法改动加跑 76 项回归：
 
   ```bash
   for t in tests/test_*.py; do python "$t"; done

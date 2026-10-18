@@ -69,7 +69,7 @@ class MarkerPose:
     tvec_mm: np.ndarray     # (3,) float64，码中心在相机系下的坐标；[2] 恒 > 0
     distance_mm: float      # ||tvec_mm||（斜距，不是 tvec[2]）
     tilt_deg: float         # acos(-R[2,2])，0 = 正对相机
-    yaw_deg: float          # 码 x 轴在图像平面内的方向角，(180, 180]，顺时针为正
+    yaw_deg: float          # 码 x 轴在图像平面内的方向角，(−180, 180]，顺时针为正
     reproj_rms_px: float    # 四角重投影 RMS
     ambiguous: bool = False # 两解难分（只做诊断）
 ```
@@ -136,7 +136,8 @@ def detect(self, image_bgr) -> list[ArucoMarker]
 ```python
 def estimate_pose(marker, marker_size_mm, camera_matrix, dist_coeffs=None,
                   method="ippe_square", refine=True,
-                  max_reproj_rms_px=2.0) -> MarkerPose
+                  max_reproj_rms_px=2.0,
+                  ambiguity_ratio=3.0, ambiguity_deg=10.0) -> MarkerPose
 def estimate_poses(markers, marker_size_mm, camera_matrix, ...) -> list[MarkerPose]
 ```
 
@@ -216,3 +217,4 @@ class FrameSource(ABC):
 | 2026-10-16 | 精简：9 节压到 6 节；判色族内容收进 2.3 一张表；配置字段、依赖方向、运行平台各压成一两句 | 当前只有 ArUco 部分是待建的，其余是已实现的事实登记；将来要用的等用得到时再展开 |
 | 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`stub_aruco.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
 | 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`core/pose.py` + `tests/test_pose.py` |
+| 2026-10-18 | 3.3 的签名补 `ambiguity_ratio` / `ambiguity_deg`；2.3 的 `yaw_deg` 区间笔误 `(180, 180]` 改为 `(−180, 180]` | 复核意见 P2-1（字段原本是死的）与 P3-4（笔误） |

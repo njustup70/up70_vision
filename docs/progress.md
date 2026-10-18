@@ -14,7 +14,7 @@
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
 - `src/up70_vision/` 的 `core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）均已实现
-- 回归测试 **59 项**（判色/几何/配置 36 + ArUco 14 + 相机标定 9）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
+- 回归测试 **76 项**（判色/几何/配置 39 + ArUco 14 + 相机标定 10 + 位姿 13，75 通过 / 1 项存量 Windows 路径断言）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
 - **2026-10-16 复核整改**：PR #3 的复核意见（针对 `a06df7f`）逐条处理 —— `--limit` 丢结果、相机半初始化句柄泄漏、白底白字标签、画框多 1px、中文滑条名、`writer.close` 只在成功路径；整改记录见第三节末
@@ -105,7 +105,7 @@
 | `tests/test_calibration.py` | 9 | 合成数据反推：已知 K/畸变投影出角点再标定，检查 fx/fy/cx/cy/k1 是否找回；板子参数、角点个数不符、去畸变、YAML 往返 |
 | `tests/test_aruco.py` | 14 | **真 ArUco**：多码/旋转/无码图对真值（中心与真值完全相等、四角 ≤ 0.25 px）；角点顺序（上边倾角 0°/−30°/−60°）；45° 单码；契约形状（ArucoMarker / float32 / 四角均值）；坏输入被拒；目录里 9 张图逐张对真值 |
 
-**合计 59 项**（36 + 14 + 9）。
+**合计 76 项**（39 + 14 + 10 + 13；实际跑 75 通过 + 1 项存量 Windows 路径断言）。
 
 **双环境验证记录（2026-10-16，复核整改后复测）**
 
@@ -317,6 +317,11 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 49 | 亮度调到 2.2 倍，五档「过曝」全部通过，等于没测过曝 | 纯乘增益：黑框乘 2.2 仍是 0、白格仍是 255，对比度一点没丢；真过曝是「环境光把黑框照亮 + 增益把白格截顶」 | 生成器加 `ambient`，按 `(像素 + 环境光) × 增益` 成像；3.0 倍 + 环境光 110 才真的丢码 |
 | 50 | 正视时倾角误差 4~16°，但重投影 RMS 只有 0.15 px，看不出来 | 四个点没有冗余，PnP 总能精确穿过它们；而码正对相机时绕 x/y 轴转 10° 只让投影高度缩 1.5%（67 px 码差 1 px），该自由度本身弱可观 | 别拿 RMS 当姿态精度；真值倾角 < 10° 的样本只判距离（`pose_check.TILT_JUDGE_MIN_DEG`），姿态精度在 15° 以上才有意义 |
 | 51 | 640×480 的图上距离解成 1571.9 mm（真值 450 mm，偏 249%），检测一切正常 | 1280×1024 的内参直接套到 640×480 图上，等效换了一颗长焦镜头 | `core/calibration.scale_camera_matrix()` 按宽高比缩放 fx/cx、fy/cy；`pose_check` 与 `pose_sweep` 都自动调用（畸变系数不缩放，严谨仍要重标定） |
+| 52 | 严格正视 + 严格居中的码明明在画面里，解算却抛「`tvec[2]` 必须为正」 | IPPE_SQUARE 的闭式解在这种完美对称输入上退化成 NaN（实测 23 mm 码、300 mm、合成内参 `cx=640`：两个候选的 rvec/tvec/RMS 全是 nan；同一张图换 float32 角点反而不退化）。NaN 的比较恒为 False，`tvec[2] <= 0` 与 `rms > limit` 都拦不住，最后漏到 `MarkerPose` 报一句指向「角点顺序」的错 | 候选解先过 `isfinite`；兜底判据改取**最小** RMS（原来取的是排序前的 `scored[0]`）；报错分「数值退化」与「顺序错」两类；`tests/test_pose.py` 加回归用例 |
+| 53 | `--set pose.ambiguity_deg=20` 改了、校验也过了，结果一点不变 | 三个字段只在 `schema.py` 里存在：`core/pose.py` 用的是模块常量，`max_tilt_deg` 连日志提示都没实现 | `ambiguity_ratio/deg` 接进 `solve_pose` 并由 `cli` 传配置值；`max_tilt_deg` 直接删除（倾角超 60° 检测本身就丢，没有可执行动作） |
+| 54 | 同一场景名两次生成的噪声图不一样，噪声档误差数字每次小幅抖动 | 种子用的是 `abs(hash(name))`，而 `str.__hash__` 每进程随机（实测三次 40350 / 30148 / 54421） | 改用 `zlib.crc32(name.encode())`；两次独立生成的 `noise_16.png` md5 一致（`893A59…5BE`） |
+| 55 | Windows 下工具跑完却抛 `UnicodeEncodeError`，退出码 1 | 控制台是 GBK，而工具打印 `✅/⚠️`；容器里是 UTF-8，所以从没暴露 | 新入口调 `utils/console.ensure_utf8_stdout()`；README「开发环境约定」补了说明 |
+| 56 | 坐标轴与码的四个角差几像素，画面边缘更明显 | 位姿是带着 `D` 解出来的（原始畸变像素空间），画轴却用 `dist=None` 投影；docstring 还写着「位姿在去畸变空间解出来」 | `draw_pose_axes` 增加 `dist_coeffs` 参数，`cli` 传同一个 `D`：已掰直配 None、未掰直配 D，两边必须成对 |
 
 > 注：上表编号 17 与「环境类」新增的 17~23 重复，下次整理时统一重排。
 
