@@ -128,7 +128,7 @@ VS Code 用户可直接 Reopen in Container，配置在 `.devcontainer/devcontai
 
 | 参数 | 含义 |
 |---|---|
-| `--headless` | 不建窗口，改成每 `--save-every` 帧落盘（容器里没有 X server 时用） |
+| `--headless` | 不建窗口，改成每 `--save-every` 帧落盘（没有显示器、或不想开窗时用；容器里**也能**开窗，见下文） |
 | `--save-every N` | headless 的落盘间隔，默认 30 帧；至少 1 |
 
 实时循环的帧流程（顺序固定，**每帧重新检测**，不缓存上一帧的框）：
@@ -259,11 +259,23 @@ t=0.02s | frames=4 | fps=203.7 | markers=3 | id=0 center=(190.0, 260.0) | id=1 c
 
 ### 换成真摄像头
 
-需要**原生机器 + 显示器**（容器里没有 X server 开不了窗口），并完成「真相机」三步前置：
+需要**接上相机 + 一个显示器**（原生机器或容器都行），并完成「真相机」三步前置。容器里开窗口要三件事：
 
 ```bash
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+xhost +local:root                       # 允许容器里的 root 连你的 X
+docker compose -f .devcontainer/docker-compose.yml run --rm \
+  -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix up70-vision \
   python scripts/run_aruco_live.py --set detector.name=aruco --set input.source=camera
+xhost -local:root                       # 用完撤销
+```
+
+镜像必须含 `libsm6 libice6`（Dockerfile 最后一层已装；**旧镜像要重新 build**，否则报
+`Could not load the Qt platform plugin "xcb"`，见 `progress.md` 坑 39）。没有显示器就加 `--headless`。
+
+在**原生机器**（有显示器、装好了 MVS）上则更简单，不用 `xhost`、也不进容器：
+
+```bash
+python scripts/run_aruco_live.py --set detector.name=aruco --set input.source=camera
 ```
 
 窗口里按 `q` / `ESC` 退出，点关闭按钮也行；`Ctrl+C` 会正常收尾并释放相机。
@@ -399,8 +411,8 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 已知限制
 
-- **位姿估计没做**：目前只给 ID、四角、中心；`solvePnP` 需要相机内参与标定，顺延下一阶段。
-- **容器里没有窗口**：实时验证走 `--headless` 落盘；窗口模式在原生机器上验。
+- **位姿估计没做**：目前只给 ID、四角、中心；相机内参与畸变已就绪（见 `docs/相机标定.md`），`solvePnP` 顺延下一阶段。
+- **容器窗口要手动接 X**：`xhost +local:root` + `-e DISPLAY` + 挂 `/tmp/.X11-unix`，镜像需含 `libsm6 libice6`；没有显示器时用 `--headless` 落盘。
 - **相机需要 MVS SDK**：镜像不带 deb，需手动投放后重新构建；没有相机时用 `replay` 或 `stub_aruco`。
 - **YOLO 未接入**：`blob` 判色是占位，检测器接口已按可替换设计（`core/detectors/base.py`）。
 - **ROS 2 未接入**：入口已按「薄壳 + 单一实现」设计，节点接入时复用 `cli.py`。
