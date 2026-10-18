@@ -34,8 +34,12 @@
       再传畸变系数等于去畸变两次（实测 k1=-0.30 时距离偏 0.62%）。
     · **平面位姿天然两解**：两解的倾角相同、距离只差 0.1–0.5%，旋转夹角恰为 `2×tilt`。
       `ambiguous` 只是"两解难以区分"的诊断位，不代表结果不能用——位置比姿态稳。
-    · **180° 角点错位**：四个角点整体循环平移两位（等价于码转 180°），重投影误差可以是
-      0.0000 px，距离和倾角都"看着对"，只有 `tvec_mm[2]` 的符号能抓到（实测为负）。
+    · **180° 角点错位**：四个角点整体循环平移两位（等价于码转 180°），在正方形对称的
+      前提下位姿层**分辨不出来**（距离、倾角、RMS 全不变，只有 yaw 差 180°）。
+      角点顺序只能由检测层保证（`tests/test_aruco.py` 的上边倾角断言），这里拦不住。
+    · **IPPE_SQUARE 的退化分支**：输入完全正对且严格居中时，闭式解的两个候选会一起锁到
+      180° 分支（实测 675 mm 场景两解 RMS 都是 38.6 px，真解本该 0.01 px）。所以
+      `solve_pose` 在"最好的解都过不了 RMS 门槛"时会用 ITERATIVE 兜一次，谁小用谁。
 """
 
 from __future__ import annotations
@@ -166,6 +170,39 @@ def _rotation_angle_deg(rvec_a: np.ndarray, rvec_b: np.ndarray) -> float:
     return float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
 
 
+def _raw_candidates(object_points, corners, matrix, dist_coeffs, method: str) -> list:
+    """调 OpenCV 求原始候选解，不做任何筛选。
+
+    :return: `[(rvec(3,), tvec(3,)), ...]`；IPPE_SQUARE 通常给 2 个，ITERATIVE 给 1 个
+    """
+    import cv2
+    if method == "ippe_square":
+        count, rvecs, tvecs, _errs = cv2.solvePnPGeneric(
+            object_points, corners, matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+        return [(np.asarray(rvecs[i], dtype=np.float64).reshape(3),
+                 np.asarray(tvecs[i], dtype=np.float64).reshape(3)) for i in range(count)]
+    ok, rvec, tvec = cv2.solvePnP(object_points, corners, matrix, dist_coeffs,
+                                  flags=cv2.SOLVEPNP_ITERATIVE)
+    if not ok:
+        return []
+    return [(np.asarray(rvec, dtype=np.float64).reshape(3),
+             np.asarray(tvec, dtype=np.float64).reshape(3))]
+
+
+def _score_candidates(candidates, object_points, corners, matrix, dist_coeffs) -> list:
+    """给每个候选解算重投影 RMS，并扔掉"解到相机后方"的。
+
+    :return: `[(rms, rvec, tvec), ...]`，未排序
+    """
+    scored = []
+    for rvec, tvec in candidates:
+        if tvec[2] <= 0:                       # 码在相机后方，一定是错的
+            continue
+        rms = _reproject_rms(object_points, corners, rvec, tvec, matrix, dist_coeffs)
+        scored.append((rms, rvec, tvec))
+    return scored
+
+
 def pose_metrics(rvec, tvec_mm) -> tuple[float, float, float]:
     """由旋转向量与平移向量算出三个可读量：距离、倾角、面内转角。
 
@@ -243,25 +280,23 @@ def solve_pose(corners_px: np.ndarray,
     if limit <= 0:
         raise ValueError(f"max_reproj_rms_px 必须为正，收到 {max_reproj_rms_px!r}")
 
-    # ---- 步骤 1：求解（IPPE_SQUARE 走 generic，能一次拿到两个候选解）----
-    if method == "ippe_square":
-        count, rvecs, tvecs, _errs = cv2.solvePnPGeneric(
-            object_points, corners, matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-        candidates = [(np.asarray(rvecs[i], dtype=np.float64).reshape(3),
-                       np.asarray(tvecs[i], dtype=np.float64).reshape(3)) for i in range(count)]
-    else:
-        ok, rvec, tvec = cv2.solvePnP(object_points, corners, matrix, dist_coeffs,
-                                      flags=cv2.SOLVEPNP_ITERATIVE)
-        candidates = [(np.asarray(rvec, dtype=np.float64).reshape(3),
-                       np.asarray(tvec, dtype=np.float64).reshape(3))] if ok else []
+    # ---- 步骤 1：求解。IPPE_SQUARE 走 generic，能一次拿到两个候选解 ----
+    scored = _score_candidates(_raw_candidates(object_points, corners, matrix, dist_coeffs,
+                                               method),
+                               object_points, corners, matrix, dist_coeffs)
+    used_fallback = False
+    if method == "ippe_square" and (not scored or scored[0][0] > limit):
+        # 兜底：IPPE_SQUARE 是闭式解，遇到"完全正对且严格居中"的退化输入时，
+        # 两个候选解会一起锁到 180° 的分支上（实测 675 mm 场景：两个解的 RMS 都是
+        # 38.6 px，而真解的重投影本该是 0.01 px）。ITERATIVE 用 DLT 初值，label 感知，
+        # 在这种输入上能一次到位，所以这里再试一次，谁的重投影小用谁。
+        fallback = _score_candidates(_raw_candidates(object_points, corners, matrix,
+                                                     dist_coeffs, "iterative"),
+                                     object_points, corners, matrix, dist_coeffs)
+        if fallback:
+            used_fallback = True
+            scored = fallback
 
-    # ---- 步骤 2：逐个候选算 RMS；z<=0 的解直接扔（码不可能在相机后方）----
-    scored = []
-    for rvec, tvec in candidates:
-        if tvec[2] <= 0:                       # 翻到相机后面的解，一定是错的
-            continue
-        rms = _reproject_rms(object_points, corners, rvec, tvec, matrix, dist_coeffs)
-        scored.append((rms, rvec, tvec))
     if not scored:
         raise ValueError(
             f"位姿解算失败（id={marker_id}）：没有落在相机前方的解，"
@@ -299,7 +334,8 @@ def solve_pose(corners_px: np.ndarray,
     # 二义性：两个解都"足够像"时才标记。比例判据 + 夹角判据同时成立才算，
     # 因为正视时两解本来重合（夹角≈0），不该被标成 ambiguous。
     ambiguous = False
-    if len(scored) > 1:
+    # 走了 ITERATIVE 兜底时不留歧义标记：那时 only 一个解，标 True 只会误导
+    if len(scored) > 1 and not used_fallback:
         second_rms, second_rvec, _second_tvec = scored[1]
         angle = _rotation_angle_deg(rvec, second_rvec)
         ambiguous = (second_rms / max(rms, _EPS) < AMBIGUITY_RATIO) and (angle > AMBIGUITY_DEG)
