@@ -17,14 +17,14 @@ try:
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from up70_vision.tools.gen_chessboard import render_board
+    from up70_vision.tools.gen_chessboard import inject_png_dpi, render_board, write_pdf
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from up70_vision.core.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from up70_vision.tools.gen_chessboard import render_board
+    from up70_vision.tools.gen_chessboard import inject_png_dpi, render_board, write_pdf
 
 import numpy as np
 
@@ -189,6 +189,63 @@ def test_camera_intrinsics_dict_roundtrip_and_quality():
     assert result.quality in ("good", "usable", "poor")
     assert f"fx={result.fx:.1f}" in result.summary()
     assert RMS_USABLE == 1.0, "RMS 判据阈值是给别人看的文档口径，别悄悄改"
+
+
+# ---------------------------------------------------------------- 打印件本身
+def test_png_carries_dpi_metadata():
+    """PNG 必须写 pHYs，否则打印驱动会按 200 dpi 猜（实测把 15 mm 打成 23 mm）。"""
+    import struct
+    import tempfile
+
+    image, _ = render_board(BOARD, dpi=300)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = str(Path(tmp) / "board.png")
+        import cv2
+        assert cv2.imwrite(path, image)
+        inject_png_dpi(path, 300)
+        raw = Path(path).read_bytes()
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+    offset, found = 8, None
+    while offset < len(raw):
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        kind = raw[offset + 4:offset + 8]
+        if kind == b"pHYs":
+            x_ppm, _y_ppm, unit = struct.unpack(">IIB", raw[offset + 8:offset + 17])
+            found = (x_ppm, unit)
+            break
+        if kind == b"IDAT":
+            break
+        offset += 12 + length
+    assert found is not None, "PNG 里没有 pHYs 块"
+    ppm, unit = found
+    assert unit == 1, "单位应为米"
+    assert abs(ppm * 0.0254 - 300) < 0.5, f"应记录 300 dpi，实得 {ppm * 0.0254:.1f}"
+
+
+def test_pdf_matches_physical_size():
+    """PDF 的图必须按「像素/dpi*72」精确排布：打印时选实际大小就是 1:1。"""
+    import re
+    import tempfile
+
+    image, _ = render_board(BOARD, dpi=300)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = str(Path(tmp) / "board.pdf")
+        page_mm, image_mm = write_pdf(path, image, 300, "a4")
+        raw = Path(path).read_text(encoding="latin1")
+
+    assert raw.startswith("%PDF-1.4") and raw.rstrip().endswith("%%EOF")
+    assert "xref" in raw and "/Subtype /Image" in raw
+    # A4 页面（点）：595.28 x 841.89
+    assert abs(page_mm[0] - 210.0) < 0.5 and abs(page_mm[1] - 297.0) < 0.5, page_mm
+    # 图在纸上的物理尺寸必须等于 像素/300*25.4
+    height, width = image.shape[:2]
+    assert abs(image_mm[0] - width / 300 * 25.4) < 0.05, image_mm
+    assert abs(image_mm[1] - height / 300 * 25.4) < 0.05, image_mm
+    # 内容流里的 cm 矩阵尺寸应与换算一致（点）
+    match = re.search(r"q ([\d.]+) 0 0 ([\d.]+) ", raw)
+    assert match, "内容流里没有图像变换矩阵"
+    assert abs(float(match.group(1)) - width / 300 * 72) < 0.05
+    assert abs(float(match.group(2)) - height / 300 * 72) < 0.05
 
 
 def _run_standalone() -> int:

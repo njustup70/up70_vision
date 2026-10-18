@@ -14,7 +14,7 @@
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
 - `src/up70_vision/` 的 `core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）均已实现
-- 回归测试 **59 项**（判色/几何/配置 36 + ArUco 14 + 相机标定 9）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
+- 回归测试 **61 项**（判色/几何/配置 36 + ArUco 14 + 相机标定 11）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
 - **2026-10-16 复核整改**：PR #3 的复核意见（针对 `a06df7f`）逐条处理 —— `--limit` 丢结果、相机半初始化句柄泄漏、白底白字标签、画框多 1px、中文滑条名、`writer.close` 只在成功路径；整改记录见第三节末
@@ -95,10 +95,10 @@
 | `tests/test_pipeline.py` | 11 | 合成源同 seed 逐像素可复现；每帧 6 块且颜色不重复；blob 检出 6 个；`match_to_truth` 具体数值；**端到端 18 个色块、判色 18/18**；配置校验；**stub_aruco 契约与运动**（三个码中心 x = 16/160/304、每帧转 12° 的具体坐标）；**管线对码跳过判色**（`color_counts` 为空、`uncertain` 为 0） |
 | `tests/test_config.py` | 9 | 默认值来自 YAML；8 类非法值都报 `ConfigError` 且消息含字段路径；`--set` 类型转换（float/int/bool/列表）；错键报错列出可用键；阈值表按配置文件目录解析；**`detector.name=stub_aruco` 的默认值与 4 类非法参数** |
 
-| `tests/test_calibration.py` | 9 | 合成数据反推：已知 K/畸变投影出角点再标定，检查 fx/fy/cx/cy/k1 是否找回；板子参数、角点个数不符、去畸变、YAML 往返 |
+| `tests/test_calibration.py` | 11 | 合成数据反推：已知 K/畸变投影出角点再标定，检查 fx/fy/cx/cy/k1 是否找回；板子参数、角点个数不符、去畸变、YAML 往返 |
 | `tests/test_aruco.py` | 14 | **真 ArUco**：多码/旋转/无码图对真值（中心与真值完全相等、四角 ≤ 0.25 px）；角点顺序（上边倾角 0°/−30°/−60°）；45° 单码；契约形状（ArucoMarker / float32 / 四角均值）；坏输入被拒；目录里 9 张图逐张对真值 |
 
-**合计 59 项**（36 + 14 + 9）。
+**合计 61 项**（36 + 14 + 11）。
 
 **双环境验证记录（2026-10-16，复核整改后复测）**
 
