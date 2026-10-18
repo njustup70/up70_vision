@@ -26,8 +26,9 @@
     · 畸变系数顺序固定为 OpenCV 的 `[k1, k2, p1, p2, k3]`（见 `DIST_ORDER`），不要自己重排。
 
 已知的坑
-    · 打印出来的棋盘会被打印机缩放 1~2%，`square_mm` 必须**用尺子量**后填，否则焦距整体偏
-      那么多（坑 40）。
+    · 打印出来的棋盘会被打印机缩放，`square_mm` 必须**用尺子量**后填。注意它**不影响内参**
+      （尺度会被位姿吸收），影响的是位姿估计出来的距离：我们这台打印机把标称 15 mm 打成了
+      23 mm（+53%），按 15 填会让距离少算 35%（坑 40）。
     · 板子只占画面一小块、或反光/过曝时 `findChessboardCorners` 返回 False。别急着换算法，
       先看是不是板子太小、光照太硬（坑 41）。
 """
@@ -65,12 +66,12 @@ class BoardSpec:
     属性
         cols      : int   横向内角点个数（默认 9）
         rows      : int   纵向内角点个数（默认 6）
-        square_mm : float 一个格子的边长，单位毫米（默认 20.0，**用尺子量出来填**）
+        square_mm : float 一个格子的边长，单位毫米（默认 15.0，**打印后要用尺子量**）
     """
 
     cols: int = 9
     rows: int = 6
-    square_mm: float = 20.0
+    square_mm: float = 15.0
 
     def __post_init__(self) -> None:
         if int(self.cols) < 3 or int(self.rows) < 3:

@@ -445,8 +445,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"采到的图存哪（默认 {DEFAULT_CAPTURE_DIR}）")
     ap.add_argument("--board", default="9x6",
                     help="内角点个数，横向x纵向（默认 9x6；不是格子数）")
-    ap.add_argument("--square-mm", type=float, default=15.0,
-                    help="格子边长毫米（默认 15；**填尺子量到的值**）")
+    ap.add_argument("--square-mm", type=float, default=None,
+                    help="格子边长毫米（**必填**；填尺子量到的实际值，不是打印标称值）")
     ap.add_argument("--out", default=DEFAULT_OUT, help=f"标定结果写哪（默认 {DEFAULT_OUT}）")
     ap.add_argument("--from", dest="from_file", default=None,
                     help="不重新标，只读回一份已有标定并打印")
@@ -477,7 +477,7 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     setup_logging(args.log_level)
 
-    # 只读回已有标定：打印完就退出，不碰相机
+    # 只读回已有标定：打印完就退出，不碰相机（这条路径不需要格子边长）
     if args.from_file:
         import yaml
         with open(args.from_file, "r", encoding="utf-8") as handle:
@@ -486,6 +486,12 @@ def main(argv=None) -> int:
         print_report(intrinsics, [], [], args.max_rms)
         return 0 if intrinsics.rms <= args.max_rms else 1
 
+    if args.square_mm is None:
+        # 宁可报错，也不要拿"标称值"去标：我们实测过 15 mm 的板子打出来是 23 mm，
+        # 填错不会让内参错，但会让位姿距离整体偏 53%（坑 40）
+        print("❌ 必须给出实测格子边长：--square-mm <毫米>（用尺子量，不是打印标称值）",
+              file=sys.stderr)
+        return 2
     try:
         board = parse_board(args.board, args.square_mm)
     except ValueError as exc:

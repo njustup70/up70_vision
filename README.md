@@ -170,8 +170,8 @@ read() 取一帧
 | OpenCV 冒烟 | `python scripts/demo.py` |
 | ArUco 图组自检（9/9） | `python scripts/check_aruco.py` |
 | 重新生成测试图组 | `python scripts/gen_aruco.py` |
-| 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15` |
-| 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 14.7`（`--square-mm` 填尺子量到的值） |
+| 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（打印后要量实际边长） |
+| 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填尺子量到的实际值；本机标称 15 实测 23） |
 | 批处理识别 | `python scripts/run.py --set detector.name=aruco --set input.source=replay --set input.replay.path=assets/aruco/scenes` |
 | 回归测试（59 项） | `for t in tests/test_*.py; do python "$t"; done` |
 | 看全部参数 | `python scripts/run.py --help` / `python scripts/run_aruco_live.py --help` |
