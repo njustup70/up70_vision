@@ -42,6 +42,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from ..core.calibration import scale_intrinsics
 from ..core.pose import marker_object_points, pose_metrics
 
 #: 默认画布。与相机标定文档里的那台相机同分辨率（1280×1024）。
@@ -432,12 +433,14 @@ def main(argv=None) -> int:
 
     written = 0
     for spec in specs:
-        # 只有"标定分辨率 == 本场景画布"时才用真内参：1280 宽的内参套到 640 宽图上
-        # 等于换了一颗镜头，量出来的误差是"配置错"而不是"算法差"（progress 坑 3）。
-        if intrinsics is not None and tuple(intrinsics.image_size) == tuple(spec.canvas_size):
-            image, truth = render_scene(spec, intrinsics.camera_matrix, intrinsics.dist_coeffs)
-        else:
+        if intrinsics is None:
             image, truth = render_scene(spec, None, None)
+        else:
+            # 真内参按画布尺寸等比缩放：1280 的内参直接套到 640 画布上等于换了一颗长焦
+            # 镜头，那样造出来的图与"同一颗相机降分辨率输出"不是一回事（progress 坑 3）。
+            used = (intrinsics if tuple(intrinsics.image_size) == tuple(spec.canvas_size)
+                    else scale_intrinsics(intrinsics, spec.canvas_size))
+            image, truth = render_scene(spec, used.camera_matrix, used.dist_coeffs)
         write_scene(args.out, spec, image, truth)
         written += 1
     print(f"✅ 已写 {written} 个场景到 {args.out}（每张图配一个同名 .json 真值）")

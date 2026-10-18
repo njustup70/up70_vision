@@ -36,6 +36,7 @@ import os
 
 import numpy as np
 
+from ..core.calibration import scale_intrinsics
 from ..core.detectors.aruco import ArucoDetector
 from ..core.pose import DEFAULT_METHOD, estimate_pose
 from ..utils.image_io import read_image_bgr
@@ -45,6 +46,12 @@ from ..utils.image_io import read_image_bgr
 DEFAULT_MAX_DIST_ERR = 0.04
 DEFAULT_MAX_TILT_ERR_DEG = 3.0
 DEFAULT_MAX_RMS_PX = 2.0
+
+#: 真值倾角小于这个角度时**不判倾角**（误差照记，只是不算通过与否）。
+#: 理由：码正对相机时，绕 x/y 轴转 10° 只让投影高度缩 1.5%——67 px 的码差 1 px，
+#: 与角点定位噪声同量级，所以"正视时的倾角"在几何上就是弱可观的，实测误差可达 10°。
+#: 拿 3° 门槛去卡它，测的是不可观测量，不是算法好坏。倾斜 15° 以上才判。
+TILT_JUDGE_MIN_DEG = 10.0
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp")
 
@@ -76,7 +83,8 @@ def check_one(image_path: str,
               method: str = DEFAULT_METHOD,
               max_dist_err: float = DEFAULT_MAX_DIST_ERR,
               max_tilt_err_deg: float = DEFAULT_MAX_TILT_ERR_DEG,
-              max_rms_px: float = DEFAULT_MAX_RMS_PX) -> dict:
+              max_rms_px: float = DEFAULT_MAX_RMS_PX,
+              tilt_judge_min_deg: float = TILT_JUDGE_MIN_DEG) -> dict:
     """核对一张图，返回一条可打印、可入 CSV 的记录。
 
     用大白话说
@@ -92,6 +100,7 @@ def check_one(image_path: str,
     :param max_dist_err: 距离相对误差上限（比例）
     :param max_tilt_err_deg: 倾角绝对误差上限（度）
     :param max_rms_px: 重投影 RMS 上限（像素）
+    :param tilt_judge_min_deg: 真值倾角小于它时不判倾角（理由见常量说明）
     :return: dict，字段见 `CSV_COLUMNS`；`reason` 非空表示没通过
     """
     image_bgr = read_image_bgr(image_path)
@@ -144,7 +153,9 @@ def check_one(image_path: str,
     problems = []
     if record["distance_err"] > max_dist_err:
         problems.append(f"距离误差 {record['distance_err'] * 100:.1f}% > {max_dist_err * 100:.0f}%")
-    if record["tilt_err_deg"] > max_tilt_err_deg:
+    # 真值接近正视时不判倾角：那个自由度本身弱可观（见 TILT_JUDGE_MIN_DEG 的说明），
+    # 误差仍然记进 record，报告里看得到，只是不计入"通过/不通过"
+    if float(truth["tilt_deg"]) >= tilt_judge_min_deg and record["tilt_err_deg"] > max_tilt_err_deg:
         problems.append(f"倾角误差 {record['tilt_err_deg']:.1f}° > {max_tilt_err_deg:.0f}°")
     if pose.reproj_rms_px > max_rms_px:
         problems.append(f"RMS {pose.reproj_rms_px:.2f}px > {max_rms_px:.1f}px")
@@ -220,14 +231,19 @@ def main(argv=None) -> int:
     for path in images:
         truth = _load_truth(path)
         if base_intrinsics is not None:
-            camera_matrix = base_intrinsics.camera_matrix
-            dist_coeffs = base_intrinsics.dist_coeffs
-            if truth is not None and "canvas" in truth and not size_warned:
+            used = base_intrinsics
+            if truth is not None and "canvas" in truth:
                 want = tuple(int(v) for v in truth["canvas"])
                 if want != tuple(base_intrinsics.image_size):
-                    size_warned = True
-                    print(f"⚠️  内参按 {base_intrinsics.image_size} 标定，图组是 {want}；"
-                          "距离会整体偏，换分辨率要重标定")
+                    # 尺寸不同时按比例缩放内参，而不是硬套：硬套等于换了一颗长焦镜头，
+                    # 实测 640×480 图上距离会解成 1571.9 mm（真值 450 mm，偏 249%）
+                    used = scale_intrinsics(base_intrinsics, want)
+                    if not size_warned:
+                        size_warned = True
+                        print(f"⚠️  内参按 {base_intrinsics.image_size} 标定，图是 {want}；"
+                              "已按比例缩放（近似：畸变系数不缩放，严谨请重标定）")
+            camera_matrix = used.camera_matrix
+            dist_coeffs = used.dist_coeffs
         elif truth is not None and "camera_matrix" in truth:
             camera_matrix = np.asarray(truth["camera_matrix"], dtype=np.float64)
             dist_coeffs = None

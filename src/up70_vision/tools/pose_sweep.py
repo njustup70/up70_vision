@@ -45,9 +45,12 @@ import cv2
 import numpy as np
 
 from ..config.loader import load_intrinsics
+from ..core.calibration import scale_camera_matrix
 from ..core.detectors.aruco import ArucoDetector
 from ..viz.draw import put_text
-from .gen_pose_scenes import DEFAULT_MARKER_MM, PoseSpec, build_suite, render_scene
+from .gen_pose_scenes import (DEFAULT_MARKER_MM, PoseSpec, build_suite, render_scene,
+                              synthetic_intrinsics)
+from .pose_check import TILT_JUDGE_MIN_DEG
 
 #: 图幅与边距（像素）。宽一点是为了 x 轴刻度标签不重叠。
 CHART_SIZE = (820, 480)
@@ -125,6 +128,7 @@ def run_suite(specs,
               marker_size_mm: float = DEFAULT_MARKER_MM,
               method: str = "ippe_square",
               camera_matrix=None,
+              camera_size=None,
               max_dist_err: float = 0.04,
               max_tilt_err_deg: float = 3.0,
               max_rms_px: float = 2.0) -> list:
@@ -133,16 +137,20 @@ def run_suite(specs,
     :param specs: `list[PoseSpec]`，一般来自 `build_suite()`
     :param marker_size_mm: 码边长（毫米）；场景自带的边长优先
     :param method: 位姿求解方法
-    :param camera_matrix: 强制使用的内参（验证"内参/分辨率不匹配"时用）；
-        默认按每个场景的画布尺寸自造一套
+    :param camera_matrix: 使用哪套内参；None 表示按每个场景的画布自造合成内参
+    :param camera_size: `camera_matrix` 对应的 `(宽, 高)`；与场景画布不同时自动等比缩放
     :return: `list[Row]`，顺序与 `specs` 一致
     """
     detector = ArucoDetector()
     rows = []
     for spec in specs:
-        image_bgr, truth = render_scene(spec, camera_matrix)
-        matrix = (np.asarray(camera_matrix, dtype=np.float64) if camera_matrix is not None
-                  else np.asarray(truth["camera_matrix"], dtype=np.float64))
+        # 内参必须与画布尺寸匹配：1280 的内参套到 640 画布上等于换了一颗长焦镜头，
+        # "每格像素"这条结论会全错（progress.md 坑 3 的扫描版）
+        matrix = (synthetic_intrinsics(spec.canvas_size[0], spec.canvas_size[1])
+                  if camera_matrix is None
+                  else scale_camera_matrix(camera_matrix, camera_size or spec.canvas_size,
+                                           spec.canvas_size))
+        image_bgr, truth = render_scene(spec, matrix)
         cell = _cell_px(truth["corners_px"])
         group, level = _group_and_level(spec.name)
 
@@ -201,7 +209,9 @@ def _check_rendered(image_bgr, truth, detector, camera_matrix, marker_size_mm, m
     problems = []
     if record["distance_err"] > max_dist_err:
         problems.append(f"距离误差 {record['distance_err'] * 100:.1f}%")
-    if record["tilt_err_deg"] > max_tilt_err_deg:
+    # 与 pose_check 同一条规矩：接近正视时不判倾角（那个自由度弱可观），误差照记
+    if (float(truth["tilt_deg"]) >= TILT_JUDGE_MIN_DEG
+            and record["tilt_err_deg"] > max_tilt_err_deg):
         problems.append(f"倾角误差 {record['tilt_err_deg']:.1f}°")
     if pose.reproj_rms_px > max_rms_px:
         problems.append(f"RMS {pose.reproj_rms_px:.2f}px")
@@ -284,17 +294,21 @@ def write_summary(path: str, rows, specs_count: int, marker_mm: float,
         lines.append(f"- 检出样本的每格像素范围：{min(row.cell_px for row in detected_rows):.1f}"
                      f"–{max(row.cell_px for row in detected_rows):.1f} px")
     if missing:
-        # 只统计"未检出"的样本：检出了但误差超限的样本每格像素可能很大（比如糊了），
-        # 把两者混在一起算会得出"11.9 px 也检不出"这种自相矛盾的结论
-        lines.append(f"- 未检出样本的每格像素范围："
-                     f"{min(row.cell_px for row in missing):.1f}"
-                     f"–{max(row.cell_px for row in missing):.1f} px")
+        # 只统计"未检出"的样本，并列出场景名：它们的原因不限于尺寸（还有过曝），
+        # 混进"每格像素"里当尺寸结论会被误读
+        lines.append(f"- 未检出样本：{', '.join(row.scene for row in missing)}"
+                     f"（每格 {min(row.cell_px for row in missing):.1f}"
+                     f"–{max(row.cell_px for row in missing):.1f} px；原因不限于尺寸）")
     for group, label in (("dist", "距离"), ("tilt", "倾角"), ("bright", "亮度"),
                          ("blur", "模糊"), ("noise", "噪声")):
         if group in groups:
             lines.append(f"- {label}：{_first_fail_after(groups[group])}")
     lines += ["", "> 距离误差只在**检出**的样本上统计：没检出与算不准是两种失败，",
               "> 混在一起算会让曲线在拐点处虚高，也没法归因。",
+              "",
+              "> 真值倾角 < 10° 的样本只判距离、不判倾角：正对相机时绕 x/y 轴转 10° 只让投影高度"
+              "缩 1.5%，",
+              "> 与角点噪声同量级（实测误差可达 10°）。误差值仍记在 raw.csv 里，只是不计入通过与否。",
               "",
               "> 这些数字来自**合成图**（无噪声压缩、无镜头畸变、边缘是理想直线），",
               "> 属于识别能力的**上限**。真机要额外留余量：教程第三节给的"
@@ -512,7 +526,8 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
 
-    camera_matrix, note = None, "合成（fx=800@1280 等比缩放）"
+    camera_matrix, camera_size = None, None
+    note = "合成（fx=800@1280 等比缩放）"
     if args.intrinsics:
         try:
             intrinsics = load_intrinsics(args.intrinsics)
@@ -520,12 +535,13 @@ def main(argv=None) -> int:
             print(f"❌ 读内参失败：{exc}")
             return 2
         camera_matrix = intrinsics.camera_matrix
-        note = f"{args.intrinsics} {intrinsics.image_size[0]}x{intrinsics.image_size[1]}"
+        camera_size = tuple(intrinsics.image_size)
+        note = f"{args.intrinsics} {camera_size[0]}x{camera_size[1]}"
 
     specs = build_suite(args.marker_mm)
     print(f"码边长 {args.marker_mm} mm   内参 {note}   场景 {len(specs)} 个")
     rows = run_suite(specs, marker_size_mm=args.marker_mm, method=args.method,
-                     camera_matrix=camera_matrix)
+                     camera_matrix=camera_matrix, camera_size=camera_size)
 
     csv_path = write_csv(os.path.join(args.out, "raw.csv"), rows)
     summary_path = write_summary(os.path.join(args.out, "summary.md"), rows, len(specs),
