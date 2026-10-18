@@ -301,7 +301,7 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
             image_points.append(corners)
             saved.append(path)
             signatures.append(sig)
-            print(f"  ✅ 第 {index}/{count} 张 -> {path}   sharp {sharp:.0f}", flush=True)
+            print(f"  ✅ 本批 {len(saved)}/{count} 张 -> {path}   sharp {sharp:.0f}", flush=True)
     finally:
         # 相机是独占资源：异常路径也必须释放，否则下次打不开（坑 31）
         source.close()
