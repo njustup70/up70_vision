@@ -56,4 +56,4 @@ data/*
 !.vscode/settings.json.example
 
 # 相机标定结果：每台相机/每个场地一份，由 scripts/calibrate_camera.py 生成
-configs/camera_calibration.yaml
+configs/camera_calibration*.yaml

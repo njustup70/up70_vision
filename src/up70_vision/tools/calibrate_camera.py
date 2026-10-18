@@ -63,6 +63,17 @@ IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp")
 #: 从图目录读图时的上限，防止误指到超大目录
 MAX_IMAGES = 200
 
+#: 「太像就不收」的阈值：中心距离占画面宽度比例、格距相对差、倾角差（度）。
+#: 不设这道闸，快速连拍会收进七八张同一姿势的图——那会让焦距与主点跑飞（progress 坑 43）
+DEDUP_CENTER_RATIO = 0.05
+DEDUP_SCALE_RATIO = 0.06
+DEDUP_ANGLE_DEG = 6.0
+
+#: 「站稳才拍」需要连续多少帧姿态几乎不变（手抖/运动模糊会让角点发漂）
+STABLE_FRAMES = 3
+STABLE_CENTER_RATIO = 0.01
+STABLE_SCALE_RATIO = 0.02
+
 
 def parse_board(text: str, square_mm: float) -> BoardSpec:
     """把 `"9x6"` 这样的字符串解析成板子参数。
@@ -118,9 +129,44 @@ def collect_from_dir(directory: str, board: BoardSpec) -> tuple[list, list, list
     return image_points, used, skipped
 
 
+def _pose_signature(corners: np.ndarray, image_size: tuple[int, int],
+                    board: BoardSpec | None = None) -> tuple:
+    """把一张图里棋盘的姿态压成 4 个数，用来判断「稳不稳」和「像不像」。
+
+    用大白话说
+        中心在哪、格子多大、转了多少度——这三件事足够区分"同一姿势"和"换了个姿势"。
+        全部按画面宽度归一化，换分辨率也不受影响。
+
+    :param corners: `find_board_corners()` 的返回值 `(N,1,2)`
+    :param image_size: `(width, height)`
+    :param board: 板子参数（用来把角点摆回 rows×cols 的网格）
+    :return: `(cx_norm, cy_norm, spacing_norm, angle_deg)`；角度取 0~180°
+    """
+    spec = board or BoardSpec()
+    width, height = (int(v) for v in image_size)
+    grid = np.asarray(corners, dtype=np.float32).reshape(int(spec.rows), int(spec.cols), 2)
+    center = grid.reshape(-1, 2).mean(axis=0)
+    # 横向相邻角点间距当尺度：对透视不敏感，也不受格子总数影响
+    spacing = float(np.mean(np.linalg.norm(np.diff(grid, axis=1), axis=2)))
+    top_row = grid[0]
+    angle = float(np.degrees(np.arctan2(*(top_row[-1] - top_row[0])[::-1])))
+    return (float(center[0]) / width, float(center[1]) / height,
+            spacing / width, angle % 180.0)
+
+
+def _is_too_similar(a: tuple, b: tuple, center_ratio: float, scale_ratio: float,
+                    angle_deg: float) -> bool:
+    """两个姿态签名是否"像到可以当作同一张"。"""
+    d_center = float(np.hypot(a[0] - b[0], a[1] - b[1]))
+    d_scale = abs(a[2] - b[2]) / max(a[2], 1e-6)
+    d_angle = min(abs(a[3] - b[3]), 180.0 - abs(a[3] - b[3]))
+    return d_center < center_ratio and d_scale < scale_ratio and d_angle < angle_deg
+
+
 def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                         colors: list | None = None,
-                        max_frames: int = 0) -> tuple[list, list]:
+                        max_frames: int = 0,
+                        preview: bool = False) -> tuple[list, list]:
     """从配置里的输入源抓帧，找到棋盘就存下来，凑够 count 张为止。
 
     用大白话说
@@ -133,17 +179,24 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
     :param out_dir: 图存哪
     :param colors: 阈值表里的颜色名（只有合成源用得上；相机源忽略它）
     :param max_frames: 最多看多少帧（0 = 不限）；相机是无限流，靠它兜底
-    :return: `(image_points, saved_paths)`
+    :param preview: 是否开实时窗口（显示当前画面 + 是否认出棋盘 + 已收几张；按 q 中止）
+    :return: `(image_points, saved_paths)`；preview 下按 q 会提前结束，已收的仍然有效
     :raises OSError: 输入源构造失败（相机被占用 / SDK 缺失）
     """
+    import cv2
+
     ensure_dir(out_dir)
     source = build_source(cfg.input.source,
                           synthetic_params=dict(vars(cfg.input.synthetic)),
                           replay_params=dict(vars(cfg.input.replay)),
                           camera_params=dict(vars(cfg.input.camera)),
                           colors=colors)
-    image_points, saved = [], []
+    image_points, saved, signatures = [], [], []
     seen = 0
+    last_sig, stable = None, 0
+    window = "calibrate_camera: capture (q = stop)"
+    if preview:
+        cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     try:
         while len(saved) < count:
             frame = source.read()
@@ -155,20 +208,98 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                 print(f"  已看满 {max_frames} 帧，停止采图")
                 break
             corners = find_board_corners(frame.image_bgr, board)
+            sharp = cv2.Laplacian(cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2GRAY),
+                                  cv2.CV_64F).var()
+            ready, hint = False, ""
+            if corners is not None:
+                sig = _pose_signature(corners, (frame.image_bgr.shape[1], frame.image_bgr.shape[0]),
+                                  board)
+                # 闸 1：稳不稳 —— 连续 STABLE_FRAMES 帧姿态几乎不变才算"站稳了"
+                if last_sig is not None and _is_too_similar(sig, last_sig, STABLE_CENTER_RATIO,
+                                                            STABLE_SCALE_RATIO, 2.0):
+                    stable += 1
+                else:
+                    stable = 1
+                last_sig = sig
+                # 闸 2：像不像 —— 与已收的某张太像就不收
+                duplicate = next((i + 1 for i, old in enumerate(signatures)
+                                  if _is_too_similar(sig, old, DEDUP_CENTER_RATIO,
+                                                     DEDUP_SCALE_RATIO, DEDUP_ANGLE_DEG)), None)
+                if stable < STABLE_FRAMES:
+                    hint = f"hold still ({stable}/{STABLE_FRAMES})"
+                elif duplicate:
+                    hint = f"too similar to #{duplicate} - change pose"
+                else:
+                    ready = True
+            if preview:
+                # 实时窗口：让摄影师知道"现在这一帧能不能用"，否则只能干等终端
+                show = frame.image_bgr.copy()
+                if corners is not None:
+                    cv2.drawChessboardCorners(show, (int(board.cols), int(board.rows)), corners, True)
+                status = ("saved %d/%d" % (len(saved), count)) if ready else hint
+                hud = f"{status}   sharp {sharp:4.0f}   q to stop"
+                color = (0, 220, 0) if ready else (0, 0, 255)
+                cv2.putText(show, hud, (12, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 5)
+                cv2.putText(show, hud, (12, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                cv2.imshow(window, show)
+                if (cv2.waitKey(1) & 0xFF) in (ord("q"), 27):
+                    print("  按 q 中止采图", flush=True)
+                    break
             if corners is None:
                 if seen % 30 == 0:
-                    print(f"  … 已看 {seen} 帧，还没找到完整的板子（收到 {len(saved)} 张）")
+                    print(f"  … 已看 {seen} 帧，还没找到完整的板子（收到 {len(saved)} 张）",
+                          flush=True)
                 continue
+            if not ready:
+                continue                        # 没站稳、或和已收的太像 —— 等它换个姿势
             index = len(saved) + 1
             path = os.path.join(out_dir, f"calib_{index:02d}.png")
             write_image(path, frame.image_bgr)
             image_points.append(corners)
             saved.append(path)
-            print(f"  ✅ 第 {index}/{count} 张 -> {path}")
+            signatures.append(sig)
+            print(f"  ✅ 第 {index}/{count} 张 -> {path}   sharp {sharp:.0f}", flush=True)
     finally:
         # 相机是独占资源：异常路径也必须释放，否则下次打不开（坑 31）
         source.close()
+        if preview:
+            cv2.destroyWindow(window)
     return image_points, saved
+
+
+def refine_without_outliers(image_points: list, image_size: tuple[int, int],
+                            board: BoardSpec, first: CameraIntrinsics,
+                            factor: float = 2.0) -> tuple[CameraIntrinsics, list]:
+    """按「单张 RMS 明显偏大」剔除离群图，再用剩下的图重标一次。
+
+    用大白话说
+        一批图里常有一两张拍糊的、反光的、或者板子没压平的。它们会让整批的误差指标变差，
+        也会把焦距/畸变拽偏。做法很朴素：先标一次，看每张图的误差，把"比中位数大一倍以上"
+        的挑出去，剩下的再标一次。剔掉的图会打印出来，方便你重拍那几张。
+
+    :param image_points: 每张图的角点（与 `first.per_view_rms` 一一对应）
+    :param image_size: `(width, height)`
+    :param board: 板子参数
+    :param first: 第一次标定的结果
+    :param factor: 判定阈值 = factor × 中位数（默认 2.0，另设 0.5 px 的下限）
+    :return: `(新的标定结果, 被剔除的下标列表)`；没东西可剔就原样返回
+    """
+    import statistics
+
+    errors = list(first.per_view_rms)
+    if len(errors) <= MIN_VIEWS:
+        return first, []
+    median = statistics.median(errors)
+    limit = max(float(factor) * median, 0.5)
+    keep = [i for i, value in enumerate(errors) if value <= limit]
+    dropped = [i for i in range(len(errors)) if i not in keep]
+    if not dropped or len(keep) < MIN_VIEWS:
+        return first, []
+    second = calibrate([image_points[i] for i in keep], image_size, board,
+                       flags=first.flags)
+    if second.rms >= first.rms * 0.98:          # 剔完没变好，就退回原结果
+        return first, []
+    return second, dropped
 
 
 def write_calibration(path: str, intrinsics: CameraIntrinsics) -> str:
@@ -280,8 +411,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"RMS 超过它就判为不可用并返回 1（默认 {RMS_USABLE}）")
     ap.add_argument("--max-frames", type=int, default=0,
                     help="采图时最多看多少帧（0 = 不限；相机是无限流，靠它兜底）")
+    ap.add_argument("--free-k3", action="store_true",
+                    help="允许 6 次径向项 k3 自由（默认固定为 0：普通镜头用不到，放开容易过拟合）")
+    ap.add_argument("--keep-outliers", action="store_true",
+                    help="不剔除误差明显偏大的图（默认会把比中位数大一倍以上的挑掉后重标一次）")
     ap.add_argument("--preview", action="store_true",
-                    help="标定完开窗对比原图/矫正图（需要 GUI）")
+                    help="开实时窗口：采图时显示当前帧与已收张数（q 中止），标定完再对比原图/矫正图")
     ap.add_argument("--config", default=None, help="配置文件路径（默认 configs/default.yaml）")
     ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=value",
                     help="临时覆盖配置，可多次，如 --set input.source=camera")
@@ -331,7 +466,8 @@ def main(argv=None) -> int:
         try:
             image_points, saved = capture_from_source(
                 cfg, board, args.capture, args.capture_dir,
-                colors=list(thresholds), max_frames=args.max_frames)
+                colors=list(thresholds), max_frames=args.max_frames,
+                preview=args.preview)
         except (OSError, RuntimeError) as exc:
             print(f"❌ 采图失败：{exc}", file=sys.stderr)
             return 1
@@ -359,12 +495,23 @@ def main(argv=None) -> int:
     # ---- 第二步：解算 ----
     sample_image = read_image_bgr(sample)
     image_size = (sample_image.shape[1], sample_image.shape[0])
+    # 普通镜头用不到 6 次项：放开 k3 会让它和 k1/k2 互相抵消（实测 rms 几乎不变、系数却失真），
+    # 所以默认固定 k3 = 0；确实需要（广角/鱼眼）再加 --free-k3
+    import cv2
+    flags = 0 if args.free_k3 else cv2.CALIB_FIX_K3
     try:
-        intrinsics = calibrate(image_points, image_size, board)
+        intrinsics = calibrate(image_points, image_size, board, flags=flags)
     except ValueError as exc:
         print(f"❌ 标定失败：{exc}", file=sys.stderr)
         return 1
 
+    if not args.keep_outliers:
+        refined, dropped = refine_without_outliers(image_points, image_size, board, intrinsics)
+        if dropped:
+            names = ", ".join(used[i] if i < len(used) else f"第{i+1}张" for i in dropped)
+            print(f"  剔除离群   : {names}  "
+                  f"（RMS {intrinsics.rms:.2f} -> {refined.rms:.2f} px）")
+            intrinsics = refined
     ok = print_report(intrinsics, used, skipped, args.max_rms)
     try:
         path = write_calibration(args.out, intrinsics)
