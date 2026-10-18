@@ -372,7 +372,9 @@ def _plot(path: str, series, x_label: str, y_label: str, title: str,
         x_value = x_min + (x_max - x_min) * i / 4.0
         px, _y = to_px(x_value, y_min)
         cv2.line(canvas, (px, top + plot_h), (px, top + plot_h + 4), (0, 0, 0), 1)
-        put_text(canvas, f"{x_value:g}", (px - 12, top + plot_h + 22), 0.45, (0, 0, 0))
+        # 量级大的轴（距离/亮度×100）取整显示：101.25 这种刻度没人能一眼读出档位
+        label = f"{x_value:.0f}" if abs(x_value) >= 10 else f"{x_value:g}"
+        put_text(canvas, label, (px - 12, top + plot_h + 22), 0.45, (0, 0, 0))
 
     if reference is not None:
         ref_value, ref_label = reference
