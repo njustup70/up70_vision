@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import zlib
 from dataclasses import dataclass
 
 import cv2
@@ -285,7 +286,10 @@ def render_scene(spec: PoseSpec,
         canvas = np.clip((canvas.astype(np.float32) + float(spec.ambient))
                          * float(spec.brightness), 0, 255).astype(np.uint8)
     if float(spec.noise_sigma) > 0:
-        rng = np.random.default_rng(abs(hash(spec.name)) % (2 ** 32))
+        # 用 crc32 而不是内置 hash()：str 的 hash 每个进程都不同（PYTHONHASHSEED 随机），
+        # 同一场景名两次运行会得到不同噪声图，噪声档的数字就没法当回归基线
+        # （实测三次运行同一个名字分别得到 40350 / 30148 / 54421）。
+        rng = np.random.default_rng(zlib.crc32(spec.name.encode("utf-8")))
         noise = rng.normal(0.0, float(spec.noise_sigma), canvas.shape)
         canvas = np.clip(canvas.astype(np.float32) + noise, 0, 255).astype(np.uint8)
     canvas = _apply_blur(canvas, spec.blur_px)

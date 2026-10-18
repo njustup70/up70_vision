@@ -37,9 +37,11 @@
     · **180° 角点错位**：四个角点整体循环平移两位（等价于码转 180°），在正方形对称的
       前提下位姿层**分辨不出来**（距离、倾角、RMS 全不变，只有 yaw 差 180°）。
       角点顺序只能由检测层保证（`tests/test_aruco.py` 的上边倾角断言），这里拦不住。
-    · **IPPE_SQUARE 的退化分支**：输入完全正对且严格居中时，闭式解的两个候选会一起锁到
-      180° 分支（实测 675 mm 场景两解 RMS 都是 38.6 px，真解本该 0.01 px）。所以
-      `solve_pose` 在"最好的解都过不了 RMS 门槛"时会用 ITERATIVE 兜一次，谁小用谁。
+    · **IPPE_SQUARE 的退化分支**：输入完全正对且严格居中时，闭式解会退化，两种表现都实测过：
+      一是两个候选一起锁到 180° 分支（675 mm 场景两解 RMS 都是 38.6 px，真解本该 0.01 px），
+      二是两个候选一起变成 NaN（23 mm 码、300 mm、合成内参 `cx=640`；同一张图用 float32
+      角点反而不退化，说明这是数值巧合而非几何必然）。所以候选解一律先过 `isfinite`，
+      再过"最好的解都过不了 RMS 门槛就用 ITERATIVE 兜一次"。
 """
 
 from __future__ import annotations
@@ -47,6 +49,10 @@ from __future__ import annotations
 import numpy as np
 
 from .types import ArucoMarker, MarkerPose
+
+# cv2 在函数内 import 而不是模块顶部：与 `core/calibration.py`、`core/detectors/aruco.py`
+# 一致，`import up70_vision.core.pose` 不该顺带把 OpenCV 的初始化开销带进来。
+# （`core/color.py`、`core/detectors/blob.py` 是顶层 import，属既有的两种风格并存，未统一。）
 
 #: 可选的求解方法（configs/default.yaml 的 pose.method 只能填这些）
 #:   ippe_square：专为「正方形、共面、四个点」设计，闭式解、不要初值；能给出两个解
@@ -190,15 +196,26 @@ def _raw_candidates(object_points, corners, matrix, dist_coeffs, method: str) ->
 
 
 def _score_candidates(candidates, object_points, corners, matrix, dist_coeffs) -> list:
-    """给每个候选解算重投影 RMS，并扔掉"解到相机后方"的。
+    """给每个候选解算重投影 RMS，并扔掉"解到相机后方"和"根本不是有限数"的。
 
-    :return: `[(rms, rvec, tvec), ...]`，未排序
+    :return: `[(rms, rvec, tvec), ...]`，未排序（排序由调用方在比较之后做）
+
+    为什么必须显式过滤 NaN
+        严格正视 + 严格居中的完美方形会让 IPPE_SQUARE 的闭式解退化成 NaN
+        （实测 23 mm 码、300 mm、合成内参 `cx=640`：两个候选的 rvec/tvec/RMS 全是
+        nan；同一张图换 float32 角点则不退化）。NaN 的所有比较都返回 False，
+        所以 `tvec[2] <= 0` 拦不住、`rms > limit` 也拦不住，最后会漏到 `MarkerPose`
+        里报一句"tvec[2] 必须为正"，把人引向"角点顺序"，与真实原因相反。
     """
     scored = []
     for rvec, tvec in candidates:
+        if not (np.all(np.isfinite(rvec)) and np.all(np.isfinite(tvec))):
+            continue
         if tvec[2] <= 0:                       # 码在相机后方，一定是错的
             continue
         rms = _reproject_rms(object_points, corners, rvec, tvec, matrix, dist_coeffs)
+        if not np.isfinite(rms):
+            continue
         scored.append((rms, rvec, tvec))
     return scored
 
@@ -237,7 +254,9 @@ def solve_pose(corners_px: np.ndarray,
                marker_id: int = -1,
                method: str = DEFAULT_METHOD,
                refine: bool = True,
-               max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX) -> MarkerPose:
+               max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX,
+               ambiguity_ratio: float = AMBIGUITY_RATIO,
+               ambiguity_deg: float = AMBIGUITY_DEG) -> MarkerPose:
     """从四个角点解出一个码的位姿（本模块的唯一求解入口）。
 
     用大白话说
@@ -254,6 +273,8 @@ def solve_pose(corners_px: np.ndarray,
     :param method: `ippe_square`（默认）或 `iterative`
     :param refine: True 时用 `solvePnPRefineLM` 再精化一次，只有 RMS 更小才采用
     :param max_reproj_rms_px: 重投影 RMS 上限；超过就抛 ValueError
+    :param ambiguity_ratio: 判 `ambiguous` 的相对误差比上限，默认取 `pose.ambiguity_ratio`
+    :param ambiguity_deg: 判 `ambiguous` 的两解旋转夹角下限（度），默认取 `pose.ambiguity_deg`
     :return: `MarkerPose`
     :raises ValueError: 入参形状/取值非法、解算失败、RMS 超限、解到相机后方
 
@@ -279,13 +300,23 @@ def solve_pose(corners_px: np.ndarray,
     limit = float(max_reproj_rms_px)
     if limit <= 0:
         raise ValueError(f"max_reproj_rms_px 必须为正，收到 {max_reproj_rms_px!r}")
+    ratio_limit = float(ambiguity_ratio)
+    if not np.isfinite(ratio_limit) or ratio_limit <= 0:
+        raise ValueError(f"ambiguity_ratio 必须是正的有限数，收到 {ambiguity_ratio!r}")
+    angle_limit = float(ambiguity_deg)
+    if not (0.0 <= angle_limit <= 180.0):
+        raise ValueError(f"ambiguity_deg 必须在 0–180 之间，收到 {ambiguity_deg!r}")
 
     # ---- 步骤 1：求解。IPPE_SQUARE 走 generic，能一次拿到两个候选解 ----
     scored = _score_candidates(_raw_candidates(object_points, corners, matrix, dist_coeffs,
                                                method),
                                object_points, corners, matrix, dist_coeffs)
     used_fallback = False
-    if method == "ippe_square" and (not scored or scored[0][0] > limit):
+    # 判据看的是**最小的那个** RMS，不是"第一个候选"。`_score_candidates` 不排序，
+    # 直接取 scored[0] 会把"第二个候选更好"的情况判错。空列表时 best 取无穷大，
+    # 于是会走兜底——这正是 NaN 退化输入该走的路。
+    best_rms = min((item[0] for item in scored), default=float("inf"))
+    if method == "ippe_square" and best_rms > limit:
         # 兜底：IPPE_SQUARE 是闭式解，遇到"完全正对且严格居中"的退化输入时，
         # 两个候选解会一起锁到 180° 的分支上（实测 675 mm 场景：两个解的 RMS 都是
         # 38.6 px，而真解的重投影本该是 0.01 px）。ITERATIVE 用 DLT 初值，label 感知，
@@ -298,9 +329,12 @@ def solve_pose(corners_px: np.ndarray,
             scored = fallback
 
     if not scored:
+        # 两类原因的报错文本必须分开：一个是"你配错了"，一个是"这组输入数值退化"。
+        # 混成一句会把人引向角点顺序，而真正该做的是换个姿态/加点噪声再拍。
         raise ValueError(
-            f"位姿解算失败（id={marker_id}）：没有落在相机前方的解，"
-            "多半是角点顺序与模型点顺序对不上")
+            f"位姿解算失败（id={marker_id}）：所有候选解都不可用（非有限数，或落在相机后方）。"
+            f"输入是否严格正对且居中？那种完美对称会让 IPPE_SQUARE 退化成 NaN，"
+            f"ITERATIVE 兜底也没解出来；否则检查角点顺序与模型点顺序是否一致")
 
     scored.sort(key=lambda item: item[0])
     rms, rvec, tvec = scored[0]
@@ -334,11 +368,12 @@ def solve_pose(corners_px: np.ndarray,
     # 二义性：两个解都"足够像"时才标记。比例判据 + 夹角判据同时成立才算，
     # 因为正视时两解本来重合（夹角≈0），不该被标成 ambiguous。
     ambiguous = False
-    # 走了 ITERATIVE 兜底时不留歧义标记：那时 only 一个解，标 True 只会误导
+    # 走了 ITERATIVE 兜底时不留歧义标记：那时只有一个解，标 True 只会误导。
+    # 两个门槛由调用方给（cli 从 `pose.ambiguity_ratio/deg` 传进来），不再是写死的常量。
     if len(scored) > 1 and not used_fallback:
         second_rms, second_rvec, _second_tvec = scored[1]
         angle = _rotation_angle_deg(rvec, second_rvec)
-        ambiguous = (second_rms / max(rms, _EPS) < AMBIGUITY_RATIO) and (angle > AMBIGUITY_DEG)
+        ambiguous = (second_rms / max(rms, _EPS) < ratio_limit) and (angle > angle_limit)
 
     return MarkerPose(marker_id=int(marker_id), rvec=rvec, tvec_mm=tvec,
                       distance_mm=float(np.linalg.norm(tvec)),
@@ -352,7 +387,9 @@ def estimate_pose(marker: ArucoMarker,
                   dist_coeffs=None,
                   method: str = DEFAULT_METHOD,
                   refine: bool = True,
-                  max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX) -> MarkerPose:
+                  max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX,
+                  ambiguity_ratio: float = AMBIGUITY_RATIO,
+                  ambiguity_deg: float = AMBIGUITY_DEG) -> MarkerPose:
     """对一个已检测到的码求位姿（`solve_pose` 的 `ArucoMarker` 版本）。
 
     用大白话说
@@ -366,6 +403,8 @@ def estimate_pose(marker: ArucoMarker,
     :param method: 见 `solve_pose`
     :param refine: 是否做 LM 精化
     :param max_reproj_rms_px: 重投影 RMS 上限
+    :param ambiguity_ratio: 判 `ambiguous` 的相对误差比，默认取配置默认值
+    :param ambiguity_deg: 判 `ambiguous` 的两解夹角下限（度）
     :return: `MarkerPose`，`marker_id` 取自入参
     :raises ValueError: 见 `solve_pose`
     """
@@ -373,7 +412,8 @@ def estimate_pose(marker: ArucoMarker,
         raise ValueError(f"estimate_pose 需要 ArucoMarker，收到 {type(marker).__name__}")
     return solve_pose(marker.corners_px, marker_size_mm, camera_matrix, dist_coeffs,
                       marker_id=marker.marker_id, method=method, refine=refine,
-                      max_reproj_rms_px=max_reproj_rms_px)
+                      max_reproj_rms_px=max_reproj_rms_px,
+                      ambiguity_ratio=ambiguity_ratio, ambiguity_deg=ambiguity_deg)
 
 
 def estimate_poses(markers: list,
@@ -382,7 +422,9 @@ def estimate_poses(markers: list,
                    dist_coeffs=None,
                    method: str = DEFAULT_METHOD,
                    refine: bool = True,
-                   max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX) -> list:
+                   max_reproj_rms_px: float = DEFAULT_MAX_REPROJ_RMS_PX,
+                   ambiguity_ratio: float = AMBIGUITY_RATIO,
+                   ambiguity_deg: float = AMBIGUITY_DEG) -> list:
     """批量求位姿，输出顺序与输入一致。
 
     用大白话说
@@ -399,5 +441,6 @@ def estimate_poses(markers: list,
     """
     return [estimate_pose(marker, marker_size_mm, camera_matrix, dist_coeffs,
                           method=method, refine=refine,
-                          max_reproj_rms_px=max_reproj_rms_px)
+                          max_reproj_rms_px=max_reproj_rms_px,
+                          ambiguity_ratio=ambiguity_ratio, ambiguity_deg=ambiguity_deg)
             for marker in markers]

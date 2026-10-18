@@ -208,7 +208,9 @@ def test_pose_config_defaults_and_validation():
     """位姿段：默认关闭、默认门槛合法；非法值报错要带字段路径。"""
     cfg = from_dict({})
     assert cfg.pose.enabled is False, "默认不启用位姿：不开时实时入口输出应与改造前一致"
-    assert cfg.pose.marker_size_mm == 40.0
+    # 默认值是本队那批码的实量 23 mm（progress.md 坑 40），不是通用占位值；
+    # 留 40 会让"只开位姿、没给边长"的人拿到 +74% 的距离误差
+    assert cfg.pose.marker_size_mm == 23.0
     assert (cfg.pose.method, cfg.pose.refine) == ("ippe_square", True)
     assert (cfg.calibration.file, cfg.calibration.required) == \
         ("camera_calibration.yaml", False)
@@ -224,7 +226,6 @@ def test_pose_config_defaults_and_validation():
                          ({"method": "epnp"}, "pose.method"),
                          ({"ambiguity_ratio": 1.0}, "ambiguity_ratio"),
                          ({"ambiguity_deg": 200}, "ambiguity_deg"),
-                         ({"max_tilt_deg": -1}, "max_tilt_deg"),
                          ({"max_reproj_rms_px": 0}, "max_reproj_rms_px")):
         try:
             from_dict({"pose": bad})

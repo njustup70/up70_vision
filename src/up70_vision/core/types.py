@@ -174,7 +174,7 @@ class ArucoMarker:
 
 @dataclass(frozen=True)
 class MarkerPose:
-    """一个 ArUco 码相对相机的三维位姿（契约见 docs/interface.md 2.4 节）。
+    """一个 ArUco 码相对相机的三维位姿（契约见 docs/interface.md 2.3 节）。
 
     用大白话说
         相机拍到一个码，除了"这是 7 号码、它在画面第 320 列"，还能说清三件事：

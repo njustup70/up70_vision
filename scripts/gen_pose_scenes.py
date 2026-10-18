@@ -22,4 +22,9 @@ except ModuleNotFoundError:
     from up70_vision.tools.gen_pose_scenes import main
 
 if __name__ == "__main__":
+    # Windows 控制台是 GBK，打印 ✅/⚠️ 会 UnicodeEncodeError 并把退出码变成 1
+    # （复核意见 P1-2）。容器里本来就是 UTF-8，这行是空操作。
+    from up70_vision.utils.console import ensure_utf8_stdout
+
+    ensure_utf8_stdout()
     sys.exit(main())

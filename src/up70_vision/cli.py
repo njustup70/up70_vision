@@ -717,14 +717,20 @@ def run_aruco_live(argv=None) -> int:
                                 # 这与"先 undistort_points 再传 None"是两种口径，别混用
                                 intrinsics.dist_coeffs,
                                 method=cfg.pose.method, refine=cfg.pose.refine,
-                                max_reproj_rms_px=cfg.pose.max_reproj_rms_px))
+                                max_reproj_rms_px=cfg.pose.max_reproj_rms_px,
+                                # 两个歧义门槛必须从配置传进来，否则 --set 就是个摆设
+                                ambiguity_ratio=cfg.pose.ambiguity_ratio,
+                                ambiguity_deg=cfg.pose.ambiguity_deg))
                         except ValueError as exc:
                             pose_failures += 1
                             if pose_failures <= POSE_WARN_LIMIT:   # 只报前几次，避免刷屏
                                 print(f"⚠️  码 {marker.marker_id} 跳过位姿：{exc}", file=sys.stderr)
                     if poses:
+                        # 画轴要跟解位姿用同一套 (K, D)：位姿是在带畸变的像素空间里解的
+                        # （上面把 D 传进了 PnP），这里再用 dist=None 投就会在画面边缘错开
                         canvas = draw_pose_axes(canvas, poses, intrinsics.camera_matrix,
-                                                axis_mm=cfg.pose.marker_size_mm * POSE_AXIS_RATIO)
+                                                axis_mm=cfg.pose.marker_size_mm * POSE_AXIS_RATIO,
+                                                dist_coeffs=intrinsics.dist_coeffs)
 
                 # HUD 三行：来源#帧号 / 本帧检出数与 ID / 当前帧率。只写 ASCII（Hershey 字体无中文）
                 draw_hud(canvas, [f"{frame.source} #{frame.index}",

@@ -47,6 +47,10 @@ DEFAULT_MAX_DIST_ERR = 0.04
 DEFAULT_MAX_TILT_ERR_DEG = 3.0
 DEFAULT_MAX_RMS_PX = 2.0
 
+#: `--intrinsics` 与真值里的 `fx` 相对差超过这个比例就告警。
+#: 5% 是"肉眼还看不出偏、但距离已经偏 5%"的量级；只告警不覆盖参数（见 main 里的说明）。
+K_MISMATCH_RATIO = 0.05
+
 #: 真值倾角小于这个角度时**不判倾角**（误差照记，只是不算通过与否）。
 #: 理由：码正对相机时，绕 x/y 轴转 10° 只让投影高度缩 1.5%——67 px 的码差 1 px，
 #: 与角点定位噪声同量级，所以"正视时的倾角"在几何上就是弱可观的，实测误差可达 10°。
@@ -101,7 +105,7 @@ def check_one(image_path: str,
     :param max_tilt_err_deg: 倾角绝对误差上限（度）
     :param max_rms_px: 重投影 RMS 上限（像素）
     :param tilt_judge_min_deg: 真值倾角小于它时不判倾角（理由见常量说明）
-    :return: dict，字段见 `CSV_COLUMNS`；`reason` 非空表示没通过
+    :return: dict，键见 `_blank_record()`；`reason` 非空表示没通过
     """
     image_bgr = read_image_bgr(image_path)
     truth = _load_truth(image_path)
@@ -167,8 +171,6 @@ def check_one(image_path: str,
     return record
 
 
-CSV_COLUMNS = ("image", "detected", "id_ok", "distance_mm", "distance_err", "tilt_deg",
-               "tilt_err_deg", "yaw_deg", "yaw_err_deg", "reproj_rms_px", "ok", "reason")
 
 
 def _iter_images(root: str):
@@ -227,7 +229,7 @@ def main(argv=None) -> int:
     print(f"{'图名':<22}{'码数':>4}{'真值d':>9}{'估计d':>9}{'距离误差':>9}"
           f"{'真值tilt':>9}{'估计tilt':>9}{'RMS':>7}  结论")
 
-    records, size_warned = [], False
+    records, size_warned, k_warned = [], False, False
     for path in images:
         truth = _load_truth(path)
         if base_intrinsics is not None:
@@ -242,6 +244,18 @@ def main(argv=None) -> int:
                         size_warned = True
                         print(f"⚠️  内参按 {base_intrinsics.image_size} 标定，图是 {want}；"
                               "已按比例缩放（近似：畸变系数不缩放，严谨请重标定）")
+            # 尺寸对得上但 fx 差得远，说明这套 K 根本不是渲染这张图用的那套：
+            # 距离会整体偏（实测 fx 1321 顶 800 时 31 张全偏 65.8%）。
+            # 只告警、不覆盖：--intrinsics 是显式参数，静默改成真值 K 会让
+            # "我想试另一套内参"变成不可能。
+            if not k_warned and truth is not None and "camera_matrix" in truth:
+                truth_fx = float(np.asarray(truth["camera_matrix"], dtype=np.float64)[0, 0])
+                used_fx = float(np.asarray(used.camera_matrix, dtype=np.float64)[0, 0])
+                if truth_fx > 0 and abs(used_fx - truth_fx) / truth_fx > K_MISMATCH_RATIO:
+                    k_warned = True
+                    print(f"⚠️  内参 fx 与真值不一致：你给 {used_fx:.1f}，真值是 {truth_fx:.1f}"
+                          f"（差 {abs(used_fx - truth_fx) / truth_fx * 100:.1f}%）；"
+                          "继续用你给的那套，距离会整体偏")
             camera_matrix = used.camera_matrix
             dist_coeffs = used.dist_coeffs
         elif truth is not None and "camera_matrix" in truth:

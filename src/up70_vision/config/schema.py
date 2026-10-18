@@ -308,29 +308,31 @@ class PoseConfig:
         │ 键                 │ 类型    │ 合法值 / 含义               │ 默认          │
         ├───────────────────┼─────────┼────────────────────────────┼──────────────┤
         │ enabled            │ bool    │ 是否输出位姿                │ false         │
-        │ marker_size_mm     │ float   │ > 0，码黑框外沿边长（毫米）  │ 40.0          │
+        │ marker_size_mm     │ float   │ > 0，码黑框外沿边长（毫米）  │ 23.0          │
         │ method             │ str     │ ippe_square / iterative     │ ippe_square   │
         │ refine             │ bool    │ 是否做 LM 精化               │ true          │
         │ ambiguity_ratio    │ float   │ > 1，两解 RMS 比小于它算难分 │ 3.0           │
         │ ambiguity_deg      │ float   │ 0–180，两解夹角超过它算难分  │ 10.0          │
-        │ max_tilt_deg       │ float   │ 0–180，超过只在日志里提示    │ 75.0          │
         │ max_reproj_rms_px  │ float   │ > 0，超过直接抛错            │ 2.0           │
         └───────────────────┴─────────┴────────────────────────────┴──────────────┘
 
     两条容易踩的
         · `marker_size_mm` **必须用卡尺量黑框外沿**，不含白边。填错不会让重投影误差变大，
-          只会让所有距离按同比例错（progress.md 坑 40 的位姿版）。
+          只会让所有距离按同比例错（progress.md 坑 40 的位姿版）。默认值 23.0 是**本队
+          那批码的实量值**（progress.md 坑 40：打印标称 15 mm 实际 23 mm），不是通用值——
+          换了码就必须重量，别把它当默认安全值。
         · `enabled` 默认 false：不开位姿时，实时入口的输出与改造前**逐字节一致**，
           这样"加了功能"不会变成"改了别人的日志格式"。
     """
 
     enabled: bool = False
-    marker_size_mm: float = 40.0
+    # 默认值取本队实量的 23 mm，而不是"看起来合理"的 40：40 会让距离整体偏 +74%
+    # 且重投影误差完全正常（坑 40 的位姿版）。换码必须重量。
+    marker_size_mm: float = 23.0
     method: str = "ippe_square"
     refine: bool = True
     ambiguity_ratio: float = 3.0
     ambiguity_deg: float = 10.0
-    max_tilt_deg: float = 75.0
     max_reproj_rms_px: float = 2.0
 
     def validate(self) -> None:
@@ -345,8 +347,6 @@ class PoseConfig:
                 f"pose.ambiguity_ratio 必须大于 1（它是「次优/最优」的倍数）：{self.ambiguity_ratio!r}")
         if not 0.0 <= float(self.ambiguity_deg) <= 180.0:
             raise ConfigError(f"pose.ambiguity_deg 必须在 0–180：{self.ambiguity_deg!r}")
-        if not 0.0 <= float(self.max_tilt_deg) <= 180.0:
-            raise ConfigError(f"pose.max_tilt_deg 必须在 0–180：{self.max_tilt_deg!r}")
         if not np.isfinite(self.max_reproj_rms_px) or float(self.max_reproj_rms_px) <= 0:
             raise ConfigError(
                 f"pose.max_reproj_rms_px 必须为正（像素）：{self.max_reproj_rms_px!r}")
@@ -455,12 +455,11 @@ def from_dict(data: dict) -> AppConfig:
         ),
         pose=PoseConfig(
             enabled=bool(pose.get("enabled", False)),
-            marker_size_mm=float(pose.get("marker_size_mm", 40.0)),
+            marker_size_mm=float(pose.get("marker_size_mm", 23.0)),
             method=str(pose.get("method", "ippe_square")),
             refine=bool(pose.get("refine", True)),
             ambiguity_ratio=float(pose.get("ambiguity_ratio", 3.0)),
             ambiguity_deg=float(pose.get("ambiguity_deg", 10.0)),
-            max_tilt_deg=float(pose.get("max_tilt_deg", 75.0)),
             max_reproj_rms_px=float(pose.get("max_reproj_rms_px", 2.0)),
         ),
     )

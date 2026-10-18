@@ -94,7 +94,8 @@ def draw_pose_axes(frame_bgr: np.ndarray,
                    camera_matrix,
                    axis_mm: float,
                    thickness: int = 2,
-                   show_labels: bool = True) -> np.ndarray:
+                   show_labels: bool = True,
+                   dist_coeffs=None) -> np.ndarray:
     """在图上画每个码的三维坐标轴，返回新图（不改原图）。
 
     用大白话说
@@ -112,12 +113,16 @@ def draw_pose_axes(frame_bgr: np.ndarray,
     :param axis_mm: 轴长（毫米）；一般取 `pose.marker_size_mm * 0.6`
     :param thickness: 线宽（像素）
     :param show_labels: 是否在轴端写 x/y/z（ASCII）
+    :param dist_coeffs: 投影时用的畸变系数。**必须与解位姿时的口径一致**：
+        解算时把 `D` 传进了 PnP（原始畸变像素空间），这里就要传同一个 `D`；
+        解算时角点已 `undistort_points(..., P=K)` 掰直、PnP 传的是 None，这里也传 None。
     :return: 画好轴的新图
 
-    已知的近似
-        位姿是在**去畸变空间**解出来的（角点先掰直再 PnP），而这里画在**原始图**上，
-        所以画面边缘会有几像素的错位（畸变越大越明显）。中间区域基本看不出。
-        要严格对齐就得整帧去畸变后再画，那会把每帧的耗时抬上去，不值。
+    为什么口径必须成对
+        轴是"码坐标系里的三个点"投到图像上。投影用的 (K, D) 与解位姿用的不一致，
+        轴就会与码的四个角对不齐。实测偏差随畸变增大：中间区域几像素、画面边缘更明显。
+        早期版本固定用 `dist=None` 投影，而两条真实调用路径都是带 `D` 解的，
+        属于"注释写着去畸变空间、代码在原始空间"的口径错位（复核意见 P3-4）。
     """
     canvas = frame_bgr.copy()
     if not poses:
@@ -132,8 +137,9 @@ def draw_pose_axes(frame_bgr: np.ndarray,
     labels = ("x", "y", "z")
 
     for pose in poses:
-        base, _ = cv2.projectPoints(origin, pose.rvec, pose.tvec_mm, camera_matrix, None)
-        tips, _ = cv2.projectPoints(axis_points, pose.rvec, pose.tvec_mm, camera_matrix, None)
+        base, _ = cv2.projectPoints(origin, pose.rvec, pose.tvec_mm, camera_matrix, dist_coeffs)
+        tips, _ = cv2.projectPoints(axis_points, pose.rvec, pose.tvec_mm, camera_matrix,
+                                    dist_coeffs)
         # reshape：projectPoints 返回 (N,1,2)，直接索引会拿到嵌套数组
         origin_px = tuple(int(round(v)) for v in np.asarray(base).reshape(2))
         for tip, color, label in zip(np.asarray(tips).reshape(3, 2), colors, labels):

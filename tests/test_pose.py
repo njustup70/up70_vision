@@ -275,6 +275,48 @@ def test_undistorted_corners_must_not_get_dist_coeffs():
 
 
 # ---------------------------------------------------------------- 独立运行
+def test_degenerate_symmetric_input_does_not_leak_nan():
+    """严格正视 + 严格居中 + 23 mm 码：闭式解会退化成 NaN，必须被过滤掉并正常出解。
+
+    这是复核意见 P1-1 的回归用例。修之前的表现：两个候选的 rvec/tvec/RMS 全是 nan，
+    `tvec[2] <= 0` 与 `rms > limit` 都拦不住 NaN（比较恒为 False），最后从
+    `MarkerPose` 抛一句"tvec[2] 必须为正"，把原因指到"角点顺序"上。
+    """
+    # 合成内参 cx=640，码又摆在画面正中：这是唯一会触发数值退化的组合，
+    # 换成真机内参 cx=642.8 就不退化（实测），所以必须用默认渲染（合成 K）
+    marker, truth = _render(PoseSpec("degenerate", 300.0, marker_size_mm=MARKER_MM))
+    pose = _estimate(marker, truth)
+
+    assert np.all(np.isfinite(pose.tvec_mm)), f"解出非有限的 tvec：{pose.tvec_mm}"
+    assert math.isfinite(pose.reproj_rms_px) and pose.reproj_rms_px < 1.0, \
+        f"重投影 RMS 异常：{pose.reproj_rms_px}"
+    assert _distance_error(pose, truth) < 0.02, \
+        f"退化输入下距离 {pose.distance_mm:.1f} mm 与真值 {truth['distance_mm']:.1f} mm 差太多"
+
+
+def test_ambiguity_thresholds_come_from_arguments():
+    """两个歧义门槛由入参决定，不是模块常量：同一组角点换阈值必须换结果。
+
+    ratio 传 1e12 是"几乎一定判为两解接近"的探针（不允许传 inf，参数校验会拒），
+    配合 deg=0 与 deg=180 两次调用，就能看出夹角门槛到底有没有生效。
+    """
+    spec = PoseSpec("amb", 450.0, tilt_deg=30.0, marker_size_mm=MARKER_MM)
+    marker, truth = _render(spec)
+    corners = np.asarray(marker.corners_px, dtype=np.float64)
+    matrix = np.asarray(truth["camera_matrix"])
+
+    loose = solve_pose(corners, MARKER_MM, matrix, None, ambiguity_ratio=1e12,
+                       ambiguity_deg=0.0)
+    strict = solve_pose(corners, MARKER_MM, matrix, None, ambiguity_ratio=1e12,
+                        ambiguity_deg=180.0)
+
+    # 30° 倾角下两解夹角约 60°，所以 deg=0 判"难分"、deg=180 判"可分"
+    assert loose.ambiguous is True, "deg=0 时两解夹角必然超过门槛，应标 ambiguous"
+    assert strict.ambiguous is False, "deg=180 时任何夹角都超不过门槛，不该标 ambiguous"
+    # 换阈值只影响诊断位，不影响解本身
+    assert loose.distance_mm == strict.distance_mm
+
+
 def _run_standalone() -> int:
     """不依赖 pytest：把本文件里所有 `test_*` 函数挨个跑一遍，打印通过/跳过/失败。
 
