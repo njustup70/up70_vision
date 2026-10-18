@@ -163,10 +163,46 @@ def _is_too_similar(a: tuple, b: tuple, center_ratio: float, scale_ratio: float,
     return d_center < center_ratio and d_scale < scale_ratio and d_angle < angle_deg
 
 
+def _next_index(out_dir: str) -> int:
+    """下一个可用的文件名编号，保证补拍不覆盖已有的图。
+
+    :param out_dir: 采图目录
+    :return: 最小可用序号（目录里已有 calib_01/02/03 时返回 4）
+    """
+    import re
+
+    used = []
+    for path in glob.glob(os.path.join(out_dir, "calib_*.png")):
+        match = re.search(r"calib_(\d+)\.png$", os.path.basename(path))
+        if match:
+            used.append(int(match.group(1)))
+    return (max(used) + 1) if used else 1
+
+
+def _existing_signatures(out_dir: str, board: BoardSpec) -> list:
+    """把目录里已有图的棋盘姿态读出来，供「补拍时避开已有姿势」用。
+
+    :param out_dir: 采图目录
+    :param board: 板子参数
+    :return: 若干 `_pose_signature()` 的返回值；读不了/认不出的图直接跳过
+    """
+    signatures = []
+    for path in sorted(glob.glob(os.path.join(out_dir, "*.png"))):
+        try:
+            image = read_image_bgr(path)
+        except Exception:                                # noqa: BLE001
+            continue
+        corners = find_board_corners(image, board)
+        if corners is not None:
+            signatures.append(_pose_signature(corners, (image.shape[1], image.shape[0]), board))
+    return signatures
+
+
 def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                         colors: list | None = None,
                         max_frames: int = 0,
-                        preview: bool = False) -> tuple[list, list]:
+                        preview: bool = False,
+                        fresh: bool = False) -> tuple[list, list]:
     """从配置里的输入源抓帧，找到棋盘就存下来，凑够 count 张为止。
 
     用大白话说
@@ -180,6 +216,7 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
     :param colors: 阈值表里的颜色名（只有合成源用得上；相机源忽略它）
     :param max_frames: 最多看多少帧（0 = 不限）；相机是无限流，靠它兜底
     :param preview: 是否开实时窗口（显示当前画面 + 是否认出棋盘 + 已收几张；按 q 中止）
+    :param fresh: True 表示当作全新一批（不读已有图的姿势、编号从 1 开始并覆盖）
     :return: `(image_points, saved_paths)`；preview 下按 q 会提前结束，已收的仍然有效
     :raises OSError: 输入源构造失败（相机被占用 / SDK 缺失）
     """
@@ -191,7 +228,13 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                           replay_params=dict(vars(cfg.input.replay)),
                           camera_params=dict(vars(cfg.input.camera)),
                           colors=colors)
-    image_points, saved, signatures = [], [], []
+    # 补拍场景：目录里可能已经有图。先把它们的姿态读进来当"已占用"，
+    # 这样同一姿势不会再收第二遍；编号也从下一个可用值开始，避免覆盖
+    signatures = _existing_signatures(out_dir, board) if not fresh else []
+    if signatures and not fresh:
+        print(f"  目录里已有 {len(signatures)} 张可用图，会避开这些姿势", flush=True)
+    next_index = 1 if fresh else _next_index(out_dir)
+    image_points, saved = [], []
     seen = 0
     last_sig, stable = None, 0
     window = "calibrate_camera: capture (q = stop)"
@@ -252,7 +295,7 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                 continue
             if not ready:
                 continue                        # 没站稳、或和已收的太像 —— 等它换个姿势
-            index = len(saved) + 1
+            index = next_index + len(saved)
             path = os.path.join(out_dir, f"calib_{index:02d}.png")
             write_image(path, frame.image_bgr)
             image_points.append(corners)
@@ -411,6 +454,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"RMS 超过它就判为不可用并返回 1（默认 {RMS_USABLE}）")
     ap.add_argument("--max-frames", type=int, default=0,
                     help="采图时最多看多少帧（0 = 不限；相机是无限流，靠它兜底）")
+    ap.add_argument("--fresh", action="store_true",
+                    help="当作全新一批：编号从 1 开始（会覆盖同目录已有图）、不避开已有姿势")
     ap.add_argument("--free-k3", action="store_true",
                     help="允许 6 次径向项 k3 自由（默认固定为 0：普通镜头用不到，放开容易过拟合）")
     ap.add_argument("--keep-outliers", action="store_true",
@@ -467,11 +512,15 @@ def main(argv=None) -> int:
             image_points, saved = capture_from_source(
                 cfg, board, args.capture, args.capture_dir,
                 colors=list(thresholds), max_frames=args.max_frames,
-                preview=args.preview)
+                preview=args.preview, fresh=args.fresh)
         except (OSError, RuntimeError) as exc:
             print(f"❌ 采图失败：{exc}", file=sys.stderr)
             return 1
         used = [os.path.basename(p) for p in saved]
+        # 补拍语义：采完对**整个目录**标定，把以前采的图也算进来（否则只用了这次新收的几张）
+        if saved:
+            print(f"  正在对目录里全部图片重新标定：{args.capture_dir}", flush=True)
+            image_points, used, skipped = collect_from_dir(args.capture_dir, board)
     else:
         print("❌ 要指定 --images DIR 或 --capture N（二选一）", file=sys.stderr)
         return 2
