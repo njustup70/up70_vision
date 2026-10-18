@@ -83,6 +83,8 @@ class PoseSpec:
         marker_id (int)       用哪个 ID 的码（DICT_4X4_50）
         marker_size_mm (float) 码边长（毫米），黑框外沿到外沿
         brightness (float)    亮度倍数；1.0 = 原样，>1 可能过曝到全白
+        ambient (float)       环境光偏置（灰度级），**加在乘亮度之前**。纯乘亮度模拟不了
+                              过曝：黑的地方乘 2 还是黑，只有把黑"照亮"才会丢掉对比度
         noise_sigma (float)   叠加的高斯噪声标准差（灰度级）
         blur_px (int)         线性运动模糊核长度（像素）；0 = 不模糊
         canvas_size (tuple)   画布 (宽, 高)，像素
@@ -98,6 +100,7 @@ class PoseSpec:
     marker_id: int = 0
     marker_size_mm: float = DEFAULT_MARKER_MM
     brightness: float = 1.0
+    ambient: float = 0.0
     noise_sigma: float = 0.0
     blur_px: int = 0
     canvas_size: tuple = DEFAULT_CANVAS
@@ -117,6 +120,8 @@ class PoseSpec:
                 f"渲染出来无法检测；收到 {self.tilt_deg!r}")
         if int(self.blur_px) < 0:
             raise ValueError(f"blur_px 不能为负：{self.blur_px!r}")
+        if float(self.ambient) < 0:
+            raise ValueError(f"ambient 不能为负（它是「把黑的地方照亮」的量）：{self.ambient!r}")
 
 
 def synthetic_intrinsics(width: int, height: int, fx: float = DEFAULT_FX) -> np.ndarray:
@@ -272,9 +277,12 @@ def render_scene(spec: PoseSpec,
     canvas[mask > 0] = cv2.cvtColor(warped, cv2.COLOR_GRAY2BGR)[mask > 0]
 
     # ---- 步骤 3：光照 / 噪声 / 模糊，只改"好不好认"，不改真值 ----
-    if float(spec.brightness) != 1.0:
-        # 先转 float 再截断：uint8 上直接乘会溢出回绕，得到"负亮度"的黑图
-        canvas = np.clip(canvas.astype(np.float32) * float(spec.brightness), 0, 255).astype(np.uint8)
+    if float(spec.brightness) != 1.0 or float(spec.ambient) != 0.0:
+        # 先转 float 再截断：uint8 上直接乘会溢出回绕，得到"负亮度"的黑图。
+        # 顺序是 (像素 + 环境光) × 增益：环境光先把黑框抬亮，增益再把白格截到 255，
+        # 两步合起来才是"过曝"——只乘的话黑框仍是 0，检测反而更容易。
+        canvas = np.clip((canvas.astype(np.float32) + float(spec.ambient))
+                         * float(spec.brightness), 0, 255).astype(np.uint8)
     if float(spec.noise_sigma) > 0:
         rng = np.random.default_rng(abs(hash(spec.name)) % (2 ** 32))
         noise = rng.normal(0.0, float(spec.noise_sigma), canvas.shape)
@@ -296,7 +304,8 @@ def render_scene(spec: PoseSpec,
         "canvas": [width, height],
         "params": {
             "tilt_deg": float(spec.tilt_deg), "spin_deg": float(spec.spin_deg),
-            "brightness": float(spec.brightness), "noise_sigma": float(spec.noise_sigma),
+            "brightness": float(spec.brightness), "ambient": float(spec.ambient),
+            "noise_sigma": float(spec.noise_sigma),
             "blur_px": int(spec.blur_px), "offset_mm": list(spec.offset_mm),
         },
     }
@@ -351,8 +360,13 @@ def build_suite(base_marker_mm: float = DEFAULT_MARKER_MM,
         add(f"tilt_{int(tilt):02d}", distance_mm=base_distance_mm, tilt_deg=tilt)
     for spin in (0.0, 90.0, 180.0, 270.0):
         add(f"spin_{int(spin):03d}", distance_mm=base_distance_mm, spin_deg=spin)
-    for factor in (0.35, 0.60, 1.00, 1.40, 2.20):
-        add(f"bright_{int(factor * 100):03d}", distance_mm=base_distance_mm, brightness=factor)
+    for factor in (0.35, 0.60, 1.00, 1.40, 2.20, 3.00):
+        # 2.2 / 3.0 两档额外加环境光：只有"黑框被照亮 + 白格截顶"才叫过曝。
+        # 单纯乘 2.2 时黑框还是 0、白格还是 255，等于什么都没变（实测 100% 通过）；
+        # 加上偏移才是真过曝：2.2 + 60 属于"发灰但仍能认"，3.0 + 110 直接丢码。
+        ambient = 110.0 if factor >= 3.0 else (60.0 if factor > 2.0 else 0.0)
+        add(f"bright_{int(factor * 100):03d}", distance_mm=base_distance_mm,
+            brightness=factor, ambient=ambient)
     for sigma in (0.0, 8.0, 16.0):
         add(f"noise_{int(sigma):02d}", distance_mm=base_distance_mm, noise_sigma=sigma)
     for blur in (0, 5, 9, 13):
