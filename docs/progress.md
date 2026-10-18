@@ -198,13 +198,15 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 真值是 `fx=fy=800、cx=640、cy=400、k1=−0.28`。工具链三条通路都跑通：`--images`、`--capture`（用回放图组
 模拟现场采图）、`--from`（读回 YAML）。
 
-**2026-10-18 首次真机标定（MV-CU013-A0UC，15 张手持）**：
+**2026-10-18 真机标定（MV-CU013-A0UC，23 张手持，格子实测 23 mm）**：
 
 | 项 | 值 |
 |---|---|
 | 内参 | `fx=1321.0`、`fy=1324.6`、`cx=642.8`、`cy=532.3` |
 | 畸变 | `k1=-0.0588`、`k2=+0.0845`、`p1/p2≈0`、`k3=0`（默认固定） |
-| 重投影 RMS | **0.597 px**（原始 15 张 1.87 px，剔除 4 张糊图后 0.597） |
+| 重投影 RMS | **0.507 px**（23 张剔离群后 19 张；最初 15 张是 1.87 px） |
+| 留出验证 | 奇偶两折交叉：**0.453 / 0.470 px**，两折 fx 差 0.43% → 没过拟合 |
+| 与老仓库对照 | 老仓库同型号 `fx=1322.8 / fy=1338.4`，我们 `1328.1 / 1329.4`，**差 0.4%** |
 | 结论 | `fx≈fy`（0.28%）、主点接近中心 → **可用**；要"好"（<0.5 px）需重新对焦并补四角姿势 |
 
 采图过程中补了三道工程闸（都写进工具了）：**站稳才拍**（连续 3 帧姿态稳定）、**太像不收**
@@ -296,7 +298,7 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 37 | `python -m up70_vision.tools.aruco_check` 报 `ModuleNotFoundError: up70_vision` | 在宿主 venv 里跑但没 `pip install -e .` | 走薄入口 `python scripts/check_aruco.py`（自带 `src` 路径兜底），或 `PYTHONPATH=src python -m up70_vision.tools.aruco_check` |
 | 38 | `docker compose build` 重建镜像很慢（几分钟到十几分钟，几乎全卡在 `pip` 下载） | Dockerfile 默认 `PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`，**2026-10-17 实测只有 304 KB/s**：`numpy`（16.8 MB）用了 56 s，`opencv-python`（**77.4 MB**）按这个速度要 4 分钟以上；`apt` 那层走 Ubuntu 官方源，国内同样慢 | **换清华源重建**：`docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`（README 第 91 行给的是中科大源，同样可用）。注意两种改动的代价完全不同：改这个 build-arg 只让 pip 层失效重下、前面 apt/MVS 层仍走缓存；**改 Dockerfile 里的 apt 层会让它后面所有层重跑**——所以新增系统库请追加到 Dockerfile 最后一层 |
 | 39 | 容器里 `cv2.imshow` 报 `Could not load the Qt platform plugin "xcb" ... even though it was found`，而 `--headless` 落盘那条路完全正常 | `opencv-python` 的 GUI 走 Qt，`libqxcb.so` 运行时 dlopen `libSM.so.6` 与 `libICE.so.6`，`ubuntu:22.04` 基础镜像里没有；**报错完全不提缺哪个库**，极易误判成"OpenCV 没编 GUI 支持"而去重装 opencv | 镜像补 `apt-get install -y --no-install-recommends libsm6 libice6`（已加进 Dockerfile 最后一层）；宿主侧还需 `xhost +local:root`、`-e DISPLAY`、挂载 `/tmp/.X11-unix`。排查命令：`ldd $CV2PATH/qt/plugins/platforms/libqxcb.so \| grep "not found"` |
-| 40 | 标定出来的焦距整体偏 1~2%（`fx` 总是比手算值小/大一点点），换一批图也一样 | 打印机几乎都会把「标称尺寸」缩放 1~2%；`--square-mm` 填了标称值，于是整块板的真实尺寸与程序以为的不一致 | **打印完用尺子量一个格子**，把量到的值填给 `--square-mm`（示例：标称 15 mm、实量 14.7 mm 就填 14.7） |
+| 40 | 标定出来的焦距整体偏了（我们实测偏 **53%**：标称 15 mm 的板子打出来是 23 mm）（`fx` 总是比手算值小/大一点点），换一批图也一样 | 打印机几乎都会把「标称尺寸」缩放 1~2%；`--square-mm` 填了标称值，于是整块板的真实尺寸与程序以为的不一致 | **打印完用尺子量一个格子**，把量到的值填给 `--square-mm`（示例：标称 15 mm、实量 14.7 mm 就填 14.7） |
 | 41 | 标定 RMS 3~4 px、`fx` 偏 10% 以上，但每张图都「成功找到 54 个角点」 | 板子离太远，135 mm 的棋盘在图上只有 ~120 px，54 个角点挤在一起，亚像素精化失效，检出的点已不是格子阵（实测：角点间距 13/16/5/27 px 乱跳） | 让板子占画面 **1/3 以上**：`tvec.z` 从 1000 mm 改到 220~620 mm 后，同一套流程 RMS 从 3.8 px 降到 0.39 px |
 | 42 | 畸变系数 `k2/k3` 跑来跑去、每次标定差别很大 | 纸卷边 / 板子没贴平 / 强反光：镜头看到的是「弯的板」，程序只能把这份弯曲也学进畸变系数 | 棋盘贴硬纸板、用哑光纸、光源偏离正面；`k3` 不稳时可以 `cv2.CALIB_FIX_K3` 固定它 |
 | 43 | 标定结果离谱：`fx` 与 `fy` 差 7%、主点偏 200 px、`k2=0.98` `k3=-1.38`，但每张图都「成功找到 54 个角点」 | 快速连拍收进了 7 张**几乎同一姿势**的图（中心差 ≤12 px、格距差 0.1 px）：重复观测把焦距与畸变的耦合解当成真解 | 采图时加「太像就不收」的闸（`DEDUP_*` 阈值），重复姿势会被提示 `too similar to #N - change pose`；已收的图可用 `--images` 重算 |
