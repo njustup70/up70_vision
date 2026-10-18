@@ -89,6 +89,62 @@ def draw_detections(frame_bgr: np.ndarray,
     return canvas
 
 
+def draw_pose_axes(frame_bgr: np.ndarray,
+                   poses,
+                   camera_matrix,
+                   axis_mm: float,
+                   thickness: int = 2,
+                   show_labels: bool = True) -> np.ndarray:
+    """在图上画每个码的三维坐标轴，返回新图（不改原图）。
+
+    用大白话说
+        每个码画一个"小十字架"：红轴指向码的右边、绿轴指向码的上边、蓝轴垂直纸面
+        往外戳。看图的人一眼就能判断"码是正对镜头还是斜着、歪了多少"——
+        光看四边形框看不出倾斜，看轴的透视缩短就很直观。
+
+    为什么轴长要由调用方给
+        `viz/` 不知道码有多大（那在 `pose.marker_size_mm` 里）。默认取边长的 0.6 倍
+        是"够长能看清、又不至于盖住旁边的码"，但真正合适的值取决于画面里码的密度。
+
+    :param frame_bgr: 原始 BGR 图
+    :param poses: `list[MarkerPose]`；空列表返回原图的副本
+    :param camera_matrix: (3,3) 内参（与解位姿时同一个）
+    :param axis_mm: 轴长（毫米）；一般取 `pose.marker_size_mm * 0.6`
+    :param thickness: 线宽（像素）
+    :param show_labels: 是否在轴端写 x/y/z（ASCII）
+    :return: 画好轴的新图
+
+    已知的近似
+        位姿是在**去畸变空间**解出来的（角点先掰直再 PnP），而这里画在**原始图**上，
+        所以画面边缘会有几像素的错位（畸变越大越明显）。中间区域基本看不出。
+        要严格对齐就得整帧去畸变后再画，那会把每帧的耗时抬上去，不值。
+    """
+    canvas = frame_bgr.copy()
+    if not poses:
+        return canvas
+
+    origin = np.zeros((1, 3), dtype=np.float64)
+    axis_points = np.array([[float(axis_mm), 0.0, 0.0],
+                            [0.0, float(axis_mm), 0.0],
+                            [0.0, 0.0, float(axis_mm)]], dtype=np.float64)
+    # x 红、y 绿、z 蓝（BGR 顺序），与 OpenCV 的惯例一致，别改成"好看的配色"
+    colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0))
+    labels = ("x", "y", "z")
+
+    for pose in poses:
+        base, _ = cv2.projectPoints(origin, pose.rvec, pose.tvec_mm, camera_matrix, None)
+        tips, _ = cv2.projectPoints(axis_points, pose.rvec, pose.tvec_mm, camera_matrix, None)
+        # reshape：projectPoints 返回 (N,1,2)，直接索引会拿到嵌套数组
+        origin_px = tuple(int(round(v)) for v in np.asarray(base).reshape(2))
+        for tip, color, label in zip(np.asarray(tips).reshape(3, 2), colors, labels):
+            tip_px = tuple(int(round(v)) for v in tip)
+            cv2.arrowedLine(canvas, origin_px, tip_px, color, thickness, tipLength=0.2)
+            if show_labels:
+                put_text(canvas, label, (tip_px[0] + 2, tip_px[1] - 2), 0.4, color, 1, outline=True)
+        cv2.circle(canvas, origin_px, 2, (255, 255, 255), -1)
+    return canvas
+
+
 def draw_hud(canvas: np.ndarray, lines, origin=(10, 22), scale: float = 0.6,
              color=(0, 255, 255), line_gap: int = 22) -> None:
     """左上角信息栏（帧号/检出数/汇总之类），原图就地修改。"""

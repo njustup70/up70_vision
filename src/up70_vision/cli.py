@@ -43,15 +43,17 @@ from collections import deque
 
 import cv2
 
-from .config.loader import (load_config, load_thresholds, resolve_thresholds_path)
+from .config.loader import (load_config, load_intrinsics, load_thresholds,
+                            resolve_calibration_path, resolve_thresholds_path)
 from .config.schema import ConfigError
 from .core.detectors.base import build_detector
 from .core.pipeline import ColorConfig, process_frames, summarize
+from .core.pose import estimate_pose
 from .core.types import is_marker
 from .io.base import build_source
 from .utils.image_io import write_image
 from .utils.logging import get_logger, setup_logging
-from .viz.draw import draw_detections, draw_hud
+from .viz.draw import draw_detections, draw_hud, draw_pose_axes
 from .viz.writer import OutputWriter
 
 log = get_logger("cli")
@@ -435,21 +437,34 @@ LIVE_FPS_WINDOW = 30
 # 与批处理的结果目录（含 results.json / csv，会被同名文件覆盖）分开，避免互相踩。
 LIVE_OUT_SUBDIR = os.path.join("output", "aruco")
 
+# 人话：码上画的那三根轴，长度取码边长的多少倍。
+# 技术：0.6 倍是实测出来的折中——比 0.5 更容易看出倾斜（透视缩短更明显），
+# 又不会长到压住紧邻的另一个码（多码图里码间距约 1.5 倍边长）。
+POSE_AXIS_RATIO = 0.6
 
-def _format_live_line(elapsed: float, frames: int, fps: float, markers) -> str:
+# 人话：位姿解算失败时，终端最多报几次，剩下的只记次数。
+# 技术：相机 30 fps 下若某个码持续算不出来，逐帧打印就是每秒 30 行刷屏，
+# 把"帧率掉了"这类真正要看的信息冲掉；3 次足够让人知道"有问题"。
+POSE_WARN_LIMIT = 3
+
+
+def _format_live_line(elapsed: float, frames: int, fps: float, markers, poses=None) -> str:
     """把本帧状态拼成一行固定格式的终端摘要（便于 diff、贴进 PR）。
 
     用大白话说
         把"跑了多久、第几帧、现在几帧每秒、看到几个码、每个码在哪"串成一句话。
+        开了位姿之后，每个码后面再多三个数："多远、斜多少、转多少"。
         码多的时候这句话就长一点，没码的时候只有前半句。
 
     格式
-        `t=<秒>s frames=<已处理帧数> fps=<滑动平均> markers=<个数> [| id=N center=(x, y)]*`
-        每个 marker 追加一段 `| id=N center=(x, y)`，有多个码就重复多段。
+        `t=<秒>s | frames=<已处理帧数> | fps=<滑动平均> | markers=<个数>
+         [| id=N center=(x, y)[ d=<毫米>mm tilt=<度> yaw=<度>]]*`
+        每个 marker 追加一段；开了位姿时该段尾部再多三个字段，**字段顺序固定**。
 
-    输出示例
-        无码：`t=3.20s frames=96 fps=29.8 markers=0`
-        两码：`t=3.20s frames=96 fps=29.8 markers=2 | id=3 center=(320.0, 240.0) | id=7 center=(501.0, 180.5)`
+    输出示例（字段之间是 " | "，与本函数实际输出一致）
+        无码：`t=3.20s | frames=96 | fps=29.8 | markers=0`
+        两码：`t=3.20s | frames=96 | fps=29.8 | markers=2 | id=3 center=(320.0, 240.0) | id=7 center=(501.0, 180.5)`
+        开位姿：`... | markers=1 | id=7 center=(501.0, 180.5) d=512mm tilt=12.4 yaw=-30.1`
 
     为什么是"固定格式 + 一行一条"
         · 一行一条便于 `grep markers=` / `awk` 统计，也便于直接贴进 PR；
@@ -460,17 +475,27 @@ def _format_live_line(elapsed: float, frames: int, fps: float, markers) -> str:
     :param frames: 已处理的帧数（含本帧）
     :param fps: 最近 `LIVE_FPS_WINDOW` 帧的滑动平均帧率
     :param markers: 本帧的 `list[ArucoMarker]`（无码时是 `[]`）
+    :param poses: 本帧的 `list[MarkerPose]`；None 或空列表表示没开位姿，
+        **此时输出与加位姿之前逐字节一致**（别让新功能改了别人的日志格式）
     :return: 单行字符串，调用方直接 print（不带换行符）
     """
     # 前半段：时间 / 帧数 / 帧率 / 本帧码数。这些都是标量，顺序固定。
     parts = [f"t={elapsed:.2f}s", f"frames={frames}", f"fps={fps:.1f}",
              f"markers={len(markers)}"]
+    # 位姿按 id 建索引：markers 可能因解算失败而缺位姿，不能按下标硬对
+    pose_by_id = {int(pose.marker_id): pose for pose in (poses or [])}
     # 后半段：每个码一段。markers 已由检测器按 marker_id 升序，输出顺序才稳定可 diff。
     for marker in markers:
         cx, cy = marker.center_px
         # center 用契约里的四角算术平均（ArucoMarker.center_px），不是 bbox 中心：
         # 码倾斜时两者不是同一个位置，用错会让"中心点"看起来偏。
-        parts.append(f"id={int(marker.marker_id)} center=({cx:.1f}, {cy:.1f})")
+        segment = f"id={int(marker.marker_id)} center=({cx:.1f}, {cy:.1f})"
+        pose = pose_by_id.get(int(marker.marker_id))
+        if pose is not None:
+            # 距离取整到毫米、角度一位小数：终端一行要能扫读，多给的位数没人看
+            segment += (f" d={pose.distance_mm:.0f}mm"
+                        f" tilt={pose.tilt_deg:.1f} yaw={pose.yaw_deg:.1f}")
+        parts.append(segment)
     # 用 " | " 连接：人在终端里一眼能分清字段的分组边界
     return " | ".join(parts)
 
@@ -501,16 +526,17 @@ def run_aruco_live(argv=None) -> int:
         │  1. 量帧间隔 dt，更新 fps 滑动平均                        │
         │  2. detect(image_bgr) -> list[ArucoMarker]（每帧重算）    │
         │  3. draw_detections 画四边形/中心/id 标签                 │
-        │  4. draw_hud 画左上角 HUD（来源#帧号 / markers / fps）    │
-        │  5. 输出：headless 落盘 **或** 窗口 imshow + waitKey(1)   │
-        │  6. frames += 1；本帧有码则 with_markers += 1            │
-        │  7. 终端节流：到 0.5s 或 id 集合变了就打一行              │
-        │  8. --limit 到了就 break                                  │
+        │  4. （pose.enabled 时）逐码 estimate_pose -> 画坐标轴      │
+        │  5. draw_hud 画左上角 HUD（来源#帧号 / markers / fps）    │
+        │  6. 输出：headless 落盘 **或** 窗口 imshow + waitKey(1)   │
+        │  7. frames += 1；本帧有码则 with_markers += 1            │
+        │  8. 终端节流：到 0.5s 或 id 集合变了就打一行              │
+        │  9. --limit 到了就 break                                  │
         └───────────────────────────────────────────────────────────┘
 
     启动顺序（每一步失败都返回 2，且不会留下占用的资源）
         解析参数 -> 读配置+校验 -> 读阈值表 -> 打印生效配置 -> 检查 DISPLAY
-        -> 建检测器（先）-> 建输入源（后）-> 建窗口（仅窗口模式）
+        -> 建检测器（先）-> 读内参（仅开启位姿时）-> 建输入源（后）-> 建窗口（仅窗口模式）
 
         检测器先于输入源：相机是**独占资源**，检测器名字/参数写错时不该先把相机打开；
         窗口建在输入源之后：没有输入源就没有画面，先建窗口只会闪一下。
@@ -587,6 +613,26 @@ def run_aruco_live(argv=None) -> int:
         print(f"❌ 检测器不可用：{exc}", file=sys.stderr)
         return 2
 
+    # ---- 6.5 位姿：只在 pose.enabled 时建（默认关闭，老用户零感知）----
+    # 人话：要用位姿就得先拿到"这台相机的内参"，没有就算不出毫米。
+    #       内参文件不进版本库，新 clone 的仓库一定没有，所以这里分两种处理：
+    #         required=true  -> 直接报错退出（现场/CI 用，避免"以为在算位姿其实没算"）
+    #         required=false -> 打警告、本次只跑检测（默认，别让缺文件挡住演示）
+    intrinsics = None
+    if cfg.pose.enabled:
+        calib_path = resolve_calibration_path(cfg, config_path)
+        try:
+            intrinsics = load_intrinsics(calib_path)
+        except ConfigError as exc:
+            if cfg.calibration.required:
+                print(f"❌ 位姿已启用但内参不可用：{exc}", file=sys.stderr)
+                return 2
+            print(f"⚠️  位姿已启用但内参不可用，本次只跑检测：{exc}", file=sys.stderr)
+        else:
+            print(f"内参       : {calib_path}  {intrinsics.summary()}")
+            print(f"位姿       : 码边长 {cfg.pose.marker_size_mm} mm  "
+                  f"method={cfg.pose.method} refine={cfg.pose.refine}")
+
     # ---- 7. 建输入源（后）----
     # 人话：按配置决定画面从哪来——真相机、图片/视频回放，还是程序自己画的合成图。
     # 技术：配置对象是 dataclass，这里拆成普通参数传进工厂
@@ -623,6 +669,8 @@ def run_aruco_live(argv=None) -> int:
     frames = 0            # 已处理帧数（含本帧）；--limit 判定与汇总都用它，不用 frame.index
     with_markers = 0      # 至少检出一个码的帧数；用来区分"有码帧 / 无码帧"
     saved = 0             # headless 实际落盘的 PNG 张数（汇总时报告）
+    pose_failures = 0     # 位姿解算失败的次数；只进日志与汇总，不影响退出码
+    size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
     t_start = time.monotonic()            # 循环起点，终端摘要的 t= 与最终平均帧率都以它为基准
     t_prev = t_start                      # 上一帧时刻：每帧更新，用于算 dt
@@ -647,6 +695,37 @@ def run_aruco_live(argv=None) -> int:
                 markers = detector.detect(frame.image_bgr)
                 canvas = draw_detections(frame.image_bgr, markers)   # 返回副本，不改原帧
                 ids = [int(m.marker_id) for m in markers]           # 升序（检测器契约保证）
+
+                # ---- 位姿：逐码解算，单个码失败不影响这一帧的其它码 ----
+                # 人话：知道码在画面哪、再知道码有多大和相机内参，就能算出它离得多远、
+                #       斜了多少。算失败（比如码太糊、重投影误差超限）就跳过这个码，
+                #       继续处理下一个——实时场景不能因为一个坏样本整帧退出。
+                poses = []
+                if intrinsics is not None:
+                    # 分辨率不匹配只提醒一次：套错内参时距离会整体偏，但程序不报错
+                    if not size_checked:
+                        size_checked = True
+                        if tuple(frame.image_bgr.shape[1::-1]) != tuple(intrinsics.image_size):
+                            print(f"⚠️  内参是按 {intrinsics.image_size[0]}x{intrinsics.image_size[1]} "
+                                  f"标定的，当前帧是 {frame.image_bgr.shape[1]}x{frame.image_bgr.shape[0]}；"
+                                  "距离会整体偏，换分辨率要重标定", file=sys.stderr)
+                    for marker in markers:
+                        try:
+                            poses.append(estimate_pose(
+                                marker, cfg.pose.marker_size_mm, intrinsics.camera_matrix,
+                                # 角点没在这里去畸变（图像也没去），所以畸变系数原样传进去：
+                                # 这与"先 undistort_points 再传 None"是两种口径，别混用
+                                intrinsics.dist_coeffs,
+                                method=cfg.pose.method, refine=cfg.pose.refine,
+                                max_reproj_rms_px=cfg.pose.max_reproj_rms_px))
+                        except ValueError as exc:
+                            pose_failures += 1
+                            if pose_failures <= POSE_WARN_LIMIT:   # 只报前几次，避免刷屏
+                                print(f"⚠️  码 {marker.marker_id} 跳过位姿：{exc}", file=sys.stderr)
+                    if poses:
+                        canvas = draw_pose_axes(canvas, poses, intrinsics.camera_matrix,
+                                                axis_mm=cfg.pose.marker_size_mm * POSE_AXIS_RATIO)
+
                 # HUD 三行：来源#帧号 / 本帧检出数与 ID / 当前帧率。只写 ASCII（Hershey 字体无中文）
                 draw_hud(canvas, [f"{frame.source} #{frame.index}",
                                   f"markers={len(markers)} ids={ids}",
@@ -688,7 +767,8 @@ def run_aruco_live(argv=None) -> int:
                 # flush=True：重定向到文件时行缓冲不会攒着，tail -f 能实时看到。
                 tick = time.monotonic()
                 if ids != last_ids or (tick - last_print) >= LIVE_PRINT_INTERVAL_S:
-                    print(_format_live_line(tick - t_start, frames, fps, markers), flush=True)
+                    print(_format_live_line(tick - t_start, frames, fps, markers, poses),
+                          flush=True)
                     last_print = tick
                     last_ids = ids
 
@@ -718,6 +798,9 @@ def run_aruco_live(argv=None) -> int:
     print("=" * 62)
     print(f"  帧数        : {frames}（有码 {with_markers} / 无码 {frames - with_markers}）")
     print(f"  平均帧率    : {avg_fps:.1f} fps")
+    if intrinsics is not None:
+        # 失败次数单独报：它是"有多少帧拿不到毫米"的唯一线索，不算失败退出
+        print(f"  位姿        : 边长 {cfg.pose.marker_size_mm} mm，解算失败 {pose_failures} 次")
     if args.headless:
         print(f"  落盘        : {LIVE_OUT_SUBDIR}（{saved} 张）")
     print("=" * 62)
