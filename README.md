@@ -235,11 +235,12 @@ config ┘
 
 ---
 
-## 最小示例：实时识别 ArUco
+## 最小示例：从 ArUco 识别到位姿估计
 
-这是**验证仓库链路能跑通的最小例子**，不是仓库的全部能力：读一帧、找码、画框、终端报数，循环往复。
+这是**一条能完整跑通的主线**：读一帧 → 找码 → 画框 → 解位姿（距离/倾角/面内角）→ 终端与画面同时报数，循环往复。
+两步之间只差两个参数：`--set pose.enabled=true --set pose.marker_size_mm=82.5`。
 
-`assets/aruco/scenes/` 是 6 张带真值的场景图（多码、旋转、无码），把它当"视频流"喂进实时循环：
+先看识别。`assets/aruco/scenes/` 是 6 张带真值的场景图（多码、旋转、无码），把它当"视频流"喂进实时循环：
 
 ```bash
 docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
@@ -267,6 +268,7 @@ t=0.02s | frames=4 | fps=203.7 | markers=3 | id=0 center=(190.0, 260.0) | id=1 c
 ![6 个 ArUco 码的 ID、四角与中心](assets/readme/live_aruco_demo.png)
 
 > 绿框是四角，红叉是中心，左上 HUD 是来源 / 帧号 / fps / markers 列表。无码图输出 `markers=0` 而不是报错。
+> 打开位姿后 HUD 会再追加一行 `id N d .. tilt .. yaw ..`（见下一节）。
 
 ### 换成真摄像头
 
@@ -290,8 +292,9 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
   --headless --save-every 60
 ```
 
-### 加上位姿：画面多三根轴，终端多三个数
+### 同一循环加位姿：画面多三根轴，终端与 HUD 多三个数
 
+位姿不是另一个入口，就在上面这条循环里：打开 `pose.enabled`、填对码边长即可。
 需要两样东西：**相机内参**（`configs/camera_calibration.yaml`，标定产物、不进版本库）和
 **码的实际边长**（卡尺量黑框外沿，不含白边；本批为 **82.5 mm**）。
 
