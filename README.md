@@ -207,7 +207,7 @@ up70_vision/
 │   └── cli.py           唯一业务实现：run() 与 run_aruco_live()
 
 ├── scripts/             薄入口：run.py / run_aruco_live.py / demo.py / check_env.py
-├── configs/             可调参数：default.yaml、color_thresholds.yaml
+├── configs/             可调参数：default.yaml、color_thresholds.yaml、默认内参快照
 ├── assets/              随仓库分发的素材
 │   ├── aruco/           9 张测试图 + 真值 JSON
 │   └── readme/          README 用的截图
@@ -295,7 +295,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 ### 同一循环加位姿：画面多三根轴，终端与 HUD 多三个数
 
 位姿不是另一个入口，就在上面这条循环里：打开 `pose.enabled`、填对码边长即可。
-需要两样东西：**相机内参**（`configs/camera_calibration.yaml`，标定产物、不进版本库）和
+需要两样东西：**相机内参**（`configs/camera_calibration.yaml`，仓库自带一份默认快照，见下）和
 **码的实际边长**（卡尺量黑框外沿，不含白边；本批为 **82.5 mm**）。
 
 ```bash
@@ -318,6 +318,11 @@ id 0 d 451mm tilt 0.4 yaw 0.0
 - 画面上红/绿/蓝三根轴是码的 x/y/z 方向；正视时蓝轴缩成一个点，这是对的
 - 没有内参时位姿自动关闭并打一条警告（`calibration.required=false`），设成 `true` 则直接失败
 - 精度扫描与失败归因：`python scripts/pose_sweep.py`，见 `docs/位姿估计.md`
+
+真相机实拍（82.5 mm 码，40 ms / 15 dB）：绿框是四角，红/绿/蓝是码的三根轴，
+HUD 第四行就是这一帧的距离与姿态。图中 `d=317mm tilt=37.6 yaw=-144.0`。
+
+![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](assets/readme/live_pose_demo.jpg)
 
 ### 完整例程：识别 → 位姿（五条命令）
 
@@ -373,6 +378,11 @@ python scripts/pose_sweep.py --marker-mm 82.5 \
 
 `pose.marker_size_mm` 的默认值仍是 **23.0**（上一批码的历史值），所以用 82.5 mm 的码时
 **必须显式传 `--set pose.marker_size_mm=82.5` 或 `--marker-mm 82.5`**，否则距离会偏到 0.279 倍。
+
+**内参文件**：`configs/camera_calibration.yaml` 在 `.gitignore` 里，但仓库**强制带了一份默认快照**
+（本机 2026-10-19 标定，33 视图，RMS 0.473 px，1280×1024），新 clone 下来位姿就能直接跑。
+换相机或重标定会覆盖这个路径——提交前确认这份是不是全队约定的那台相机；
+只想临时用别人的标定，用 `--intrinsics <别的 yaml>`，不要覆盖它。
 
 `--set` 只能改**已存在**的字段，名字写错会在启动时报错并返回 2，不会带着错配置继续跑。
 启动时会把**实际生效**的配置整份打印一遍，日志和 PR 里能直接看到覆盖结果，不用回头翻命令行。
