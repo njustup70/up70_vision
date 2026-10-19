@@ -69,6 +69,36 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision
 
 ---
 
+## 目录导览
+
+```text
+up70_vision/
+├── src/up70_vision/
+│   ├── core/            纯算法层：判色、管线、位姿、标定、数据结构
+│   │   ├── detectors/   blob 判色 / stub_aruco 假码 / aruco 真码
+│   │   ├── pose.py      solvePnP + 两条硬校验（重投影 RMS、z 前向性）
+│   │   ├── calibration.py 内参、去畸变、按分辨率等比缩放
+│   │   └── types.py     Detection / ArucoMarker / MarkerPose
+│   ├── io/              输入源：synthetic / replay / camera（MVS）
+│   ├── viz/             画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
+│   ├── config/          YAML 加载、字段校验、--set 覆盖
+│   ├── tools/           生成与自检：gen_*、*_check、pose_sweep、hsv_tuner
+│   └── cli.py           唯一业务实现：run() 与 run_aruco_live()
+├── scripts/             薄入口，只转交 argv
+├── configs/             default.yaml、color_thresholds.yaml、默认内参快照
+├── assets/              aruco/（9 张图 + 真值）、calib/（棋盘 PNG+PDF）、readme/（截图）
+├── tests/               回归测试 78 项，可 python tests/test_xxx.py 独立跑
+├── docs/                进度 / 契约 / 三个规范 / ArUco 教程 / 标定与位姿说明
+├── .devcontainer/       Dockerfile、CPU/GPU compose、pkgs/
+├── data/                数据集与回放素材（不进版本库）
+└── output/              运行产物：demo/、aruco/、pose_scenes*/、pose_sweep/（不进版本库）
+```
+
+依赖方向是硬约束，下层不知道上层存在：`utils/config → core → io → viz → cli → scripts/`。
+`core/` 不 import ROS、不读文件、不开窗口；`scripts/` 保持薄入口。
+
+---
+
 ## 常用命令
 
 | 目的 | 命令（容器内执行） |
