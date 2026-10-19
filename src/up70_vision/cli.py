@@ -447,6 +447,10 @@ POSE_AXIS_RATIO = 0.6
 # 把"帧率掉了"这类真正要看的信息冲掉；3 次足够让人知道"有问题"。
 POSE_WARN_LIMIT = 3
 
+# 人话：窗口左上角最多列几个码的位姿数字。
+# 技术：HUD 每行 22 px、从 y=22 起排；码多时全列会把画面糊住，且会盖到画面中央的码。
+HUD_POSE_LIMIT = 3
+
 
 def _format_live_line(elapsed: float, frames: int, fps: float, markers, poses=None) -> str:
     """把本帧状态拼成一行固定格式的终端摘要（便于 diff、贴进 PR）。
@@ -732,10 +736,17 @@ def run_aruco_live(argv=None) -> int:
                                                 axis_mm=cfg.pose.marker_size_mm * POSE_AXIS_RATIO,
                                                 dist_coeffs=intrinsics.dist_coeffs)
 
-                # HUD 三行：来源#帧号 / 本帧检出数与 ID / 当前帧率。只写 ASCII（Hershey 字体无中文）
-                draw_hud(canvas, [f"{frame.source} #{frame.index}",
-                                  f"markers={len(markers)} ids={ids}",
-                                  f"fps={fps:.1f}"])
+                # HUD：来源#帧号 / 检出数与 ID / 帧率，再逐码追加"距离/倾角/面内角"。
+                # 只写 ASCII（Hershey 字体无中文）。位姿行必须画在画面上：
+                # 窗口里看三根轴只能判方向、读不出数字，而终端行 0.5 s 才一条，
+                # 全屏看画面时终端往往被挡在后面。
+                hud_lines = [f"{frame.source} #{frame.index}",
+                             f"markers={len(markers)} ids={ids}",
+                             f"fps={fps:.1f}"]
+                for pose in poses[:HUD_POSE_LIMIT]:
+                    hud_lines.append(f"id {int(pose.marker_id)} d {pose.distance_mm:.0f}mm "
+                                     f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}")
+                draw_hud(canvas, hud_lines)
 
                 # ---- 输出：headless 落盘 / 窗口显示，二选一，不自动降级 ----
                 # 人话：要么把画好的图显示出来给人看，要么存成文件以后看。
