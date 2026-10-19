@@ -230,9 +230,17 @@ def main(argv=None) -> int:
     print(f"已写入  : {args.out}（已写入 {args.dpi} dpi 元数据）")
 
     if not args.no_pdf:
+        # 内容比 A4 还宽/高时，按 A4 出 PDF 只会被裁或被驱动缩小（1:1 就没了），
+        # 所以自动换成"页面正好等于图"的尺寸，并明确要求更大的纸
+        paper = args.paper
+        too_big = width_mm > A4_PRINTABLE_MM[0] or height_mm > A4_PRINTABLE_MM[1]
+        if paper == "a4" and too_big:
+            paper = "auto"
+            print(f"  ⚠️  内容 {width_mm:.1f}x{height_mm:.1f} mm 超过 A4 可打印区，"
+                  f"PDF 已改用「页面=图」的尺寸：必须用 A3 或更大纸张，否则打不出 1:1")
         pdf_path = os.path.splitext(args.out)[0] + ".pdf"
         try:
-            page_mm, img_mm = write_pdf(pdf_path, image, args.dpi, args.paper)
+            page_mm, img_mm = write_pdf(pdf_path, image, args.dpi, paper)
             print(f"PDF     : {pdf_path}")
             print(f"          页面 {page_mm[0]:.1f} x {page_mm[1]:.1f} mm，"
                   f"棋盘内容 {img_mm[0]:.1f} x {img_mm[1]:.1f} mm（按 {args.dpi} dpi 换算）")
