@@ -45,7 +45,7 @@ UP70 战队视觉组仓库。目标是把 2D 视觉的基础链路跑通：**从
 | 输入源 | `io/`：synthetic / replay / camera | `--set input.source=...` |
 | 配置系统 | `config/`：YAML + `--set` 点分覆盖 + 校验 | 写错字段启动即报错，返回 2 |
 | 交互工具 | `tools/`：hsv_tuner、mvs_color_measure、gen_aruco、aruco_check | 各工具 `--help` |
-| 回归测试 | `tests/`（59 项） | `for t in tests/test_*.py; do python "$t"; done` |
+| 回归测试 | `tests/`（61 项） | `for t in tests/test_*.py; do python "$t"; done` |
 
 两种检出物分开定义，见 `docs/interface.md`：`Detection`（判色族，带颜色与命中率）与
 `ArucoMarker`（码族，带 ID、四角、中心）。改契约要先改文档、再改实现。
@@ -128,7 +128,7 @@ VS Code 用户可直接 Reopen in Container，配置在 `.devcontainer/devcontai
 
 | 参数 | 含义 |
 |---|---|
-| `--headless` | 不建窗口，改成每 `--save-every` 帧落盘（容器里没有 X server 时用） |
+| `--headless` | 不建窗口，改成每 `--save-every` 帧落盘（没有显示器、或不想开窗时用；容器里**也能**开窗，见下文） |
 | `--save-every N` | headless 的落盘间隔，默认 30 帧；至少 1 |
 
 实时循环的帧流程（顺序固定，**每帧重新检测**，不缓存上一帧的框）：
@@ -170,10 +170,10 @@ read() 取一帧
 | OpenCV 冒烟 | `python scripts/demo.py` |
 | ArUco 图组自检（9/9） | `python scripts/check_aruco.py` |
 | 重新生成测试图组 | `python scripts/gen_aruco.py` |
-| 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（打印后要量实际边长） |
+| 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（同时出 PNG+PDF；打印用 PDF、选「实际大小」） |
 | 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填尺子量到的实际值；本机标称 15 实测 23） |
 | 批处理识别 | `python scripts/run.py --set detector.name=aruco --set input.source=replay --set input.replay.path=assets/aruco/scenes` |
-| 回归测试（59 项） | `for t in tests/test_*.py; do python "$t"; done` |
+| 回归测试（61 项） | `for t in tests/test_*.py; do python "$t"; done` |
 | 看全部参数 | `python scripts/run.py --help` / `python scripts/run_aruco_live.py --help` |
 
 ---
@@ -200,7 +200,7 @@ up70_vision/
 ├── assets/              随仓库分发的素材
 │   ├── aruco/           9 张测试图 + 真值 JSON
 │   └── readme/          README 用的截图
-├── tests/               回归测试 59 项，可 python tests/test_xxx.py 独立跑
+├── tests/               回归测试 61 项，可 python tests/test_xxx.py 独立跑
 ├── docs/                进度 / 契约 / 三个规范 / ArUco 教程
 ├── .devcontainer/       Dockerfile、CPU/GPU compose、pkgs/
 ├── data/                数据集与回放素材（不进版本库）
@@ -259,11 +259,23 @@ t=0.02s | frames=4 | fps=203.7 | markers=3 | id=0 center=(190.0, 260.0) | id=1 c
 
 ### 换成真摄像头
 
-需要**原生机器 + 显示器**（容器里没有 X server 开不了窗口），并完成「真相机」三步前置：
+需要**接上相机 + 一个显示器**（原生机器或容器都行），并完成「真相机」三步前置。容器里开窗口要三件事：
 
 ```bash
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+xhost +local:root                       # 允许容器里的 root 连你的 X
+docker compose -f .devcontainer/docker-compose.yml run --rm \
+  -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix up70-vision \
   python scripts/run_aruco_live.py --set detector.name=aruco --set input.source=camera
+xhost -local:root                       # 用完撤销
+```
+
+镜像必须含 `libsm6 libice6`（Dockerfile 最后一层已装；**旧镜像要重新 build**，否则报
+`Could not load the Qt platform plugin "xcb"`，见 `progress.md` 坑 39）。没有显示器就加 `--headless`。
+
+在**原生机器**（有显示器、装好了 MVS）上则更简单，不用 `xhost`、也不进容器：
+
+```bash
+python scripts/run_aruco_live.py --set detector.name=aruco --set input.source=camera
 ```
 
 窗口里按 `q` / `ESC` 退出，点关闭按钮也行；`Ctrl+C` 会正常收尾并释放相机。
@@ -351,7 +363,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 | 环境 | `python scripts/check_env.py` | 末行「结果：全部通过」 |
 | OpenCV 冒烟 | `python scripts/demo.py` | `OpenCV 冒烟测试 -> PASS` |
 | ArUco 图组 | `python scripts/check_aruco.py` | `通过 9/9`，中心误差 0.00 px，四角 ≤ 0.23 px |
-| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **59 项**全过（判色/几何/配置 36 + ArUco 14 + 标定 9） |
+| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **61 项**全过（判色/几何/配置 36 + ArUco 14 + 标定 11） |
 
 几个约定：
 
@@ -377,7 +389,7 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 团队约定
 
-- 改 `src/` 前先跑 `check_env.py` 与 `demo.py`，两个都通过再提交；有算法改动加跑 59 项回归：
+- 改 `src/` 前先跑 `check_env.py` 与 `demo.py`，两个都通过再提交；有算法改动加跑 61 项回归：
 
   ```bash
   for t in tests/test_*.py; do python "$t"; done
@@ -399,8 +411,8 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 已知限制
 
-- **位姿估计没做**：目前只给 ID、四角、中心；`solvePnP` 需要相机内参与标定，顺延下一阶段。
-- **容器里没有窗口**：实时验证走 `--headless` 落盘；窗口模式在原生机器上验。
+- **位姿估计没做**：目前只给 ID、四角、中心；相机内参与畸变已就绪（见 `docs/相机标定.md`），`solvePnP` 顺延下一阶段。
+- **容器窗口要手动接 X**：`xhost +local:root` + `-e DISPLAY` + 挂 `/tmp/.X11-unix`，镜像需含 `libsm6 libice6`；没有显示器时用 `--headless` 落盘。
 - **相机需要 MVS SDK**：镜像不带 deb，需手动投放后重新构建；没有相机时用 `replay` 或 `stub_aruco`。
 - **YOLO 未接入**：`blob` 判色是占位，检测器接口已按可替换设计（`core/detectors/base.py`）。
 - **ROS 2 未接入**：入口已按「薄壳 + 单一实现」设计，节点接入时复用 `cli.py`。
