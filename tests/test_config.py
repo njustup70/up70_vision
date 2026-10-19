@@ -11,14 +11,19 @@ import textwrap
 from pathlib import Path
 
 try:
-    from up70_vision.config.loader import (apply_overrides, load_config, load_thresholds,
+    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+                                           load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
     from up70_vision.config.schema import AppConfig, ConfigError, from_dict
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.loader import (apply_overrides, load_config, load_thresholds,
+    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+                                           load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
     from up70_vision.config.schema import AppConfig, ConfigError, from_dict
+
+import numpy as np
+import yaml
 
 
 def test_from_dict_defaults_and_validation():
@@ -197,6 +202,81 @@ def test_detector_name_and_stub_params_are_validated():
             assert keyword in str(exc), f"报错应提到 {keyword!r}，实际：{exc}"
         else:
             raise AssertionError(f"应当报错：{bad}")
+
+
+def test_pose_config_defaults_and_validation():
+    """位姿段：默认关闭、默认门槛合法；非法值报错要带字段路径。"""
+    cfg = from_dict({})
+    assert cfg.pose.enabled is False, "默认不启用位姿：不开时实时入口输出应与改造前一致"
+    # 默认值是本队那批码的实量 23 mm（progress.md 坑 40），不是通用占位值；
+    # 留 40 会让"只开位姿、没给边长"的人拿到 +74% 的距离误差
+    assert cfg.pose.marker_size_mm == 23.0
+    assert (cfg.pose.method, cfg.pose.refine) == ("ippe_square", True)
+    assert (cfg.calibration.file, cfg.calibration.required) == \
+        ("camera_calibration.yaml", False)
+
+    cfg = from_dict({"pose": {"enabled": True, "marker_size_mm": 23.0, "method": "iterative"},
+                     "calibration": {"file": "cam_a.yaml", "required": True}})
+    assert cfg.pose.enabled and cfg.pose.marker_size_mm == 23.0
+    assert cfg.pose.method == "iterative"
+    assert cfg.calibration.file == "cam_a.yaml" and cfg.calibration.required is True
+
+    for bad, keyword in (({"marker_size_mm": 0}, "marker_size_mm"),
+                         ({"marker_size_mm": -5}, "marker_size_mm"),
+                         ({"method": "epnp"}, "pose.method"),
+                         ({"ambiguity_ratio": 1.0}, "ambiguity_ratio"),
+                         ({"ambiguity_deg": 200}, "ambiguity_deg"),
+                         ({"max_reproj_rms_px": 0}, "max_reproj_rms_px")):
+        try:
+            from_dict({"pose": bad})
+        except ConfigError as exc:
+            assert keyword in str(exc), f"报错应提到 {keyword!r}，实际：{exc}"
+        else:
+            raise AssertionError(f"应当报错：{bad}")
+
+
+def test_calibration_path_is_relative_to_config():
+    """内参路径相对配置文件目录解析（与阈值表同一个规矩）。"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_dir = os.path.join(td, "configs")
+        os.makedirs(cfg_dir)
+        cfg_path = os.path.join(cfg_dir, "default.yaml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent("""
+                input: {source: synthetic}
+                calibration: {file: cam_rig_02.yaml}
+            """))
+        cfg, loaded_path = load_config(cfg_path)
+        assert resolve_calibration_path(cfg, loaded_path) == \
+            os.path.join(cfg_dir, "cam_rig_02.yaml"), "内参路径应相对配置文件目录解析"
+
+
+def test_load_intrinsics_roundtrip_and_missing_file():
+    """标定 YAML 能原样读回；文件缺失时报错里给出标定命令。"""
+    from up70_vision.core.calibration import CameraIntrinsics
+
+    matrix = np.array([[796.9, 0.0, 641.2], [0.0, 797.3, 508.7], [0.0, 0.0, 1.0]])
+    dist = np.array([[-0.296, 0.121, 0.0008, -0.0012, 0.0]])
+    original = CameraIntrinsics(image_size=(1280, 1024), camera_matrix=matrix,
+                                dist_coeffs=dist, rms=0.54, views=8)
+
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "camera_calibration.yaml")
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(original.to_dict(), f, allow_unicode=True, sort_keys=False)
+
+        loaded = load_intrinsics(path)
+        assert loaded.image_size == (1280, 1024)
+        assert abs(loaded.fx - 796.9) < 1e-9 and abs(loaded.cy - 508.7) < 1e-9
+        assert np.allclose(loaded.dist_coeffs, dist)
+
+        # 文件不存在是常态（该文件被 gitignore），报错必须告诉人怎么生成
+        try:
+            load_intrinsics(os.path.join(td, "nope.yaml"))
+        except ConfigError as exc:
+            assert "calibrate_camera" in str(exc), f"报错应给出标定命令，实际：{exc}"
+        else:
+            raise AssertionError("内参文件不存在时应当抛 ConfigError")
 
 
 def _run_standalone() -> int:

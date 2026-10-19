@@ -191,6 +191,31 @@ def test_camera_intrinsics_dict_roundtrip_and_quality():
     assert RMS_USABLE == 1.0, "RMS 判据阈值是给别人看的文档口径，别悄悄改"
 
 
+def test_scale_camera_matrix_keeps_the_field_of_view():
+    """换分辨率时内参等比缩放：宽高减半 → fx/cx/fy/cy 都减半，视场角不变。"""
+    from up70_vision.core.calibration import scale_camera_matrix, scale_intrinsics
+
+    matrix = np.array([[1321.0, 0.0, 642.8], [0.0, 1324.6, 532.3], [0.0, 0.0, 1.0]])
+    # 尺寸相同：原样返回拷贝，且不改入参
+    same = scale_camera_matrix(matrix, (1280, 1024), (1280, 1024))
+    assert np.array_equal(same, matrix) and same is not matrix
+
+    half = scale_camera_matrix(matrix, (1280, 1024), (640, 512))
+    assert abs(half[0, 0] - 660.5) < 1e-9, f"fx 应减半，实得 {half[0, 0]}"
+    assert abs(half[0, 2] - 321.4) < 1e-9, f"cx 应减半，实得 {half[0, 2]}"
+    assert abs(half[1, 1] - 662.3) < 1e-9, f"fy 应减半，实得 {half[1, 1]}"
+    # 视场角不变：fx / 宽 在缩放前后相等
+    assert abs(half[0, 0] / 640.0 - matrix[0, 0] / 1280.0) < 1e-12
+
+    scaled = scale_intrinsics(
+        CameraIntrinsics(image_size=(1280, 1024), camera_matrix=matrix,
+                         dist_coeffs=np.array([[-0.0588, 0.0845, 0.0, 0.0, 0.0]]), rms=0.507),
+        (640, 512))
+    assert scaled.image_size == (640, 512)
+    assert abs(scaled.fx - 660.5) < 1e-9
+    # 畸变系数不随分辨率缩放，原样带过去（近似，见函数说明）
+    assert abs(scaled.dist_coeffs[0, 0] + 0.0588) < 1e-12
+
 # ---------------------------------------------------------------- 打印件本身
 def test_png_carries_dpi_metadata():
     """PNG 必须写 pHYs，否则打印驱动会按 200 dpi 猜（实测把 15 mm 打成 23 mm）。"""

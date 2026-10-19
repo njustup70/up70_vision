@@ -344,6 +344,58 @@ def calibrate(image_points: Sequence[np.ndarray],
                             views=len(views), board=spec, flags=int(flags))
 
 
+def scale_camera_matrix(camera_matrix, from_size, to_size) -> np.ndarray:
+    """把内参按图像尺寸等比缩放（保持视场角不变）。
+
+    用大白话说
+        同一颗镜头可以输出 1280×1024，也可以降采样成 640×480。画面变小了，但"看到多宽"
+        没变，所以焦距（以像素计）必须跟着变小：fx 按宽度比例缩、fy 按高度比例缩，
+        光心 cx/cy 也按同样比例移动。
+
+    为什么必须缩
+        1280 的内参直接套到 640 的图上，等效于换了一颗长焦镜头：物体看起来大一倍，
+        算出来的距离会整体偏小一半，而**程序不会报错**（progress.md 坑 3 的缩放版）。
+        实测：23 mm 码、450 mm，套错内参时 640×480 图上的距离解成 1571.9 mm（偏 249%）。
+
+    :param camera_matrix: (3,3) 原内参
+    :param from_size: 原内参对应的 `(宽, 高)`
+    :param to_size: 目标 `(宽, 高)`
+    :return: (3,3) float64 新内参；`from_size == to_size` 时返回副本（不改入参）
+    :raises ValueError: 尺寸里有非正数
+
+    近似
+        畸变系数**不随分辨率线性缩放**（它描述的是归一化坐标上的形变）。所以这里只缩
+        内参；换分辨率后要严谨还是得重标定，本函数只够"回放调试时别算出离谱距离"。
+    """
+    matrix = np.array(camera_matrix, dtype=np.float64, copy=True)
+    if matrix.shape != (3, 3):
+        raise ValueError(f"camera_matrix 必须是 3x3，收到 {matrix.shape}")
+    from_w, from_h = (float(v) for v in from_size)
+    to_w, to_h = (float(v) for v in to_size)
+    if min(from_w, from_h, to_w, to_h) <= 0:
+        raise ValueError(f"图像尺寸必须为正：{from_size} -> {to_size}")
+    if (from_w, from_h) == (to_w, to_h):
+        return matrix
+    matrix[0, :] *= to_w / from_w          # fx 与 cx 按宽度缩放
+    matrix[1, :] *= to_h / from_h          # fy 与 cy 按高度缩放
+    return matrix
+
+
+def scale_intrinsics(intrinsics: CameraIntrinsics, image_size) -> CameraIntrinsics:
+    """把一整份标定结果缩放到另一个图像尺寸（内参缩放 + 尺寸字段替换）。
+
+    :param intrinsics: 原标定结果
+    :param image_size: 目标 `(宽, 高)`
+    :return: 新的 `CameraIntrinsics`；畸变系数原样带过去（见 `scale_camera_matrix` 的近似说明）
+    """
+    return CameraIntrinsics(image_size=tuple(int(v) for v in image_size),
+                            camera_matrix=scale_camera_matrix(intrinsics.camera_matrix,
+                                                              intrinsics.image_size, image_size),
+                            dist_coeffs=intrinsics.dist_coeffs, rms=intrinsics.rms,
+                            per_view_rms=intrinsics.per_view_rms, views=intrinsics.views,
+                            board=intrinsics.board, flags=intrinsics.flags)
+
+
 def undistort_image(image_bgr: np.ndarray, intrinsics: CameraIntrinsics) -> np.ndarray:
     """把"被镜头拉弯"的画面掰直（去畸变）。
 

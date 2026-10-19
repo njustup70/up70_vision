@@ -14,7 +14,10 @@
 
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from ..core.pipeline import ColorConfig
+from ..core.pose import METHOD_NAMES as POSE_METHODS
 from ..utils.logging import parse_level
 
 SOURCES = ("synthetic", "replay", "camera")
@@ -267,6 +270,89 @@ class LogConfig:
 
 
 @dataclass
+class CalibrationConfig:
+    """相机内参文件的位置（`configs/camera_calibration.yaml` 这类文件）。
+
+    用大白话说
+        位姿估计离不开"这颗镜头把像素换算成角度"的那套数（内参 + 畸变）。
+        那套数由 `scripts/calibrate_camera.py` 标定后写成 YAML，**每台相机一份**，
+        所以它在 `.gitignore` 里、不进版本库；这里只记"去哪找它"。
+
+    属性
+        file (str)     内参文件名；**相对路径以配置文件所在目录为基准**
+                       （与 `color.thresholds_file` 同一个规矩）
+        required (bool) 找不到或读不出来时是否直接报错。
+                       True → 启动期就失败，报错里给标定命令；
+                       False → 打一条警告，位姿功能关闭，其它功能照常跑
+    """
+
+    file: str = "camera_calibration.yaml"
+    required: bool = False
+
+    def validate(self) -> None:
+        if not str(self.file).strip():
+            raise ConfigError(
+                "calibration.file 不能为空（位姿估计需要内参；标注定文件相对 configs/ 的路径）")
+
+
+@dataclass
+class PoseConfig:
+    """ArUco 位姿估计的参数（`core/pose.py` 消费）。
+
+    用大白话说
+        这一组参数决定"要不要算位姿、码有多大、算出来的结果怎么判为不可信"。
+        有一半是物理量（码边长），另一半是"什么情况下宁可报错也不给数"的门槛。
+
+    参数速查
+        ┌───────────────────┬─────────┬────────────────────────────┬──────────────┐
+        │ 键                 │ 类型    │ 合法值 / 含义               │ 默认          │
+        ├───────────────────┼─────────┼────────────────────────────┼──────────────┤
+        │ enabled            │ bool    │ 是否输出位姿                │ false         │
+        │ marker_size_mm     │ float   │ > 0，码黑框外沿边长（毫米）  │ 23.0          │
+        │ method             │ str     │ ippe_square / iterative     │ ippe_square   │
+        │ refine             │ bool    │ 是否做 LM 精化               │ true          │
+        │ ambiguity_ratio    │ float   │ > 1，两解 RMS 比小于它算难分 │ 3.0           │
+        │ ambiguity_deg      │ float   │ 0–180，两解夹角超过它算难分  │ 10.0          │
+        │ max_reproj_rms_px  │ float   │ > 0，超过直接抛错            │ 2.0           │
+        └───────────────────┴─────────┴────────────────────────────┴──────────────┘
+
+    两条容易踩的
+        · `marker_size_mm` **必须用卡尺量黑框外沿**，不含白边。填错不会让重投影误差变大，
+          只会让所有距离按同比例错（progress.md 坑 40 的位姿版）。默认值 23.0 是**本队
+          那批码的实量值**（progress.md 坑 40：打印标称 15 mm 实际 23 mm），不是通用值——
+          换了码就必须重量，别把它当默认安全值。
+        · `enabled` 默认 false：不开位姿时，实时入口的输出与改造前**逐字节一致**，
+          这样"加了功能"不会变成"改了别人的日志格式"。
+    """
+
+    enabled: bool = False
+    # 默认值取本队实量的 23 mm，而不是"看起来合理"的 40：40 会让距离整体偏 +74%
+    # 且重投影误差完全正常（坑 40 的位姿版）。换码必须重量。
+    marker_size_mm: float = 23.0
+    method: str = "ippe_square"
+    refine: bool = True
+    ambiguity_ratio: float = 3.0
+    ambiguity_deg: float = 10.0
+    max_reproj_rms_px: float = 2.0
+
+    def validate(self) -> None:
+        if not np.isfinite(self.marker_size_mm) or float(self.marker_size_mm) <= 0:
+            raise ConfigError(
+                f"pose.marker_size_mm 必须是正数（毫米，量黑框外沿）：{self.marker_size_mm!r}")
+        if self.method not in POSE_METHODS:
+            raise ConfigError(
+                f"pose.method 必须是 {list(POSE_METHODS)} 之一，收到 {self.method!r}")
+        if not np.isfinite(self.ambiguity_ratio) or float(self.ambiguity_ratio) <= 1.0:
+            raise ConfigError(
+                f"pose.ambiguity_ratio 必须大于 1（它是「次优/最优」的倍数）：{self.ambiguity_ratio!r}")
+        if not 0.0 <= float(self.ambiguity_deg) <= 180.0:
+            raise ConfigError(f"pose.ambiguity_deg 必须在 0–180：{self.ambiguity_deg!r}")
+        if not np.isfinite(self.max_reproj_rms_px) or float(self.max_reproj_rms_px) <= 0:
+            raise ConfigError(
+                f"pose.max_reproj_rms_px 必须为正（像素）：{self.max_reproj_rms_px!r}")
+
+
+@dataclass
 class AppConfig:
     """整份配置。字段与 configs/default.yaml 的层级一一对应。"""
 
@@ -276,6 +362,8 @@ class AppConfig:
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
+    pose: PoseConfig = field(default_factory=PoseConfig)
 
     def validate(self) -> "AppConfig":
         self.input.validate()
@@ -288,6 +376,8 @@ class AppConfig:
         self.detector.validate()
         self.output.validate()
         self.log.validate()
+        self.calibration.validate()
+        self.pose.validate()
         return self
 
 
@@ -309,6 +399,8 @@ def from_dict(data: dict) -> AppConfig:
     det = data.get("detector") or {}
     out = data.get("output") or {}
     log_cfg = data.get("log") or {}
+    cal = data.get("calibration") or {}
+    pose = data.get("pose") or {}
 
     det_name = str(det.get("name", "blob"))
     det_defaults = dict(DETECTOR_DEFAULT_PARAMS.get(det_name, DETECTOR_DEFAULT_PARAMS["blob"]))
@@ -357,5 +449,18 @@ def from_dict(data: dict) -> AppConfig:
             save_csv=bool(out.get("save_csv", True)),
         ),
         log=LogConfig(level=str(log_cfg.get("level", "INFO"))),
+        calibration=CalibrationConfig(
+            file=str(cal.get("file", "camera_calibration.yaml")),
+            required=bool(cal.get("required", False)),
+        ),
+        pose=PoseConfig(
+            enabled=bool(pose.get("enabled", False)),
+            marker_size_mm=float(pose.get("marker_size_mm", 23.0)),
+            method=str(pose.get("method", "ippe_square")),
+            refine=bool(pose.get("refine", True)),
+            ambiguity_ratio=float(pose.get("ambiguity_ratio", 3.0)),
+            ambiguity_deg=float(pose.get("ambiguity_deg", 10.0)),
+            max_reproj_rms_px=float(pose.get("max_reproj_rms_px", 2.0)),
+        ),
     )
     return cfg.validate()

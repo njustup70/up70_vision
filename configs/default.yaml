@@ -109,3 +109,35 @@ output:
 log:
   # DEBUG 会把每帧的候选框数与各颜色命中率都打出来，调阈值时开着很有用
   level: INFO
+
+# 相机内参：位姿估计（solvePnP）的必需输入，由 scripts/calibrate_camera.py 生成。
+# 每台相机一份，**不进版本库**（.gitignore 已排除），所以要向做过标定的队友要，
+# 或自己拍一组棋盘图重新标定。
+calibration:
+  # 相对本文件所在目录（configs/）解析，与 color.thresholds_file 同一个规矩
+  file: camera_calibration.yaml
+  # false：找不到内参时只关闭位姿功能并打一条警告，检测与判色照常跑
+  # true ：没内参就直接报错退出——现场与 CI 用这个，免得"以为在算位姿，其实没算"
+  required: false
+
+# ArUco 位姿估计（任务单第 2 条）。默认关闭：不开时实时入口的输出与改造前完全一致。
+pose:
+  enabled: false
+  # 码边长（毫米）：**卡尺量黑框外沿到外沿，不含白边，必须实测**。
+  # 23.0 是本队这批码的实量值（这台打印机把标称 15 mm 打成了 23 mm，见坑 40），
+  # 不是通用值：换码必须重量。填错不会让重投影误差变大，只会让距离按同比例错——
+  # 填 40 而实际 23 会让距离整体偏 +74%，且 RMS 完全正常。
+  marker_size_mm: 23.0
+  # ippe_square：专为正方形共面四点设计，闭式解、不要初值（默认）
+  # iterative  ：OpenCV 通用迭代解，需要初值；只在排查问题时用
+  method: ippe_square
+  # 用 solvePnPRefineLM 再精化一次，只接受"重投影更小"的结果
+  refine: true
+  # 平面位姿天然有两个解。次优解与最优解的 RMS 之比小于 ambiguity_ratio、
+  # 且两解旋转夹角超过 ambiguity_deg 时，结果标 ambiguous=True（只做诊断，不剔除）。
+  # 这两个数别改成绝对像素：实测两解 RMS 差随距离变小（500 mm 处 0.68 px、1000 mm 处 0.34 px）。
+  ambiguity_ratio: 3.0
+  ambiguity_deg: 10.0
+  # 重投影 RMS 上限（像素）：超过直接抛错，不返回"看起来正常"的位姿。
+  # 实测正常解算在 0.02–0.9 px，模型点顺序写错会到 100 px 以上。
+  max_reproj_rms_px: 2.0
