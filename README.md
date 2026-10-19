@@ -27,7 +27,7 @@ UP70 战队视觉组仓库。目标是把 2D 视觉的基础链路跑通：**从
 | ArUco 生成与识别（任务一） | `core/detectors/aruco.py`（DICT_4X4_50）+ `tools/gen_aruco.py` + 9 张带真值图组 + 14 项测试 |
 | 实时识别（任务二） | `cli.run_aruco_live()` + `scripts/run_aruco_live.py`：逐帧检测、绘制、窗口/落盘、终端节流 |
 | 相机标定（尝试做 1） | `core/calibration.py`（内参 + 畸变 + 去畸变）+ `tools/calibrate_camera.py`（采图/解算）+ `tools/gen_chessboard.py`（造打印板）；见 `docs/相机标定.md` |
-| 位姿估计（任务单第 2 条） | `core/pose.py`（`solvePnP` + 两条硬校验）+ `viz.draw_pose_axes` + 实时入口按码输出 `d/tilt/yaw`；11 项测试；见 `docs/位姿估计.md` |
+| 位姿估计（任务单第 2 条） | `core/pose.py`（`solvePnP` + 两条硬校验）+ `viz.draw_pose_axes` + 实时入口按码输出 `d/tilt/yaw`（终端与画面 HUD 同步）；13 项测试；见 `docs/位姿估计.md` |
 | 识别效果测试（任务单第 3 条） | `tools/gen_pose_scenes.py`（带真值的合成图）+ `tools/pose_sweep.py`（七组单因素扫描、CSV/MD/PNG 报告） |
 | 整合（任务三） | 两个入口共用 `cli.py`；检测器抽象为类；目录分层，不堆在一个文件里 |
 
@@ -40,8 +40,8 @@ UP70 战队视觉组仓库。目标是把 2D 视觉的基础链路跑通：**从
 | 能力 | 位置 | 怎么验证 |
 |---|---|---|
 | ArUco 检测（DICT_4X4_50） | `core/detectors/aruco.py` | `python scripts/check_aruco.py` → 9/9 |
-| ArUco 位姿估计（距离/倾角/面内角） | `core/pose.py` | `python scripts/pose_check.py --dir output/pose_scenes` |
-| 位姿精度扫描（距离/倾角/光照/模糊） | `tools/pose_sweep.py` | `python scripts/pose_sweep.py` → CSV + MD + 8 张图 |
+| ArUco 位姿估计（距离/倾角/面内角） | `core/pose.py` | `python scripts/pose_check.py --dir output/pose_scenes_825 --marker-mm 82.5` → 29/31 |
+| 位姿精度扫描（距离/倾角/光照/模糊） | `tools/pose_sweep.py` | `python scripts/pose_sweep.py --marker-mm 82.5` → CSV + MD + 8 张图 |
 | ArUco 测试图组 | `assets/aruco/`（3 张单码 + 6 张场景 + 真值 JSON） | `python scripts/gen_aruco.py` 逐字节复现 |
 | 实时循环（逐帧检测 + 绘制 + 落盘） | `cli.run_aruco_live()` / `scripts/run_aruco_live.py` | 见「最小示例」 |
 | 批处理识别（读完汇总落盘） | `cli.run()` / `scripts/run.py` | `output/demo/` 下 4 种产物 |
@@ -180,8 +180,10 @@ read() 取一帧
 | ArUco 图组自检（9/9） | `python scripts/check_aruco.py` |
 | 重新生成测试图组 | `python scripts/gen_aruco.py` |
 | 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（打印后要量实际边长） |
-| 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填尺子量到的实际值；本机标称 15 实测 23） |
+| 相机标定（采图 + 解算） | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填尺子量到的实际值；本队打印板标称 15 实测 **23**） |
 | 批处理识别 | `python scripts/run.py --set detector.name=aruco --set input.source=replay --set input.replay.path=assets/aruco/scenes` |
+| 位姿逐张核对 | `python scripts/pose_check.py --dir output/pose_scenes_825 --intrinsics configs/camera_calibration.yaml --marker-mm 82.5` |
+| 位姿精度扫描 | `python scripts/pose_sweep.py --marker-mm 82.5 --intrinsics configs/camera_calibration.yaml --out output/pose_sweep/20261019_825` |
 | 回归测试（76 项） | `for t in tests/test_*.py; do python "$t"; done` |
 | 看全部参数 | `python scripts/run.py --help` / `python scripts/run_aruco_live.py --help` |
 
@@ -291,27 +293,57 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 ### 加上位姿：画面多三根轴，终端多三个数
 
 需要两样东西：**相机内参**（`configs/camera_calibration.yaml`，标定产物、不进版本库）和
-**码的实际边长**（卡尺量黑框外沿，不含白边）。
+**码的实际边长**（卡尺量黑框外沿，不含白边；本批为 **82.5 mm**）。
 
 ```bash
 docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
   python scripts/run_aruco_live.py \
   --set detector.name=aruco --set input.source=replay \
-  --set input.replay.path=output/pose_scenes \
-  --set pose.enabled=true --set pose.marker_size_mm=23 \
+  --set input.replay.path=output/pose_scenes_825 \
+  --set pose.enabled=true --set pose.marker_size_mm=82.5 \
   --headless --limit 10
 ```
 
-终端每行会多出三个字段：
+终端每行会多出三个字段，画面左上角 HUD 也会多出一行同样的数字：
 
 ```text
-t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(640.0, 512.0) d=452mm tilt=0.1 yaw=-0.0
+t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(642.3, 532.5) d=451mm tilt=0.4 yaw=0.0
+id 0 d 451mm tilt 0.4 yaw 0.0
 ```
 
 - `d` 斜距（毫米）、`tilt` 码面与光轴夹角（0 = 正对）、`yaw` 面内转角
 - 画面上红/绿/蓝三根轴是码的 x/y/z 方向；正视时蓝轴缩成一个点，这是对的
 - 没有内参时位姿自动关闭并打一条警告（`calibration.required=false`），设成 `true` 则直接失败
 - 精度扫描与失败归因：`python scripts/pose_sweep.py`，见 `docs/位姿估计.md`
+
+### 完整例程：识别 → 位姿（五条命令）
+
+```bash
+# 1) 识别自检：9 张真值图，期望 9/9
+python scripts/check_aruco.py
+
+# 2) 造带真值的合成图（31 个场景，用真机内参与实测边长）
+python scripts/gen_pose_scenes.py --suite --marker-mm 82.5 \
+  --calib configs/camera_calibration.yaml --out output/pose_scenes_825
+
+# 3) 逐张核位姿：期望通过 29/31（已知边界是 bright_300 与 blur_13）
+python scripts/pose_check.py --dir output/pose_scenes_825 \
+  --intrinsics configs/camera_calibration.yaml --marker-mm 82.5
+
+# 4) 实时：终端与画面同时出 d / tilt / yaw
+python scripts/run_aruco_live.py \
+  --set detector.name=aruco --set input.source=replay \
+  --set input.replay.path=output/pose_scenes_825 \
+  --set pose.enabled=true --set pose.marker_size_mm=82.5 \
+  --headless --save-every 1 --limit 10
+
+# 5) 精度扫描：raw.csv + summary.md + 8 张曲线图
+python scripts/pose_sweep.py --marker-mm 82.5 \
+  --intrinsics configs/camera_calibration.yaml --out output/pose_sweep/20261019_825
+```
+
+82.5 mm 码的合成基线（fx=1321.67）：距离误差 0.02%–0.42%，倾角 15°–75° 误差 0.05–0.42°。
+真机部分要先解决光照：40 ms 曝光下画面均值低于 30 时，角点会飘、`estimate_pose` 会因 RMS 超限拒绝出解。
 
 ---
 
@@ -326,8 +358,18 @@ t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(640.0, 512.0) d=452mm t
 --set input.replay.path=assets/aruco/scenes
 --set input.camera.exposure_us=40000 # 相机曝光，微秒
 --set pose.enabled=true              # 打开位姿估计（默认关闭）
---set pose.marker_size_mm=23         # 码边长，卡尺量黑框外沿
+--set pose.marker_size_mm=82.5       # 码边长，卡尺量黑框外沿（本批实量）
 ```
+
+**两个尺寸别混**（历史上混过一次，两者都"不报错只让数字错"）：
+
+| 尺寸 | 值 | 用在哪 |
+|---|---|---|
+| 棋盘格方格边长 | **23 mm** | 相机标定 `--square-mm`；填错内参整体错 |
+| ArUco 码边长 | **82.5 mm** | 位姿 `pose.marker_size_mm` / `--marker-mm`；填错距离按比例错 |
+
+`pose.marker_size_mm` 的默认值仍是 **23.0**（上一批码的历史值），所以用 82.5 mm 的码时
+**必须显式传 `--set pose.marker_size_mm=82.5` 或 `--marker-mm 82.5`**，否则距离会偏到 0.279 倍。
 
 `--set` 只能改**已存在**的字段，名字写错会在启动时报错并返回 2，不会带着错配置继续跑。
 启动时会把**实际生效**的配置整份打印一遍，日志和 PR 里能直接看到覆盖结果，不用回头翻命令行。
@@ -424,9 +466,9 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
   ```
 
 - 碰 ArUco 相关代码后跑 `check_aruco.py`，期望 `通过 9/9`、四角误差 ≤ 0.25 px。
-- 碰位姿相关代码后加跑 `pose_check.py`，真机口径图组期望 `通过 28/31`（失败项固定是 `blur_09`、`blur_13`、`bright_300` 三个已知边界）：
-  `python scripts/gen_pose_scenes.py --suite --marker-mm 23 --calib configs/camera_calibration.yaml --out output/pose_scenes` 然后
-  `python scripts/pose_check.py --dir output/pose_scenes --intrinsics configs/camera_calibration.yaml --marker-mm 23`。
+- 碰位姿相关代码后加跑 `pose_check.py`，82.5 mm 码期望 `通过 29/31`（失败项固定是 `bright_300` 与 `blur_13` 两个已知边界）：
+  `python scripts/gen_pose_scenes.py --suite --marker-mm 82.5 --calib configs/camera_calibration.yaml --out output/pose_scenes_825` 然后
+  `python scripts/pose_check.py --dir output/pose_scenes_825 --intrinsics configs/camera_calibration.yaml --marker-mm 82.5`。
 - 命名：模块/函数/变量小写下划线，类大驼峰，常量全大写；图像变量必须带颜色空间后缀（`frame_bgr`）。
 - 注释按 `docs/代码注释规范.md`：模块/类/函数都要 docstring，写「为什么、边界、症状」，不复述代码。
 - 提交按 `docs/提交信息规范.md`，分支与自审按 `docs/视觉组协作规范.md`；`main` 始终可运行。
@@ -442,7 +484,10 @@ docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_U
 
 ## 已知限制
 
-- **位姿精度只在合成图上验过**：`docs/位姿估计.md` 的实测表来自合成图（无镜头畸变、理想边缘），属识别能力上限；真机抽测要等内参与实测边长到位。
+- **位姿精度只在合成图上验过**：`docs/位姿估计.md` 的实测表来自合成图（无镜头畸变、理想边缘），属识别能力上限。
+  82.5 mm 码的合成基线已跑通（`pose_check` 29/31，距离误差 0.02%–0.42%）；真机只验证到链路能跑
+  （1280×1024、21.6 fps），**距离/倾角精度尚未在实拍图上验收**，现场需先解决光照。
+- **两个尺寸必须分别量**：棋盘格方格 23 mm（标定用）与 ArUco 码 82.5 mm（位姿用）互不相干。
 - **位姿只做单码相对位姿**：多码融合、场地坐标系下的绝对位姿都没做（需要 ID→场地坐标的对应表）。
 - **容器里没有窗口**：实时验证走 `--headless` 落盘；窗口模式在原生机器上验。
 - **相机需要 MVS SDK**：镜像不带 deb，需手动投放后重新构建；没有相机时用 `replay` 或 `stub_aruco`。
