@@ -69,6 +69,10 @@ DEDUP_CENTER_RATIO = 0.05
 DEDUP_SCALE_RATIO = 0.06
 DEDUP_ANGLE_DEG = 6.0
 
+#: 清晰度下限（Laplacian 方差）。低于它就拒收：实测糊图会让 RMS 从 0.5 涨到 1.6 px。
+#: 参考：1280x1024 下清晰的棋盘一般在 200~400；手抖/失焦常在 100 以下。
+SHARP_MIN_DEFAULT = 120.0
+
 #: 「站稳才拍」需要连续多少帧姿态几乎不变（手抖/运动模糊会让角点发漂）
 STABLE_FRAMES = 3
 STABLE_CENTER_RATIO = 0.01
@@ -202,7 +206,8 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
                         colors: list | None = None,
                         max_frames: int = 0,
                         preview: bool = False,
-                        fresh: bool = False) -> tuple[list, list]:
+                        fresh: bool = False,
+                        min_sharp: float = SHARP_MIN_DEFAULT) -> tuple[list, list]:
     """从配置里的输入源抓帧，找到棋盘就存下来，凑够 count 张为止。
 
     用大白话说
@@ -217,6 +222,7 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
     :param max_frames: 最多看多少帧（0 = 不限）；相机是无限流，靠它兜底
     :param preview: 是否开实时窗口（显示当前画面 + 是否认出棋盘 + 已收几张；按 q 中止）
     :param fresh: True 表示当作全新一批（不读已有图的姿势、编号从 1 开始并覆盖）
+    :param min_sharp: 清晰度下限；低于它的帧不收（0 表示不检查）
     :return: `(image_points, saved_paths)`；preview 下按 q 会提前结束，已收的仍然有效
     :raises OSError: 输入源构造失败（相机被占用 / SDK 缺失）
     """
@@ -254,6 +260,10 @@ def capture_from_source(cfg, board: BoardSpec, count: int, out_dir: str,
             sharp = cv2.Laplacian(cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2GRAY),
                                   cv2.CV_64F).var()
             ready, hint = False, ""
+            if corners is not None and min_sharp > 0 and sharp < min_sharp:
+                # 闸 3：糊的不收 —— 角点会抖，重投影误差直接从 0.5 涨到 1.5+
+                hint = f"too blurry (sharp {sharp:.0f} < {min_sharp:.0f}) - focus / steady"
+                corners = None                  # 当作没认出，走"跳过"分支
             if corners is not None:
                 sig = _pose_signature(corners, (frame.image_bgr.shape[1], frame.image_bgr.shape[0]),
                                   board)
@@ -454,6 +464,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"RMS 超过它就判为不可用并返回 1（默认 {RMS_USABLE}）")
     ap.add_argument("--max-frames", type=int, default=0,
                     help="采图时最多看多少帧（0 = 不限；相机是无限流，靠它兜底）")
+    ap.add_argument("--min-sharp", dest="min_sharp", type=float, default=SHARP_MIN_DEFAULT,
+                    help=f"清晰度下限（Laplacian 方差），低于它就不收（默认 {SHARP_MIN_DEFAULT:g}；0=不检查）")
     ap.add_argument("--fresh", action="store_true",
                     help="当作全新一批：编号从 1 开始（会覆盖同目录已有图）、不避开已有姿势")
     ap.add_argument("--free-k3", action="store_true",
@@ -518,7 +530,7 @@ def main(argv=None) -> int:
             image_points, saved = capture_from_source(
                 cfg, board, args.capture, args.capture_dir,
                 colors=list(thresholds), max_frames=args.max_frames,
-                preview=args.preview, fresh=args.fresh)
+                preview=args.preview, fresh=args.fresh, min_sharp=args.min_sharp)
         except (OSError, RuntimeError) as exc:
             print(f"❌ 采图失败：{exc}", file=sys.stderr)
             return 1
