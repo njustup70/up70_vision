@@ -35,7 +35,8 @@ UP70 战队视觉组仓库：把 2D 视觉链路跑通，**从图像输入到目
 | 位姿精度扫描 | `tools/pose_sweep.py` | `python scripts/pose_sweep.py --marker-mm 82.5` → CSV + MD + 8 张图 |
 | 实时循环 | `cli.run_aruco_live()` | 见「最小示例」 |
 | 判色 / 批处理 | `core/color.py`、`cli.run()` | `python scripts/run.py` → `output/demo/` 4 种产物 |
-| 回归测试 | `tests/`（78 项） | `for t in tests/test_*.py; do python "$t"; done` |
+| YOLO 检测器（可选） | `core/detectors/yolo.py`（ONNX + `cv2.dnn`，不需 torch） | 先生成权重：`python scripts/export_yolo.py --weights yolov8n.pt`；再 `--set detector.name=yolo` |
+| 回归测试 | `tests/`（98 项） | `for t in tests/test_*.py; do python "$t"; done` |
 
 两种检出物分开定义，见 `docs/interface.md`：`Detection`（判色族）与 `ArucoMarker`（码族）。
 改契约要先改文档、再改实现。
@@ -87,8 +88,8 @@ up70_vision/
 ├── scripts/             薄入口，只转交 argv
 ├── configs/             default.yaml、color_thresholds.yaml、默认内参快照
 ├── assets/              aruco/（9 张图 + 真值）、calib/（棋盘 PNG+PDF）、readme/（截图）
-├── tests/               回归测试 78 项，可 python tests/test_xxx.py 独立跑
-├── docs/                进度 / 契约 / 三个规范 / ArUco 教程 / 标定与位姿说明
+├── tests/               回归测试 98 项，可 python tests/test_xxx.py 独立跑
+├── docs/                进度 / 契约 / 三个规范 / ArUco 教程 / 标定、位姿与 YOLO 说明
 ├── .devcontainer/       Dockerfile、CPU/GPU compose、pkgs/
 ├── data/                数据集与回放素材（不进版本库）
 └── output/              运行产物：demo/、aruco/、pose_scenes*/、pose_sweep/（不进版本库）
@@ -263,7 +264,7 @@ pip 太慢时换源重建：`docker compose ... build --build-arg PIP_INDEX_URL=
 | OpenCV 冒烟 | `python scripts/demo.py` | `OpenCV 冒烟测试 -> PASS` |
 | ArUco 图组 | `python scripts/check_aruco.py` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
 | 位姿图组 | `python scripts/pose_check.py --dir output/pose_scenes_825 --marker-mm 82.5` | 通过 29/31（`bright_300`、`blur_13` 为已知边界） |
-| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **78 项全过**（判色/几何/配置 39 + ArUco 14 + 标定 12 + 位姿 13） |
+| 回归测试 | `for t in tests/test_*.py; do python "$t"; done` | **98 项全过**（判色/几何/配置 39 + ArUco 14 + 标定 12 + 位姿 13 + YOLO 20） |
 
 约定：
 
@@ -280,6 +281,7 @@ pip 太慢时换源重建：`docker compose ... build --build-arg PIP_INDEX_URL=
 | `docs/progress.md` | 进度、实测数字、56 个坑 |
 | `docs/interface.md` | 契约（`Frame` / `Detection` / `ArucoMarker` / `MarkerPose`） |
 | `docs/位姿估计.md` | PnP 口径、82.5 mm 与 23 mm 两批实测、失败排查 |
+| `docs/YOLO接入.md` | YOLO 怎么用、为什么不用 torch、为什么不训练（人话版） |
 | `docs/相机标定.md` | 内参怎么标、怎么读、填错会怎样 |
 | `docs/ArUco码原理与识别教程.md` | 编码方式、字典与 ID 入门 |
 | `docs/提交信息规范.md` / `docs/代码注释规范.md` / `docs/视觉组协作规范.md` | 三个规范 |

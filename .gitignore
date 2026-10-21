@@ -36,6 +36,8 @@ data/*
 *.onnx
 *.engine
 *.trt
+# 导出 YOLO 时顺带写的类名表：和权重成对，权重不进来它也没意义
+*.names.json
 
 # 本地投放的安装包：184 MB 的 MVS SDK deb 由各人自行下载，
 # 说明见 .devcontainer/pkgs/README.md；镜像构建时由 Dockerfile 装进容器

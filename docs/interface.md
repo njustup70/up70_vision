@@ -92,7 +92,7 @@ class MarkerPose:
 
 | 名字 | 说明 |
 |---|---|
-| `Detection` ✅ | 判色族的产出。中心是 **bbox 中心**。字段见 `core/types.py` |
+| `Detection` ✅ | 判色族的产出。中心是 **bbox 中心**。字段见 `core/types.py`；`yolo` 也复用它（`class_name` 填模型类名） |
 | `iou` / `clip_bbox` / `bbox_from_xywh` ✅ | 共用纯函数，见 `core/types.py`（`bbox_from_xywh` 建 stub 场景时会用到） |
 
 ---
@@ -112,6 +112,18 @@ class Detector(ABC):
 - 形参名固定 **`image_bgr`**：关键字调用（`detect(image_bgr=x)`）是允许的，改名会让对方的调用直接 `TypeError`。
 - 工厂 `build_detector(name, params)`：未知名字抛 `ValueError`，报错里列出可用值。
 - `detect` **只收图**：不收帧号、不收 `Frame`、不读文件、不开窗口。
+
+**已登记的 `detector.name` 取值**（工厂与 `DETECTOR_NAMES` 必须一致）：
+
+| 取值 | 产出 | `class_name` / `class_id` |
+|---|---|---|
+| `blob` | `list[Detection]` | `"unknown"` / `-1`（颜色由 `core/color.py` 后续填） |
+| `aruco` / `stub_aruco` | `list[ArucoMarker]` | —（码没有颜色） |
+| `yolo` ✅（阶段二新增） | `list[Detection]` | **模型自己的类名与索引**（如 `"person"` / `0`） |
+
+`yolo` 是唯一会填**真实类名**的检测器：它不经过判色，`color` 留空。
+其余字段与 `blob` 同构（`bbox_xyxy` 绝对像素、半开上界，无目标返回 `[]`），
+所以下游 `viz` / `cli` 不需要知道用的是哪个检测器。
 
 ### 3.2 `ArucoDetector` ✅（任务二）
 

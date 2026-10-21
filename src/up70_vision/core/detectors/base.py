@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 
 # 工厂认识的名字（configs/default.yaml 的 detector.name 只能填这些）
-DETECTOR_NAMES = ("blob", "stub_aruco", "aruco")
+DETECTOR_NAMES = ("blob", "stub_aruco", "aruco", "yolo")
 
 
 class Detector(ABC):
@@ -59,4 +59,7 @@ def build_detector(name: str, params: dict | None = None) -> Detector:
     if key == "aruco":
         from .aruco import ArucoDetector
         return ArucoDetector(**params)
+    if key == "yolo":
+        from .yolo import YoloDetector
+        return YoloDetector(**params)
     raise ValueError(f"未知检测器 {name!r}；当前可用：{list(DETECTOR_NAMES)}")

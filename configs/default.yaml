@@ -99,6 +99,22 @@ detector:
     min_perimeter_rate: 0.03  # 检出码的最小周长占图像周长比例；调小能捞小码、也更容易误报
     max_detections: 0         # 单帧最多返回几个（0=不限）；超限时保留面积最大的几个
 
+  # yolo：ONNX 权重 + cv2.dnn 推理（core/detectors/yolo.py）。
+  #   为什么走 ONNX：容器里只要 cv2，不用装 1.4 GB 的 torch（实测 26.4 ms/帧，够 25 fps）。
+  #   权重不进版本库（.gitignore 已忽略 *.onnx），先导出一次：
+  #       python scripts/export_yolo.py --weights yolov8n.pt
+  #   用法：--set detector.name=yolo
+  #   提醒：YOLOv8 是 AGPL-3.0；对外发布前要跟队长确认许可。
+  yolo:
+    weights: assets/models/yolov8n.onnx
+    conf: 0.25            # 置信度下限；调低会明显多出误检
+    iou: 0.45             # NMS 的 IoU 阈值；调低会吃掉相邻的框
+    imgsz: 640            # ONNX 的固定输入边长（必须是 32 的倍数，与权重一致）
+    max_detections: 32
+    classes: []           # 只保留这些类别索引（如 [0] 只看 person）；空 = 全部
+    class_names: []       # 类名表；空 = 尝试读 ONNX 元数据，读不到就显示索引数字
+    device: cpu           # 目前只支持 cpu（cv2.dnn 在这台机器上没有 CUDA 后端）
+
 output:
   enabled: true
   dir: output/demo

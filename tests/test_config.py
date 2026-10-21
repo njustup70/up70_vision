@@ -184,8 +184,10 @@ def test_stub_aruco_detector_config():
 
 
 def test_detector_name_and_stub_params_are_validated():
+    # 用一个**不存在**的名字：早先这里写的是 "yolo"，那是它还没实现的时候；
+    # 现在 yolo 已是合法检测器（见 tests/test_yolo.py），再拿它当反例就会失效。
     try:
-        from_dict({"detector": {"name": "yolo"}})
+        from_dict({"detector": {"name": "no_such_detector"}})
     except ConfigError as exc:
         assert "stub_aruco" in str(exc), f"报错应列出可用检测器，实际：{exc}"
     else:

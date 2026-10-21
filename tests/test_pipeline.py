@@ -73,8 +73,9 @@ def test_blob_detector_finds_six_blocks():
 
 
 def test_unknown_detector_name_raises():
+    # 同上：之前用 "yolo" 当反例，yolo 落地后必须换成真不存在的名字
     try:
-        build_detector("yolo")
+        build_detector("no_such_detector")
     except ValueError as exc:
         assert "blob" in str(exc), "报错里应列出可用检测器"
     else:
