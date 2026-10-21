@@ -58,6 +58,10 @@ def main(argv=None) -> int:
 
     out_dir = Path(os.path.expanduser(args.out))
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 记一下传入的 .pt 是不是本来就在：不在时 ultralytics 会自动下载到**当前目录**，
+    # 导出完得把它挪进权重目录，否则仓库根会多出一个 6.5 MB 的野文件（还容易误提交）。
+    given = Path(args.weights)
+    downloaded = not given.exists()
     model = YOLO(args.weights)
     names = {int(k): str(v) for k, v in (model.names or {}).items()}
 
@@ -71,6 +75,14 @@ def main(argv=None) -> int:
     sidecar = out_dir / f"{stem}.names.json"
     sidecar.write_text(json.dumps({str(k): v for k, v in sorted(names.items())},
                                   ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if downloaded:
+        cached = out_dir / f"{stem}.pt"
+        if given.exists() and given.resolve() != cached.resolve():
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(given.read_bytes())
+            given.unlink(missing_ok=True)
+            print(f"✅ 权重    : {cached}（自动下载的 .pt 已挪进来，仓库根不再留野文件）")
 
     print(f"✅ 模型    : {target_onnx}（{target_onnx.stat().st_size / 1e6:.1f} MB）")
     print(f"✅ 类名表  : {sidecar}（{len(names)} 类）")
