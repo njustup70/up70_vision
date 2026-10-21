@@ -33,7 +33,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from ..utils.image_io import ensure_dir, write_image
+from ..core.detectors.aruco import check_opencv_aruco, predefined_dictionary
+from ..utils.image_io import ensure_dir, write_image_with_truth
 from ..utils.logging import get_logger, setup_logging
 
 log = get_logger("tools.gen_aruco")
@@ -56,43 +57,6 @@ SCENE_HELP = {
 ALL_SCENES = ("markers", "multi", "rotated", "empty")
 
 
-# ---------------------------------------------------------------- 字典
-def check_opencv_aruco() -> None:
-    """确认当前 OpenCV 有 4.7+ 的新版 aruco API。
-
-    任务单坑 1、2：ArUco 自 4.7 起进了主包 opencv-python，但 API 换了写法
-    （`cv2.aruco.ArucoDetector` 类），老教程的 `DetectorParameters_create()` 会报错。
-    """
-    if not hasattr(cv2, "aruco"):
-        raise RuntimeError(
-            f"当前 cv2 {cv2.__version__} 没有 aruco 模块。"
-            "ArUco 自 OpenCV 4.7 起才进主包，请用 opencv-python>=4.7（本仓库钉 >=4.10）；"
-            "**不要**装 opencv-contrib-python——它与 opencv-python 共用 cv2 顶层模块，会互相覆盖")
-    if not hasattr(cv2.aruco, "ArucoDetector") or not hasattr(cv2.aruco, "generateImageMarker"):
-        raise RuntimeError(
-            f"当前 cv2 {cv2.__version__} 的 aruco 是旧 API（没有 ArucoDetector）。"
-            "旧写法 DetectorParameters_create()/detectMarkers() 在新版会报错，"
-            "请升级到 opencv-python>=4.7（容器里是 4.14）")
-
-
-def predefined_dictionary(name: str):
-    """按名字取预定义字典。
-
-    :param name: "DICT_4X4_50" 或省略前缀的 "4x4_50"（大小写不敏感）
-    :return: (cv2.aruco.Dictionary, 规范名)
-    :raises ValueError: 名字不是 OpenCV 预定义字典（报错里给几个常见可用值）
-    """
-    check_opencv_aruco()
-    key = str(name).strip().upper()
-    if key and not key.startswith("DICT_"):
-        key = "DICT_" + key
-    dictionary_id = getattr(cv2.aruco, key, None)
-    if not isinstance(dictionary_id, int):
-        common = ["DICT_4X4_50", "DICT_4X4_100", "DICT_5X5_50", "DICT_6X6_250", "DICT_ARUCO_ORIGINAL"]
-        raise ValueError(f"未知 ArUco 字典 {name!r}；常见可用值：{common}")
-    return cv2.aruco.getPredefinedDictionary(dictionary_id), key
-
-
 # ---------------------------------------------------------------- 造码 / 贴码
 def make_marker_image(dictionary, marker_id: int, side_px: int = 200,
                       border_bits: int = 1) -> np.ndarray:
@@ -105,6 +69,7 @@ def make_marker_image(dictionary, marker_id: int, side_px: int = 200,
         raise ValueError(f"码边长太小（{side_px} < {MIN_SIDE_PX} px），检测会不稳定")
     if border_bits < 1:
         raise ValueError(f"border_bits 至少为 1：{border_bits}")
+    check_opencv_aruco(need_generate=True)
     return cv2.aruco.generateImageMarker(dictionary, int(marker_id), int(side_px),
                                          borderBits=int(border_bits))
 
@@ -346,12 +311,8 @@ def write_scene(out_dir: str, scene: Scene, dictionary_name: str,
     ensure_dir(target)
     png_rel = os.path.join(subdir, f"{scene.name}.png")
     png_path = os.path.join(out_dir, png_rel)
-    json_path = os.path.join(target, f"{scene.name}.json")
-    write_image(png_path, scene.image_bgr)
     truth = scene.truth(dictionary_name, png_rel.replace(os.sep, "/"))
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(truth, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    png_path, json_path = write_image_with_truth(scene.image_bgr, png_path, truth)
     log.info("写出 %s：%d 个码 -> %s", scene.name, len(scene.markers), png_rel)
     return [png_path, json_path]
 

@@ -179,19 +179,3 @@ def draw_hud(canvas: np.ndarray, lines, origin=(10, 22), scale: float = 0.6,
         put_text(canvas, text, (x, y + i * line_gap), scale, color, 2, outline=True)
 
 
-def make_contact_sheet(images, cols: int = 4, tile_width: int = 320):
-    """把多张图拼成一张总览图（调参复盘用）。"""
-    if not images:
-        raise ValueError("没有图片可拼")
-    tiles = []
-    for img in images:
-        h, w = img.shape[:2]
-        scale = tile_width / float(w)
-        tiles.append(cv2.resize(img, (tile_width, max(1, int(h * scale)))))
-    tile_h = max(t.shape[0] for t in tiles)
-    rows = (len(tiles) + cols - 1) // cols
-    sheet = np.zeros((rows * tile_h, cols * tile_width, 3), dtype=np.uint8)
-    for i, tile in enumerate(tiles):
-        r, c = divmod(i, cols)
-        sheet[r * tile_h:r * tile_h + tile.shape[0], c * tile_width:(c + 1) * tile_width] = tile
-    return sheet

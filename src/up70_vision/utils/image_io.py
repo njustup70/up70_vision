@@ -10,6 +10,7 @@
     因此不需要为 Windows 的 ANSI 路径写 fromfile/tofile 兜底。
 """
 
+import json
 import os
 
 import cv2
@@ -59,15 +60,21 @@ def write_image(path: str, image_bgr: np.ndarray) -> str:
     return path
 
 
-def to_gray(image_bgr: np.ndarray) -> np.ndarray:
-    """BGR -> 灰度。单独列出是为了让调用方不用记 cv2 的颜色码。"""
-    if image_bgr.ndim == 2:
-        return image_bgr
-    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+def write_image_with_truth(image_bgr: np.ndarray, image_path: str, truth: dict) -> tuple:
+    """把一张图和它的真值写成 `<name>.png` + `<name>.json`（同名同目录）。
 
+    两个生成器（`gen_aruco`、`gen_pose_scenes`）原先各写一遍这段"存图 + 存 JSON"，
+    产物还略有出入（一个末尾带换行、一个不带）；合并后真值文件的格式只有一处定义。
 
-def to_hsv(image_bgr: np.ndarray) -> np.ndarray:
-    """BGR -> HSV。**判色前必须过这一步**（把 BGR 当 HSV 用不会报错，只会全判错）。"""
-    if image_bgr.ndim == 2:
-        raise ValueError("判色需要三通道 BGR 图，收到单通道灰度图")
-    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    :param image_bgr: 要写的图（HxWx3 BGR）
+    :param image_path: 图片路径；真值路径由它换后缀得到
+    :param truth: 真值字典（直接 `json.dump`）
+    :return: `(png 路径, json 路径)`
+    """
+    json_path = os.path.splitext(image_path)[0] + ".json"
+    ensure_dir(os.path.dirname(image_path) or ".")
+    write_image(image_path, image_bgr)
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(truth, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return image_path, json_path

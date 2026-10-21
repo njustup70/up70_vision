@@ -35,7 +35,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import zlib
 from dataclasses import dataclass
@@ -322,14 +321,10 @@ def write_scene(out_dir: str, spec: PoseSpec, image_bgr: np.ndarray, truth: dict
 
     :return: `(png 路径, json 路径)`
     """
-    from ..utils.image_io import write_image
+    from ..utils.image_io import write_image_with_truth
     os.makedirs(out_dir, exist_ok=True)
     png_path = os.path.join(out_dir, f"{spec.name}.png")
-    json_path = os.path.join(out_dir, f"{spec.name}.json")
-    write_image(png_path, image_bgr)
-    with open(json_path, "w", encoding="utf-8") as handle:
-        json.dump(truth, handle, ensure_ascii=False, indent=2)
-    return png_path, json_path
+    return write_image_with_truth(image_bgr, png_path, truth)
 
 
 def build_suite(base_marker_mm: float = DEFAULT_MARKER_MM,
