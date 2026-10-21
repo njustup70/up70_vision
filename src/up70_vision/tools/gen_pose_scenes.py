@@ -9,12 +9,12 @@
 放什么 / 不放什么
     放"造数据"：场景定义（`PoseSpec`）、渲染（`render_scene`）、写盘（`write_scene`）、
     扫描矩阵（`build_suite`）。
-    **不做**误差统计（在 `tools/pose_sweep.py`）、不做逐图对真值核位姿（在
+    **不做**误差统计（在 `tools/pose_check.py --sweep`）、不做逐图对真值核位姿（在
     `tools/pose_check.py`）、不 import `viz/`（它画的是给人看的叠加图）。
 
 依赖谁 / 被谁用
     依赖 `core.pose.marker_object_points` 与 `core.pose.pose_metrics`（真值与求解必须同口径）、
-    numpy、OpenCV。被 `tests/test_pose.py`（当夹具）与 `tools/pose_sweep.py`（批量）调用。
+    numpy、OpenCV。被 `tests/test_pose.py`（当夹具）与 `tools/pose_check.py --sweep`（批量）调用。
 
 对外约定
     · `render_scene()` 返回 `(image_bgr, truth)`；truth 里的 `rvec`/`tvec_mm`/`corners_px`

@@ -24,7 +24,7 @@
   + `docs/相机标定.md` + 9 项测试；合成数据反推实测：**fx 796.9（真值 800）、k1 −0.296（真值 −0.28）、RMS 0.54 px**
 - **2026-10-18 位姿估计落地**（飞书任务单第 2、3 条）：`core/pose.py`（`solvePnP` + 重投影与前向性两条硬校验）
   + `viz.draw_pose_axes` + 实时入口按码输出 `d/tilt/yaw` + `tools/gen_pose_scenes.py`（带真值合成图）
-  + `tools/pose_check.py`（逐图核对）+ `tools/pose_sweep.py`（七组扫描、CSV/MD/8 张图）+ 11 项测试。
+  + `tools/pose_check.py`（逐图核对）+ `tools/pose_check.py --sweep`（七组扫描、CSV/MD/8 张图）+ 11 项测试。
   合成图（23 mm 码、真机内参 fx=1321）实测：**距离误差 0.11–1.1%（300–1500 mm）、2000 mm 处 3.9%**；
   倾角在真值 ≥15° 时误差 0.05–0.71°，**但接近正视时 4–16°（该自由度弱可观，不是 bug）**；
   过曝 3.0 倍未检出，运动模糊 9 px 起距离偏 9.9%，640×480 下每格 5.5 px 仍可用

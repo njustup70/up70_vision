@@ -17,7 +17,7 @@ UP70 战队视觉组仓库：把 2D 视觉链路跑通，**从图像输入到目
 | 判色 | `core/color.py` + `core/pipeline.py`；合成图 18 个色块，判色 18/18 |
 | ArUco 检测 | `core/detectors/aruco.py`（DICT_4X4_50）+ `tools/gen_aruco.py` + 9 张带真值图组 |
 | 位姿估计 | `core/pose.py`（`solvePnP` + 两条硬校验）+ `viz.draw_pose_axes`；13 项测试 |
-| 识别效果测试 | `tools/gen_pose_scenes.py`（带真值合成图）+ `tools/pose_sweep.py`（七组单因素扫描） |
+| 识别效果测试 | `tools/gen_pose_scenes.py`（带真值合成图）+ `tools/pose_check.py --sweep`（七组单因素扫描） |
 | 实时循环 | `cli.run_aruco_live()` + `scripts/run_aruco_live.py`：逐帧检测、画轴、终端与 HUD 报数 |
 | 相机标定 | `core/calibration.py` + `tools/calibrate_camera.py` + `tools/gen_chessboard.py`（PNG/PDF 1:1） |
 | 输入源 | `io/`：synthetic / replay / camera（海康 MVS SDK） |
@@ -32,7 +32,7 @@ UP70 战队视觉组仓库：把 2D 视觉链路跑通，**从图像输入到目
 |---|---|---|
 | ArUco 检测 | `core/detectors/aruco.py` | `python scripts/check_aruco.py` → 9/9 |
 | 位姿估计（距离/倾角/面内角） | `core/pose.py` | `python scripts/pose_check.py --dir output/pose_scenes_825 --marker-mm 82.5` → 29/31 |
-| 位姿精度扫描 | `tools/pose_sweep.py` | `python scripts/pose_sweep.py --marker-mm 82.5` → CSV + MD + 8 张图 |
+| 位姿精度扫描 | `tools/pose_check.py --sweep` | `python scripts/pose_check.py --sweep --marker-mm 82.5` → CSV + MD + 8 张图 |
 | 实时循环 | `cli.run_aruco_live()` | 见「最小示例」 |
 | 判色 / 批处理 | `core/color.py`、`cli.run()` | `python scripts/run.py` → `output/demo/` 4 种产物 |
 | YOLO 检测器（可选） | `core/detectors/yolo.py`（ONNX + `cv2.dnn`，不需 torch） | 先生成权重：`python scripts/export_yolo.py --weights yolov8n.pt`；再 `--set detector.name=yolo` |
@@ -83,7 +83,7 @@ up70_vision/
 │   ├── io/              输入源：synthetic / replay / camera（MVS）
 │   ├── viz/             画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
 │   ├── config/          YAML 加载、字段校验、--set 覆盖
-│   ├── tools/           生成与自检：gen_*、*_check、pose_sweep、hsv_tuner
+│   ├── tools/           生成与自检：gen_*、*_check、hsv_tuner
 │   └── cli.py           唯一业务实现：run() 与 run_aruco_live()
 ├── scripts/             薄入口，只转交 argv
 ├── configs/             default.yaml、color_thresholds.yaml、默认内参快照
@@ -109,7 +109,7 @@ up70_vision/
 | 造打印用棋盘板 | `python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15`（出 PNG+PDF，打印用 PDF、选「实际大小」） |
 | 相机标定 | `python scripts/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23`（**必填**，填量到的格子边长） |
 | 位姿逐张核对 | `python scripts/pose_check.py --dir output/pose_scenes_825 --intrinsics configs/camera_calibration.yaml --marker-mm 82.5` |
-| 位姿精度扫描 | `python scripts/pose_sweep.py --marker-mm 82.5 --intrinsics configs/camera_calibration.yaml --out output/pose_sweep/20261019_825` |
+| 位姿精度扫描 | `python scripts/pose_check.py --sweep --marker-mm 82.5 --intrinsics configs/camera_calibration.yaml --out output/pose_sweep/20261019_825` |
 | 回归测试 | `for t in tests/test_*.py; do python "$t"; done` |
 
 ---
@@ -197,7 +197,7 @@ python scripts/run_aruco_live.py --set detector.name=aruco \
   --set pose.enabled=true --set pose.marker_size_mm=82.5 --headless --limit 10
 
 # 5) 精度扫描：raw.csv + summary.md + 8 张曲线图
-python scripts/pose_sweep.py --marker-mm 82.5 \
+python scripts/pose_check.py --sweep --marker-mm 82.5 \
   --intrinsics configs/camera_calibration.yaml --out output/pose_sweep/20261019_825
 ```
 

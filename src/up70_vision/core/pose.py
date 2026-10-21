@@ -17,7 +17,7 @@
 
 依赖谁 / 被谁用
     只依赖 numpy 与 OpenCV（`cv2.solvePnP*`）。上层是 `viz/`（画坐标轴）、
-    `cli.py`（实时终端行）、`tools/pose_check.py`（批量）、`tools/pose_sweep.py`（精度扫描）。
+    `cli.py`（实时终端行）、`tools/pose_check.py`（批量）、`tools/pose_check.py --sweep`（精度扫描）。
 
 对外约定
     · 空输入：`estimate_poses([])` 返回 `[]`，不抛异常（与检测器的"无码返回 []"对齐）
