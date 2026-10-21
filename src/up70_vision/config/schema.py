@@ -120,6 +120,9 @@ DETECTOR_DEFAULT_PARAMS = {
     "stub_aruco": {"ids": [0, 1, 2], "side_px": 90, "moving": True},
     "aruco": {"dictionary": "DICT_4X4_50", "corner_refine": "subpix",
               "min_perimeter_rate": 0.03, "max_detections": 0},
+    "yolo": {"weights": "assets/models/yolov8n.onnx", "conf": 0.25, "iou": 0.45,
+             "imgsz": 640, "max_detections": 32, "classes": [], "class_names": [],
+             "device": "cpu"},
 }
 
 
@@ -151,6 +154,16 @@ class DetectorConfig:
         │            │ mode          │ str     │ "normal" / "none"，默认 normal│
         │            │ empty_after   │ int     │ >= 0，默认 0（不启用）       │
         └────────────┴──────────────┴─────────┴──────────────────────────────┘
+
+        yolo（ONNX 推理，实现见 `core/detectors/yolo.py`）
+            weights         str    ONNX 权重路径，默认 assets/models/yolov8n.onnx
+            conf            float  (0, 1)，默认 0.25
+            iou             float  (0, 1]，默认 0.45
+            imgsz           int    32 的正整数倍，默认 640
+            max_detections  int    >= 1，默认 32
+            classes         list[int]  只保留这些类别索引，默认 []（全部）
+            class_names     list[str]  类名表，默认 []（此时尝试读 ONNX 元数据）
+            device          str    目前只支持 cpu
 
         aruco（真 ArUco，实现见 `core/detectors/aruco.py`；这张表放不下，单列）
             dictionary          str    `DICT_` 开头，默认 DICT_4X4_50
@@ -196,6 +209,27 @@ class DetectorConfig:
             # 单帧最多保留多少个框：0 或负数等于永远不输出任何框
             if int(p.get("max_detections", 32)) <= 0:
                 raise ConfigError(f"detector.blob.max_detections 必须为正：{p.get('max_detections')}")
+        elif self.name == "yolo":
+            # conf / iou 越界不是"效果差一点"：一个让框永远出不来，一个让框全被 NMS 吃掉
+            conf = float(p.get("conf", 0.25))
+            if not 0.0 < conf < 1.0:
+                raise ConfigError(f"detector.yolo.conf 必须在 (0, 1) 之间：{p.get('conf')}")
+            iou = float(p.get("iou", 0.45))
+            if not 0.0 < iou <= 1.0:
+                raise ConfigError(f"detector.yolo.iou 必须在 (0, 1] 之间：{p.get('iou')}")
+            # imgsz：ONNX 是固定输入尺寸，写错会在 forward 时才抛一句英文 cv2 异常
+            imgsz = int(p.get("imgsz", 640))
+            if imgsz <= 0 or imgsz % 32 != 0:
+                raise ConfigError(f"detector.yolo.imgsz 必须是 32 的正整数倍：{p.get('imgsz')}")
+            if int(p.get("max_detections", 32)) <= 0:
+                raise ConfigError(f"detector.yolo.max_detections 必须为正：{p.get('max_detections')}")
+            weights = p.get("weights", "")
+            if not isinstance(weights, str) or not weights.strip():
+                raise ConfigError(f"detector.yolo.weights 必须是非空路径字符串：{weights!r}")
+            for key in ("classes", "class_names"):
+                value = p.get(key, [])
+                if not isinstance(value, (list, tuple)):
+                    raise ConfigError(f"detector.yolo.{key} 必须是列表：{value!r}")
         elif self.name == "stub_aruco":
             # ids：伪造哪些码。空列表会让 stub 每帧返回 []，与"无码"混在一起没法区分，
             # 所以这里要求非空；元素必须是整数（True/False 是 int 子类，要排掉）

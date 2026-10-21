@@ -617,6 +617,15 @@ def run_aruco_live(argv=None) -> int:
         print(f"❌ 检测器不可用：{exc}", file=sys.stderr)
         return 2
 
+    # 本入口专用于 ArUco（要画四边形/中心/id、可选算位姿）。
+    # 判色族与 YOLO 返回的是 Detection，没有 marker_id，硬跑下去只会在第一帧
+    # 抛一句 `'Detection' object has no attribute 'marker_id'`，所以在这里直接说清楚。
+    if str(cfg.detector.name).lower() not in ("aruco", "stub_aruco", "stub"):
+        print(f"❌ 本入口只跑 ArUco 检测器（当前 detector.name={cfg.detector.name!r}）；"
+              f"要用判色/YOLO 检测器请走批处理入口：python scripts/run.py "
+              f"--set detector.name={cfg.detector.name}", file=sys.stderr)
+        return 2
+
     # ---- 6.5 位姿：只在 pose.enabled 时建（默认关闭，老用户零感知）----
     # 人话：要用位姿就得先拿到"这台相机的内参"，没有就算不出毫米。
     #       内参文件不进版本库，新 clone 的仓库一定没有，所以这里分两种处理：
