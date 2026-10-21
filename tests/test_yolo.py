@@ -26,6 +26,7 @@ try:
     from up70_vision.core.detectors.yolo import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from up70_vision.core.types import Detection
+    from up70_vision.viz.draw import detection_label
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from up70_vision.config.schema import ConfigError, from_dict
@@ -33,6 +34,7 @@ except ModuleNotFoundError:
     from up70_vision.core.detectors.yolo import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from up70_vision.core.types import Detection
+    from up70_vision.viz.draw import detection_label
 
 
 # ---------------------------------------------------------------- 假网络
@@ -195,6 +197,30 @@ def test_detect_rejects_bad_image():
         assert "HxWx3" in str(exc), exc
     else:
         raise AssertionError("灰度图应当抛 ValueError")
+
+
+# ---------------------------------------------------------------- 标签
+def test_label_uses_class_name_when_detector_gives_one():
+    """YOLO 的框：标签应是「类名 + 置信度」，不是「unknown + 命中率」。"""
+    det = Detection(bbox_xyxy=(0, 0, 10, 10), class_name="person", class_id=0,
+                    score=0.89, color=None, color_ratio=0.15)
+    name, metric = detection_label(det)
+    assert name == "person", name
+    assert abs(metric - 0.89) < 1e-6, metric
+
+
+def test_label_falls_back_to_color_for_blob_detector():
+    """判色族的框：class_name 是 "unknown"，应按颜色 + 命中率显示（原行为不变）。"""
+    det = Detection(bbox_xyxy=(0, 0, 10, 10), color="red", color_ratio=0.72)
+    name, metric = detection_label(det)
+    assert name == "red", name
+    assert abs(metric - 0.72) < 1e-6, metric
+
+
+def test_label_stays_unknown_when_nothing_is_known():
+    det = Detection(bbox_xyxy=(0, 0, 10, 10))
+    name, metric = detection_label(det)
+    assert name == "unknown" and metric == 0.0, (name, metric)
 
 
 # ---------------------------------------------------------------- 注册与配置

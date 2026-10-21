@@ -28,6 +28,25 @@ MARKER_DRAW_BGR = (0, 255, 0)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
+def detection_label(det) -> tuple[str, float]:
+    """拼检测框的标签文字与数值。
+
+    为什么不能只按颜色拼
+        判色族（`blob`）的 `class_name` 恒为 "unknown"，只有 `color` 有意义；
+        而 YOLO（`detector.name=yolo`）恰好相反：`color` 是 None（框里没有我们定义的
+        颜色），`class_name` 才是真信息（"person"/"bus"）。原先一律按颜色拼，
+        YOLO 的框就全显示成 `unknown`，还把 `color_ratio` 当成了置信度显示。
+
+    :param det: `Detection`
+    :return: `(标签文字, 数值)`——有真实类名时是 `(类名, 置信度)`，
+             否则是 `(颜色或 "unknown", 颜色命中率)`
+    """
+    name = str(getattr(det, "class_name", "") or "")
+    if name and name != "unknown":
+        return name, float(getattr(det, "score", 1.0))
+    return (det.color or "unknown"), float(getattr(det, "color_ratio", 0.0))
+
+
 def color_for(name: str | None):
     return COLOR_DRAW_BGR.get(str(name), COLOR_DRAW_BGR["unknown"])
 
@@ -55,7 +74,8 @@ def draw_detections(frame_bgr: np.ndarray,
     """在图上画框/四角 + 标签 + 中心，返回新图（不改原图）。
 
     两种检出物（docs/interface.md 第 2 节）
-        · `Detection`（判色族）：按 `bbox_xyxy` 画轴对齐矩形，标签是颜色与命中率
+        · `Detection`（判色族）：按 `bbox_xyxy` 画轴对齐矩形，标签是颜色与命中率；
+      若检测器给了真实类名（YOLO），标签改用「类名 + 置信度」（见 `detection_label`）
         · `ArucoMarker`：按 `corners_px` 画**四边形**（旋转过的码也贴得住，
           矩形会丢掉旋转信息），标签是 `id=N`，中心用契约的 `center_px`
 
@@ -78,8 +98,8 @@ def draw_detections(frame_bgr: np.ndarray,
             x1, y1, x2, y2 = (int(v) for v in det.bbox_xyxy)
             cv2.rectangle(canvas, (x1, y1), (x2 - 1, y2 - 1), color_for(det.color), thickness)
             center = det.center
-            name = det.color if det.color else "unknown"
-            label = f"{name} {det.color_ratio:.2f}"
+            name, metric = detection_label(det)
+            label = f"{name} {metric:.2f}"
             label_org = (x1 + 4, y1 + 16)
         if show_center:
             cv2.drawMarker(canvas, (int(center[0]), int(center[1])), (0, 0, 255),
