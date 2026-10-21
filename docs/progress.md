@@ -14,7 +14,7 @@
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
 - `src/up70_vision/` 的 `core/`（判色与管线、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli.py`（编排）、`tools/hsv_tuner.py`（交互调阈值）均已实现
-- 回归测试 **78 项**（判色/几何/配置 39 + ArUco 14 + 相机标定 12 + 位姿 13，全部通过）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
+- 回归测试 **95 项**（判色/几何/配置 39 + ArUco 14 + 相机标定 12 + 位姿 13 + YOLO 17，全部通过）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
 - **2026-10-16 复核整改**：PR #3 的复核意见（针对 `a06df7f`）逐条处理 —— `--limit` 丢结果、相机半初始化句柄泄漏、白底白字标签、画框多 1px、中文滑条名、`writer.close` 只在成功路径；整改记录见第三节末
@@ -45,7 +45,7 @@
 | M9 相机标定（尝试做 1） | ✅ 完成 | `core/calibration.py` + `tools/calibrate_camera.py` + `tools/gen_chessboard.py` + `docs/相机标定.md` + 9 项测试；输出内参与畸变系数 YAML | 真机标定要打印一块棋盘（工具已就绪） |
 | M10 位姿估计（任务单第 2、3 条） | ✅ 完成（合成数据） | `core/pose.py` + `viz.draw_pose_axes` + 实时入口输出 + `tools/gen_pose_scenes.py` / `pose_check.py` / `pose_sweep.py` + `docs/位姿估计.md` + 11 项测试 | 真机精度要等内参文件与实测码边长；合成图不含镜头畸变 |
 | M4 ROS 2 对接 | ⬜ 阻塞 | 话题适配器 + 发布节点 + 自定义消息 | 机械臂组 / 电控组定话题名与消息字段 |
-| M5 模型接入 | ⬜ 阻塞 | YOLO 检测器 + 训练流水线 | 没有标注数据集、没有确定物块本体 |
+| M5 模型接入 | 🟡 接口已接 | YOLO 检测器（ONNX + cv2.dnn）+ 导出脚本 | **训练仍阻塞**：没有标注数据集、没有确定物块本体。预训练权重只认 COCO 80 类 |
 | M6 真相机与场地标定 | 🔵 部分完成 | 相机接入（✅ 已实现）+ 相机标定 + HSV 阈值按场地重调 | 阈值重调与标定都要等**物块与场地确定**；相机侧已无阻塞 |
 
 ---
@@ -106,7 +106,7 @@
 | `tests/test_aruco.py` | 14 | **真 ArUco**：多码/旋转/无码图对真值（中心与真值完全相等、四角 ≤ 0.25 px）；角点顺序（上边倾角 0°/−30°/−60°）；45° 单码；契约形状（ArucoMarker / float32 / 四角均值）；坏输入被拒；目录里 9 张图逐张对真值 |
 | `tests/test_pose.py` | 13 | **位姿**：已知 (R,t) 反解精度、尺度与边长一致性、滚转只改 yaw、相邻角点交换与共线角点被拒、180° 循环错位只由 z 符号暴露、完全对称输入不泄漏 NaN、歧义门槛由参数决定、去畸变角点配 `dist=None` |
 
-**合计 78 项**（39 + 14 + 12 + 13）。
+**合计 95 项**（39 + 14 + 12 + 13 + 17）。
 
 **双环境验证记录（2026-10-16，复核整改后复测）**
 
@@ -323,6 +323,8 @@ python scripts/check_aruco.py            # 薄入口，自带 src 路径兜底
 | 54 | 同一场景名两次生成的噪声图不一样，噪声档误差数字每次小幅抖动 | 种子用的是 `abs(hash(name))`，而 `str.__hash__` 每进程随机（实测三次 40350 / 30148 / 54421） | 改用 `zlib.crc32(name.encode())`；两次独立生成的 `noise_16.png` md5 一致（`893A59…5BE`） |
 | 55 | Windows 下工具跑完却抛 `UnicodeEncodeError`，退出码 1 | 控制台是 GBK，而工具打印 `✅/⚠️`；容器里是 UTF-8，所以从没暴露 | 新入口调 `utils/console.ensure_utf8_stdout()`；README「开发环境约定」补了说明 |
 | 56 | 坐标轴与码的四个角差几像素，画面边缘更明显 | 位姿是带着 `D` 解出来的（原始畸变像素空间），画轴却用 `dist=None` 投影；docstring 还写着「位姿在去畸变空间解出来」 | `draw_pose_axes` 增加 `dist_coeffs` 参数，`cli` 传同一个 `D`：已掰直配 None、未掰直配 D，两边必须成对 |
+| 57 | YOLO 在容器里跑出 `class_name="0"`，不是 `"person"` | 类名只在 ONNX 的 `metadata_props` 里，读它要装 `onnx` 包，而容器里没有（也不想为一行元数据加 30 MB） | 导出脚本顺手写一个 `<stem>.names.json` sidecar；`_read_class_names()` 先读它（标准库 json），读不到再退回 `onnx` 元数据，最后退化成索引字符串 |
+| 58 | 预训练 YOLOv8 在 `data/calib` 的棋盘图上 0 个框，看起来像接入失败 | **不是 bug**：COCO 80 类里没有"色块"，模型没见过就不输出 | 用 `bus.jpg` 跑出 6 框证明链路通；真实物块要标注数据 + 微调（M5 训练仍阻塞）。另：YOLOv8 权重是 AGPL-3.0，对外发布前需确认许可 |
 
 
 > 注：上表编号 17 与「环境类」新增的 17~23 重复，下次整理时统一重排。
