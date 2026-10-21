@@ -3,7 +3,7 @@
 
 造"答案已知"的 ArUco 位姿测试图：给定距离/倾角/滚转/光照/噪声/模糊，
 把码按相机模型投影后贴进图里，同时写一份同名 JSON 真值。
-任务单第 3 条的精度扫描（`scripts/pose_sweep.py`）与位姿单测都靠它出数据。
+任务单第 3 条的精度扫描（`scripts/pose_check.py --sweep`）与位姿单测都靠它出数据。
 
 用法（在仓库根目录）
     python scripts/gen_pose_scenes.py                        # 只造一张 450 mm 正视图

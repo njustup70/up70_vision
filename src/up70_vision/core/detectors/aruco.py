@@ -46,9 +46,17 @@ def _opencv_version_tuple() -> tuple:
     return tuple(parts[:3])
 
 
-def check_opencv_aruco() -> None:
-    """确认当前 OpenCV 有新版 aruco API；没有就抛一句带处理办法的人话。"""
+def check_opencv_aruco(need_generate: bool = False) -> None:
+    """确认当前 OpenCV 有新版 aruco API；没有就抛一句带处理办法的人话。
+
+    :param need_generate: 还要生成码图时传 True（`generateImageMarker` 与检测是两套 API，
+        有的构建/版本会缺其中一个；`tools/gen_aruco.py` 造图前要这一条）
+    """
     import cv2
+    if need_generate and not hasattr(cv2.aruco, "generateImageMarker"):
+        raise RuntimeError(
+            f"当前 cv2 {cv2.__version__} 没有 generateImageMarker（生成 ArUco 码图需要）。"
+            "请用 opencv-python>=4.7（容器里是 4.14）")
     if not hasattr(cv2, "aruco") or not hasattr(cv2.aruco, "ArucoDetector"):
         version = _opencv_version_tuple()
         raise RuntimeError(

@@ -9,12 +9,12 @@
 放什么 / 不放什么
     放"造数据"：场景定义（`PoseSpec`）、渲染（`render_scene`）、写盘（`write_scene`）、
     扫描矩阵（`build_suite`）。
-    **不做**误差统计（在 `tools/pose_sweep.py`）、不做逐图对真值核位姿（在
+    **不做**误差统计（在 `tools/pose_check.py --sweep`）、不做逐图对真值核位姿（在
     `tools/pose_check.py`）、不 import `viz/`（它画的是给人看的叠加图）。
 
 依赖谁 / 被谁用
     依赖 `core.pose.marker_object_points` 与 `core.pose.pose_metrics`（真值与求解必须同口径）、
-    numpy、OpenCV。被 `tests/test_pose.py`（当夹具）与 `tools/pose_sweep.py`（批量）调用。
+    numpy、OpenCV。被 `tests/test_pose.py`（当夹具）与 `tools/pose_check.py --sweep`（批量）调用。
 
 对外约定
     · `render_scene()` 返回 `(image_bgr, truth)`；truth 里的 `rvec`/`tvec_mm`/`corners_px`
@@ -35,7 +35,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import zlib
 from dataclasses import dataclass
@@ -322,14 +321,10 @@ def write_scene(out_dir: str, spec: PoseSpec, image_bgr: np.ndarray, truth: dict
 
     :return: `(png 路径, json 路径)`
     """
-    from ..utils.image_io import write_image
+    from ..utils.image_io import write_image_with_truth
     os.makedirs(out_dir, exist_ok=True)
     png_path = os.path.join(out_dir, f"{spec.name}.png")
-    json_path = os.path.join(out_dir, f"{spec.name}.json")
-    write_image(png_path, image_bgr)
-    with open(json_path, "w", encoding="utf-8") as handle:
-        json.dump(truth, handle, ensure_ascii=False, indent=2)
-    return png_path, json_path
+    return write_image_with_truth(image_bgr, png_path, truth)
 
 
 def build_suite(base_marker_mm: float = DEFAULT_MARKER_MM,
