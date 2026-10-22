@@ -4,7 +4,7 @@
     以前想跑一件事，得先猜它在哪一层：`scripts/` 还是 `src/up70_vision/tools/`？
     而且有六个动作存在两种叫法，名字还倒过来（`scripts/check_aruco.py` 背后叫
     `tools/aruco/check.py`）。这个文件把 19 个入口收成一道门，门上有指示牌：
-    不带参数敲 `python -m up70_vision`，就是那张十三行的指示牌（12 个功能 + clean）。
+    不带参数敲 `python -m up70_vision`，就是那张十五行的指示牌（14 个功能 + clean）。
 
 放什么 / 不放什么
     放「子命令名 -> 目标模块与函数」的登记表，以及 `clean`（清产物）这一件事。
@@ -87,6 +87,8 @@ COMMANDS = {
              "实时 ArUco：逐帧检测 + 窗口/落盘（原 scripts/run_aruco_live.py）"),
     "doctor": ("up70_vision.tools.env.check_env", "main",
                "环境自检：Python / opencv / 图像读写往返（原 scripts/check_env.py）"),
+    "demo": ("up70_vision.tools.env.demo", "main",
+             "OpenCV 冒烟：造图 -> 阈值 -> 找轮廓 -> 落盘（原 scripts/demo.py）"),
     "check-aruco": ("up70_vision.tools.aruco.check", "main",
                     "按真值核对图组：ID / 四角 / 中心（原 scripts/check_aruco.py）"),
     "pose-check": ("up70_vision.tools.pose", "main",
@@ -105,10 +107,12 @@ COMMANDS = {
                   "拖滑条调 HSV 阈值，回车写回 color_thresholds.yaml"),
     "mvs-color": ("up70_vision.tools.blob.color_measure", "main",
                   "海康 MVS 相机实时判色窗口"),
+    "gen-html": ("up70_vision.tools.doc.gen_html", "main",
+                 "教程 md -> 单文件 html（需要 pandoc；构建产物不进库）"),
 }
 
 #: 不吃命令行的子命令：目标是自包含脚本（没有 argparse），多给参数说明用错了。
-NO_ARGV = frozenset({"doctor"})
+NO_ARGV = frozenset({"doctor", "demo"})
 
 #: `clean` 的一行说明。挂在 `COMMANDS` 之外，因为它调的是本文件里的函数，不是别的模块。
 CLEAN_HELP = "清理运行产物：output/ 下的内容（留 .gitkeep）与所有 __pycache__/"
@@ -199,7 +203,7 @@ def _dispatch(name: str, argv) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """顶层参数解析器：一张子命令指示牌，每个子命令把剩余参数原样放行。
 
-    :return: 填好 13 个子命令的 `ArgumentParser`
+    :return: 填好 14 个功能子命令 + `clean` 的 `ArgumentParser`
 
     关键写法
         · 功能子命令的子解析器**一个参数都不注册**，且 `add_help=False`；
@@ -210,7 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="python -m up70_vision",
-        description="UP70 视觉：一个入口，12 个功能子命令 + clean（不带参数时打印这张表）",
+        description="UP70 视觉：一个入口，14 个功能子命令 + clean（不带参数时打印这张表）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="例：python -m up70_vision run --set input.source=synthetic --limit 3\n"
                "    python -m up70_vision pose-check --dir output/pose_scenes\n"

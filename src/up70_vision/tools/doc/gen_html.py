@@ -6,8 +6,8 @@
     改一处忘了改另一处就成了两个版本。现在仓库只留 md，要 html 自己生成。
 
 怎么跑（仓库根目录）
-    python -m up70_vision.tools.doc.gen_html                 # 转 docs/ 下所有教程 md
-    python -m up70_vision.tools.doc.gen_html docs/教程-从像素到毫米.md
+    python -m up70_vision gen-html                           # 转 docs/ 下所有教程 md
+    python -m up70_vision gen-html docs/教程-从像素到毫米.md
 
 放什么 / 不放什么
     只做"调用 pandoc 把 md 转成 html"这一件事；不生成目录、不套站点模板、

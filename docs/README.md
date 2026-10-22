@@ -49,7 +49,7 @@
 两份教程的 `.html` 是**构建产物**，不进版本库；要发给不看代码的人时自己生成：
 
 ```bash
-python -m up70_vision.tools.doc.gen_html        # 需要 pandoc
+python -m up70_vision gen-html                  # 需要 pandoc
 ```
 
 ---

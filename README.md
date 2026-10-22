@@ -21,7 +21,7 @@ docker compose -f .devcontainer/docker-compose.yml build
 docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision doctor
 
 # 3) OpenCV 冒烟：应看到「OpenCV 冒烟测试 -> PASS」
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision.tools.env.demo
+docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision demo
 ```
 
 **一条命令版**：`./demo.sh` 把上面三步再加一步「跑一批合成图」串起来，
@@ -205,13 +205,14 @@ image_io/logging ┘                                                            
 
 ## 附录 B · 命令全表
 
-一个入口、13 个子命令。不带参数敲 `python -m up70_vision` 就是这个表：
+一个入口：14 个功能子命令 + `clean`。不带参数敲 `python -m up70_vision` 就是这个表：
 
 | 子命令 | 干什么 |
 |---|---|
 | `run` | 判色/检测批处理：读完所有帧再汇总 |
 | `live` | 实时 ArUco：逐帧检测 + 窗口/落盘 |
 | `doctor` | 环境自检（Python / opencv / 图像读写往返） |
+| `demo` | OpenCV 冒烟：造图 → 阈值 → 找轮廓 → 落盘，末行 `PASS` |
 | `check-aruco` | 按真值核对图组：ID / 四角 / 中心 |
 | `pose-check` | 位姿精度核对：`--dir` 逐图 / `--sweep` 批量扫描 |
 | `calibrate` | 相机标定：采棋盘图 → 内参 + 畸变 |
@@ -221,6 +222,7 @@ image_io/logging ┘                                                            
 | `export-yolo` | 把 YOLO `.pt` 导出成 ONNX + 类名表 |
 | `hsv-tuner` | 拖滑条调 HSV 阈值，回车写回阈值表 |
 | `mvs-color` | 海康 MVS 相机实时判色窗口 |
+| `gen-html` | 教程 md → 单文件 html（需要 pandoc，产物不进库） |
 | `clean` | 清 `output/` 内容（留 `.gitkeep`）与所有 `__pycache__/` |
 
 旧的 `scripts/*.py` 薄壳已删除（2026-10-22）；CI 会拦住 `scripts/` 目录再次出现。
@@ -229,7 +231,7 @@ image_io/logging ┘                                                            
 
 | 项 | 命令 | 期望 |
 |---|---|---|
-| 环境 / 冒烟 | `python -m up70_vision doctor`、`python -m up70_vision.tools.env.demo` | 末行「结果：全部通过」/ `PASS` |
+| 环境 / 冒烟 | `python -m up70_vision doctor`、`python -m up70_vision demo` | 末行「结果：全部通过」/ `PASS` |
 | ArUco 图组 | `python -m up70_vision check-aruco` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
 | 真机链路 | `python -m up70_vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
 | 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **103 项全过** |
@@ -257,7 +259,7 @@ image_io/logging ┘                                                            
 | `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m up70_vision clean` 清掉 |
 | `__pycache__/`、`*.pyc` | Python 字节码缓存 | 同上，一并清掉 |
 | `data/` | 数据集、回放素材、标定原图（几十 MB 到几 GB） | 按 `data/README.md` 各自本地准备 |
-| `docs/*.html` | 教程的构建产物 | 要就 `python -m up70_vision.tools.doc.gen_html` 自己生成 |
+| `docs/*.html` | 教程的构建产物 | 要就 `python -m up70_vision gen-html` 自己生成 |
 | `assets/models/*.onnx`、`*.pt` | 模型权重 | `python -m up70_vision export-yolo` 自己导出 |
 | `configs/camera_calibration*.yaml` | 每台相机一份的内参 | 向做过标定的队友要，或自己标 |
 

@@ -7,5 +7,5 @@
     不套站点模板、不改 md 内容。
 
 怎么跑
-    python -m up70_vision.tools.doc.gen_html
+    python -m up70_vision gen-html
 """

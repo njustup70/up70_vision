@@ -2,7 +2,7 @@
 
 跑法
     ./demo.sh                                # 推荐：构建 + 自检 + 冒烟一条命令跑完
-    python -m up70_vision.tools.env.demo         # 只跑冒烟测试
+    python -m up70_vision demo                   # 只跑冒烟测试
 
 做什么
     只用 OpenCV 与 numpy 走一遍视觉最常用的六个动作：造图、转颜色空间、

@@ -16,8 +16,8 @@
     可以依赖任意层——它是包的最上层消费方。
 
 怎么跑
-    一律走统一入口：`python -m up70_vision <子命令>`（见 `__main__.py` 的登记表）。
-    只有 `tools.doc.gen_html` 没登记成子命令：它是文档构建，不是"跑视觉"的动作。
+    一律走统一入口：`python -m up70_vision <子命令>`（见 `__main__.py` 的登记表，
+    七个子包各至少有一个子命令，`gen_html` 对应 `gen-html`）。
 
 注意 GUI
     blob/ 下两个（hsv_tuner / color_measure）需要 X11/Wayland，且 OpenCV 不能是 headless 版。
