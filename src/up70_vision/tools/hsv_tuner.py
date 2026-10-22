@@ -34,7 +34,8 @@ import cv2
 import numpy as np
 import yaml
 
-from ..config.loader import find_default_config, read_yaml, resolve_path
+from ..config.loader import (find_default_config, read_yaml, resolve_path,
+                             split_thresholds_doc)
 from ..core.color import mask_for_segments, parse_thresholds, valid_pixel_mask
 from ..io.base import build_source
 from ..utils.image_io import read_image_bgr
@@ -207,8 +208,10 @@ def main(argv=None) -> int:
         rel = ((cfg_data.get("color") or {}).get("thresholds_file") or "color_thresholds.yaml")
         thresholds_path = resolve_path(os.path.dirname(os.path.abspath(config_path)), rel)
 
+    # 阈值表文件头还有一段保留键 `color:`（判色门槛），它不是颜色，先摘掉再解析
     raw = read_yaml(thresholds_path)
-    parsed = parse_thresholds(raw)
+    colors, _settings = split_thresholds_doc(raw, thresholds_path)
+    parsed = parse_thresholds(colors)
     names = list(parsed) if not args.colors else [c for c in args.colors if c in parsed]
     if not names:
         print(f"❌ 没有可调的颜色（阈值表：{list(parsed)}）", file=sys.stderr)
@@ -284,7 +287,9 @@ def main(argv=None) -> int:
             push_ui(table[name][seg_idx])
             print(f"当前段 -> {name} seg{seg_idx + 1}")
         elif key == ord("r"):
-            fresh = parse_thresholds(read_yaml(thresholds_path))
+            fresh_colors, _fresh_settings = split_thresholds_doc(
+                read_yaml(thresholds_path), thresholds_path)
+            fresh = parse_thresholds(fresh_colors)
             table[name] = [list(seg) for seg in fresh[name]]
             push_ui(table[name][seg_idx])
             print(f"已重新载入 {name}：{table[name]}")

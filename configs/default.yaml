@@ -1,7 +1,7 @@
 # 全局默认配置。
 #
 # 所有参数都可以用命令行覆盖，不需要改这个文件：
-#   python scripts/run.py --set color.hit_ratio_min=0.6
+#   python -m up70_vision run --set color.hit_ratio_min=0.6
 # 点分路径对应下面的层级，例如 detector.blob.min_area_px。
 #
 # 哪些改动会影响自检数字：
@@ -57,14 +57,10 @@ input:
 color:
   # 相对路径以本文件所在目录（configs/）为基准
   thresholds_file: color_thresholds.yaml
-  # 饱和度与亮度下限：低于它们的像素视为"没有颜色"（灰、黑、白、背景），
-  # 不参与判色统计。这是颜色识别任务里最需要按场地光照重调的两个数。
-  min_saturation: 40
-  min_value: 40
-  # 命中率门槛，单位是比例不是百分比。设成 1.0 意味着"必须整块都是这个颜色"，
-  # 在有色噪声的合成图上会直接全部判成 unknown。
-  hit_ratio_min: 0.50
-  ignore_border_px: 3
+  # 判色门槛（饱和度/亮度下限、命中率门槛、边框裁剪、最少有效像素）**不在本文件**：
+  # 它们与颜色范围是同一件事的两半，统一放在 color_thresholds.yaml 文件头的 `color:` 段
+  # ——调颜色只开一个文件。在这里写同名键仍然会生效（并盖住阈值表里的值），
+  # 但那是给临时实验用的，日常调参请改阈值表。
 
 detector:
   # blob      ：占位检测器，饱和度/亮度分割 + 轮廓提取，不需要模型权重；返回 list[Detection]

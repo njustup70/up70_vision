@@ -8,14 +8,14 @@
     两者都不进版本库（`.gitignore` 已忽略 *.onnx / *.pt）。
 
 怎么跑
-    # 在装了 ultralytics 的环境里（本机是 ~/.venvs/yolo）
-    ~/.venvs/yolo/bin/python scripts/export_yolo.py --weights yolov8n.pt
+    # 在装了 ultralytics 的环境里（本机是 ~/.venvs/yolo；该 venv 里也要 pip install -e 本仓库）
+    ~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolov8n.pt
     # 自定义：换模型、换输入尺寸
-    ~/.venvs/yolo/bin/python scripts/export_yolo.py --weights yolo11s.pt --imgsz 480 --out assets/models
+    ~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolo11s.pt --imgsz 480 --out assets/models
 
 导出后怎么用
-    # 注意：判色族/YOLO 走**批处理入口**；run_aruco_live 是 ArUco 专用（要画四边形和位姿轴）
-    python scripts/run.py --set detector.name=yolo \
+    # 注意：判色族/YOLO 走**批处理入口**；live 是 ArUco 专用（要画四边形和位姿轴）
+    python -m up70_vision run --set detector.name=yolo \
         --set input.source=replay --set input.replay.path=assets/aruco/scenes
 """
 
@@ -27,7 +27,9 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+# 仓库根：src/up70_vision/tools/export_yolo.py 往上三层（tools -> up70_vision -> src -> 根）。
+# 用 __file__ 而不是 cwd：默认输出目录固定在仓库的 assets/models/，从哪调用都一样。
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUT = ROOT / "assets" / "models"
 
 
@@ -53,7 +55,7 @@ def main(argv=None) -> int:
         from ultralytics import YOLO
     except ModuleNotFoundError:
         print("❌ 导出需要 ultralytics（和 torch）。请用装了它的解释器跑，例如：")
-        print("     ~/.venvs/yolo/bin/python scripts/export_yolo.py --weights yolov8n.pt")
+        print("     ~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolov8n.pt")
         return 2
 
     out_dir = Path(os.path.expanduser(args.out))

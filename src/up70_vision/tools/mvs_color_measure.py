@@ -256,7 +256,15 @@ def analyse(mask, frame, min_area):
     return vis, results
 
 
-def main():
+def main(argv=None):
+    """实时判色窗口（需要 MVS SDK 与相机，缺一不可）。
+
+    :param argv: 参数列表；None 表示取 `sys.argv[1:]`。
+        收形参是为了让 `python -m up70_vision mvs-color --index 1` 能用：
+        统一入口会把"mvs-color"之外的参数原样传进来，而直接读 `sys.argv`
+        会把这几个字当成非法参数。
+    :return: 0 正常；1 相机打不开或一帧都没取到
+    """
     ap = argparse.ArgumentParser(description="海康相机实时颜色/轮廓测量（MVS）")
     ap.add_argument("--index", type=int, default=0)
     ap.add_argument("--exposure", type=float, default=None, help="曝光 us")
@@ -265,7 +273,7 @@ def main():
     ap.add_argument("--no-window", action="store_true", help="无窗口自检")
     ap.add_argument("--frames", type=int, default=3, help="无窗口模式抓几帧")
     ap.add_argument("--out", default="mvs_color.png")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     cam = MvsCamera(args.index, args.exposure, args.gain)
     if not cam.ok:

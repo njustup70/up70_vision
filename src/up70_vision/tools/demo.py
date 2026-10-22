@@ -1,14 +1,15 @@
 """OpenCV 冒烟测试：确认这台机器上的 OpenCV 真的能跑。
 
 跑法
-    python scripts/demo.py
+    ./demo.sh                                # 推荐：构建 + 自检 + 冒烟一条命令跑完
+    python -m up70_vision.tools.demo         # 只跑冒烟测试
 
 做什么
     只用 OpenCV 与 numpy 走一遍视觉最常用的六个动作：造图、转颜色空间、
     阈值分割、找轮廓、按掩码叠加、写图落盘。
 
-    全程**不 import up70_vision**——它是环境自检，不是业务实现。
-    这样将来 src 里的实现就位后，不会和它形成第二份「检测 -> 判色」逻辑。
+    全程**不 import 本包的其他模块**——它是环境自检，不是业务实现。
+    这样 src 里的实现再长，也不会和它形成第二份「检测 -> 判色」逻辑。
 
 应该看到什么
     [自检] cv2 4.14.0 | numpy 2.2.6
@@ -30,9 +31,9 @@ except ImportError as exc:  # Ubuntu 上最常见：缺 libGL.so.1
     print("         sudo apt-get install -y libgl1 libglib2.0-0t64")
     raise SystemExit(1) from exc
 
-# 仓库根由本文件位置反推：scripts/demo.py 往上两层。
-# 因此不需要先 pip install -e .，新人 clone 完装好依赖就能跑。
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+# 仓库根由本文件位置反推：src/up70_vision/tools/demo.py 往上三层（tools -> up70_vision -> src -> 根）。
+# 用 __file__ 而不是 cwd：在容器里从任意目录调用都能把图写到仓库的 output/demo/。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _SMOKE_PNG = _REPO_ROOT / "output" / "demo" / "opencv_smoke.png"
 
 

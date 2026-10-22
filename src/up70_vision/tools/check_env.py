@@ -1,7 +1,7 @@
 """环境自检：装完依赖先跑这个，确认环境没坑。
 
 跑法
-    python scripts/check_env.py
+    python -m up70_vision doctor
 
 检查项与通过标准
     1. Python >= 3.10（低于它仓库代码里的类型写法会报错）

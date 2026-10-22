@@ -52,6 +52,10 @@ data/*
 .ai-memory/
 .codebuddy/
 
+# 文档构建产物：docs/ 里的教程 html 由 `python -m up70_vision.tools.gen_html` 生成，
+# 只在本地看或对外发布时用，不进版本库（否则 md 与 html 会变成两个版本）
+docs/*.html
+
 # 编辑器
 .idea/
 .vscode/*

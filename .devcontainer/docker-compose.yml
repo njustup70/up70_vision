@@ -27,5 +27,5 @@ services:
     # 不接相机时留着这一行也无害：它只是把 USB 总线暴露进来。
     devices:
       - "/dev/bus/usb:/dev/bus/usb"
-    # 默认命令：环境自检
-    command: python scripts/check_env.py
+    # 默认命令：环境自检（统一入口，等价于原来的 python scripts/check_env.py）
+    command: python -m up70_vision doctor

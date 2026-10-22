@@ -179,7 +179,7 @@ class FrameSource(ABC):
 - `read()` 返回 `None` = **这路输入不会再有帧了**，调用方一律当结束。
 - `read()` 抛异常 = 配置或环境错误（路径不存在、SDK 缺失），**不要吞掉**。
 - 支持 `with` 与 `for`。
-- 工厂 `build_source(source_type, synthetic_params, replay_params, camera_params, colors)`：参数是普通 dict，由 `cli.py` 从配置拆出来 —— **`io/` 不 import `config`**。
+- 工厂 `build_source(source_type, synthetic_params, replay_params, camera_params, colors)`：参数是普通 dict，由 `cli/run.py` 从配置拆出来 —— **`io/` 不 import `config`**。
 
 ### 4.2 三个源的 `None` 语义不同（最常踩的一条）
 
@@ -195,7 +195,7 @@ class FrameSource(ABC):
 
 ## 5. 其余约定（用到再查）
 
-- **依赖方向**：`config`/`utils` → `core` → `io` → `viz` → `cli` → `scripts/`。`core/` 不 import `io`/`viz`/`config`，不读文件、不开窗口；`scripts/` 保持薄入口，逻辑写在 `cli.py`。
+- **依赖方向**：`config`/`utils` → `core` → `io` → `viz` → `cli` → `__main__.py`。`core/` 不 import `io`/`viz`/`config`，不读文件、不开窗口；逻辑写在 `cli/`（参数解析 / 批处理 / 实时循环 / 终端输出四个文件）。
 - **`viz/` 的规矩**：画**检测结果**（框、标签、中心、角点、ID）→ 返回新图（照 `draw_detections` 的写法）；画 **HUD**（帧号、汇总行）→ 可以原地改。任务二加角点绘制走前者。
 - **日志**：取 logger 一律 `get_logger("<模块路径>")`（如 `get_logger("viz.draw")`）。自己用 `logging.getLogger` 拼名字会让这条链路断掉，症状是"这个模块的日志不出现"。
 - **读写图片**：一律走 `utils/image_io.py`（`read_image_bgr` / `write_image`），**不要直接调 `cv2.imread` / `cv2.imwrite`** —— 这两个失败时返回 `None` / `False` 而不抛异常。
