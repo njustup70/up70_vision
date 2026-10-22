@@ -247,7 +247,7 @@ class YoloDetector(Detector):
         if not os.path.isfile(self.weights):
             raise FileNotFoundError(
                 f"YOLO 权重不存在：{self.weights}；"
-                f"先导出一次（需要 ultralytics）：python scripts/export_yolo.py --weights yolov8n.pt")
+                f"先导出一次（需要 ultralytics）：python -m up70_vision export-yolo --weights yolov8n.pt")
         self._net = cv2.dnn.readNetFromONNX(self.weights)
         self._names = _read_class_names(self.weights)
 

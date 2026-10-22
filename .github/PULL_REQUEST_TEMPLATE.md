@@ -7,7 +7,7 @@
 <!--
 一条能直接复制粘贴的命令，再写"看到什么算通过"（要具体数字，别写"正常运行"）：
 
-    python scripts/run_aruco_live.py --source stub --scenario cycle --max-frames 180 --headless
+    python -m up70_vision live --source stub --scenario cycle --max-frames 180 --headless
     退出码 0；日志里 markers=0 与 markers=3 各出现过；帧号 0 → 179 连续
 
 只改文档、没有可运行的东西？写清"看哪一段、核对什么"即可。

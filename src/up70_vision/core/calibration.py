@@ -13,8 +13,8 @@
     读图、抓帧、写 YAML、开预览窗口都是 `tools/calibrate_camera.py` 那层的事。
 
 依赖谁 / 被谁用
-    只依赖 numpy 与 OpenCV。上层是 `tools/calibrate_camera.py`（命令行标定工具与薄入口
-    `scripts/calibrate_camera.py`）；阶段二的位姿估计（`solvePnP`）直接消费本模块的
+    只依赖 numpy 与 OpenCV。上层是 `tools/calibrate_camera.py`（命令行标定工具，
+    入口 `python -m up70_vision calibrate`）；阶段二的位姿估计（`solvePnP`）直接消费本模块的
     `CameraIntrinsics`，所以字段名与单位是给别人用的，别随手改。
 
 对外约定

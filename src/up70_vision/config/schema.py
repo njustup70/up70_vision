@@ -309,7 +309,7 @@ class CalibrationConfig:
 
     用大白话说
         位姿估计离不开"这颗镜头把像素换算成角度"的那套数（内参 + 畸变）。
-        那套数由 `scripts/calibrate_camera.py` 标定后写成 YAML，**每台相机一份**，
+        那套数由 `python -m up70_vision calibrate` 标定后写成 YAML，**每台相机一份**，
         所以它在 `.gitignore` 里、不进版本库；这里只记"去哪找它"。
 
     属性

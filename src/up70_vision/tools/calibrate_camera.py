@@ -14,12 +14,12 @@
 
 依赖谁 / 被谁用
     依赖 `core.calibration`（算法）、`io.base`（抓帧）、`config`（取相机参数）、`utils`（读写图与日志）。
-    薄入口：`scripts/calibrate_camera.py`。
+    入口：`python -m up70_vision calibrate`。
 
 两种用法
-    ① 已有图：`python scripts/calibrate_camera.py --images data/calib`
+    ① 已有图：`python -m up70_vision calibrate --images data/calib`
        （图可以从手机拍、也可以用 `--capture` 先采）
-    ② 现场采图：`python scripts/calibrate_camera.py --capture 15`
+    ② 现场采图：`python -m up70_vision calibrate --capture 15`
        （走 `--set input.source=camera` 的相机；每收一张打印一次进度）
 
 退出码
@@ -369,7 +369,7 @@ def write_calibration(path: str, intrinsics: CameraIntrinsics) -> str:
     directory = os.path.dirname(os.path.abspath(path))
     ensure_dir(directory)
     header = (
-        "# 相机内参与畸变系数（由 scripts/calibrate_camera.py 生成，别手改）\n"
+        "# 相机内参与畸变系数（由 python -m up70_vision calibrate 生成，别手改）\n"
         "#\n"
         "# 读这份文件的地方：阶段二的位姿估计（solvePnP）与去畸变。\n"
         "#   camera_matrix : 3x3 内参矩阵 [[fx,0,cx],[0,fy,cy],[0,0,1]]\n"
@@ -445,8 +445,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="calibrate_camera",
         description="相机标定：算内参矩阵与畸变系数（棋盘板）",
-        epilog="例：python scripts/calibrate_camera.py --capture 15  "
-               "或  python scripts/calibrate_camera.py --images data/calib")
+        epilog="例：python -m up70_vision calibrate --capture 15  "
+               "或  python -m up70_vision calibrate --images data/calib")
     ap.add_argument("--images", default=None,
                     help="从图目录标定（与 --capture 二选一）")
     ap.add_argument("--capture", type=int, default=0, metavar="N",
@@ -583,7 +583,7 @@ def main(argv=None) -> int:
     try:
         path = write_calibration(args.out, intrinsics)
         print(f"  已写入     : {path}")
-        print(f"  下一步     : python scripts/calibrate_camera.py --from {path}   # 复核")
+        print(f"  下一步     : python -m up70_vision calibrate --from {path}   # 复核")
     except OSError as exc:
         print(f"❌ 写盘失败：{exc}", file=sys.stderr)
         return 1

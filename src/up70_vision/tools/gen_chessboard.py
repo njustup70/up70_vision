@@ -9,7 +9,7 @@
     只放"把一块板画出来"。找角点、解内参都在 `core/calibration.py` 与 `calibrate_camera.py`。
 
 依赖谁 / 被谁用
-    依赖 `core.calibration`（板子参数）与 `utils.image_io`（写图）。薄入口见 `scripts/gen_chessboard.py`。
+    依赖 `core.calibration`（板子参数）与 `utils.image_io`（写图）。入口：`python -m up70_vision gen-chessboard`。
 
 对外约定
     · **`--cols/--rows` 是内角点个数**，不是格子数（10x7 格 -> 9x6 内角点）。这也是标定工具要填的数。
@@ -185,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="gen_chessboard",
         description="生成可打印的棋盘标定板（内角点个数不要填成格子数）",
-        epilog="例：python scripts/gen_chessboard.py --cols 9 --rows 6 --square-mm 15")
+        epilog="例：python -m up70_vision gen-chessboard --cols 9 --rows 6 --square-mm 15")
     ap.add_argument("--cols", type=int, default=9, help="横向**内角点**个数（默认 9）")
     ap.add_argument("--rows", type=int, default=6, help="纵向**内角点**个数（默认 6）")
     ap.add_argument("--square-mm", type=float, default=15.0,

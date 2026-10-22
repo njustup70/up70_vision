@@ -165,8 +165,11 @@ def test_resolve_path_and_thresholds_relative_to_config():
         assert sorted(thresholds) == ["green", "red"]
         assert len(thresholds["red"]) == 2
 
-        assert resolve_path("/abs", "x.yaml") == "/abs/x.yaml"
-        assert resolve_path("/base", "sub/x.yaml") == "/base/sub/x.yaml"
+        # 期望值走 normpath：resolve_path 内部对相对路径做 normpath，
+        # Windows 下会把 "/abs/x.yaml" 规整成 "\abs\x.yaml"。写死正斜杠的字符串
+        # 会让这条测试只在 Linux 过（2026-10-22 复核时发现）
+        assert resolve_path("/abs", "x.yaml") == os.path.normpath("/abs/x.yaml")
+        assert resolve_path("/base", "sub/x.yaml") == os.path.normpath("/base/sub/x.yaml")
 
 
 def test_stub_aruco_detector_config():
@@ -276,7 +279,7 @@ def test_load_intrinsics_roundtrip_and_missing_file():
         try:
             load_intrinsics(os.path.join(td, "nope.yaml"))
         except ConfigError as exc:
-            assert "calibrate_camera" in str(exc), f"报错应给出标定命令，实际：{exc}"
+            assert "up70_vision calibrate" in str(exc), f"报错应给出标定命令，实际：{exc}"
         else:
             raise AssertionError("内参文件不存在时应当抛 ConfigError")
 

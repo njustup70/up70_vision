@@ -12,7 +12,7 @@
 
 依赖方向（硬约束，下层不知道上层存在）
     utils ┐
-          ├─> core ─> io ─> viz ─> cli ─> scripts/
+          ├─> core ─> io ─> viz ─> cli ─> __main__.py / api.py
     config ┘
     方向是单向的：core 永远不 import io / viz / cli，否则算法就无法脱离硬件单独测试。
 
