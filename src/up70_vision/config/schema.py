@@ -16,9 +16,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..core.pipeline import ColorConfig
-from ..core.pose import METHOD_NAMES as POSE_METHODS
-from ..utils.logging import parse_level
+from ..pipeline import ColorConfig
+from ..pose import METHOD_NAMES as POSE_METHODS
+from ..logging import parse_level
 
 SOURCES = ("synthetic", "replay", "camera")
 REPLAY_KINDS = ("auto", "image_dir", "video")
@@ -155,7 +155,7 @@ class DetectorConfig:
         │            │ empty_after   │ int     │ >= 0，默认 0（不启用）       │
         └────────────┴──────────────┴─────────┴──────────────────────────────┘
 
-        yolo（ONNX 推理，实现见 `core/detectors/yolo.py`）
+        yolo（ONNX 推理，实现见 `detectors/yolo.py`）
             weights         str    ONNX 权重路径，默认 assets/models/yolov8n.onnx
             conf            float  (0, 1)，默认 0.25
             iou             float  (0, 1]，默认 0.45
@@ -165,7 +165,7 @@ class DetectorConfig:
             class_names     list[str]  类名表，默认 []（此时尝试读 ONNX 元数据）
             device          str    目前只支持 cpu
 
-        aruco（真 ArUco，实现见 `core/detectors/aruco.py`；这张表放不下，单列）
+        aruco（真 ArUco，实现见 `detectors/aruco.py`；这张表放不下，单列）
             dictionary          str    `DICT_` 开头，默认 DICT_4X4_50
             corner_refine       str    none / subpix / contour，默认 subpix
             min_perimeter_rate  float  (0, 1]，默认 0.03（占图像周长的比例）
@@ -331,7 +331,7 @@ class CalibrationConfig:
 
 @dataclass
 class PoseConfig:
-    """ArUco 位姿估计的参数（`core/pose.py` 消费）。
+    """ArUco 位姿估计的参数（`pose.py` 消费）。
 
     用大白话说
         这一组参数决定"要不要算位姿、码有多大、算出来的结果怎么判为不可信"。
@@ -401,7 +401,7 @@ class AppConfig:
 
     def validate(self) -> "AppConfig":
         self.input.validate()
-        try:                       # core 层的 ColorConfig 抛 ValueError，这里统一成 ConfigError
+        try:                       # pipeline 的 ColorConfig 抛 ValueError，这里统一成 ConfigError
             self.color.validate()
         except ValueError as exc:
             raise ConfigError(str(exc)) from exc

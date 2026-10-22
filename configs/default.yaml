@@ -87,7 +87,7 @@ detector:
 
   # aruco：真 ArUco 检测（任务单「搭档 Owner：检测核心」的产出）
   #   用法：--set detector.name=aruco 配合图片回放/相机；测试图组见 assets/aruco/
-  #   自检：python -m up70_vision.tools.aruco_check --dir assets/aruco
+  #   自检：python -m up70_vision.tools.aruco.check --dir assets/aruco
   aruco:
     dictionary: DICT_4X4_50   # 任务单指定；换字典会让已有测试图组的真值全部作废
     corner_refine: subpix     # none / subpix / contour。subpix 把角点做到亚像素，
@@ -95,7 +95,7 @@ detector:
     min_perimeter_rate: 0.03  # 检出码的最小周长占图像周长比例；调小能捞小码、也更容易误报
     max_detections: 0         # 单帧最多返回几个（0=不限）；超限时保留面积最大的几个
 
-  # yolo：ONNX 权重 + cv2.dnn 推理（core/detectors/yolo.py）。
+  # yolo：ONNX 权重 + cv2.dnn 推理（detectors/yolo.py）。
   #   为什么走 ONNX：容器里只要 cv2，不用装 1.4 GB 的 torch（实测 26.4 ms/帧，够 25 fps）。
   #   权重不进版本库（.gitignore 已忽略 *.onnx），先导出一次：
   #       python scripts/export_yolo.py --weights yolov8n.pt

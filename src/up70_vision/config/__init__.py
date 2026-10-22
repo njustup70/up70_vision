@@ -7,7 +7,7 @@
     不放业务默认值——默认值一律写在 configs/*.yaml 里，代码只定义结构与取值范围。
 
 依赖谁
-    只依赖 core.types（需要用到 Detection / Frame 等类型时）。
+    只依赖 types（需要用到 Detection / Frame 等类型时）。
 
 设计取舍
     用 dataclass + 显式校验函数，不引入 pydantic。理由是这个仓库要能被队友看懂——

@@ -23,13 +23,13 @@ assets/aruco/
 
 ```bash
 # 生成 / 重新生成整套（输出逐字节可复现，同一参数重跑结果完全一样）
-python -m up70_vision.tools.gen_aruco
-python -m up70_vision.tools.gen_aruco --list-scenes        # 看有哪些场景
-python -m up70_vision.tools.gen_aruco --ids 0 1 2 3 --side-px 120
+python -m up70_vision.tools.aruco.gen_scenes
+python -m up70_vision.tools.aruco.gen_scenes --list-scenes        # 看有哪些场景
+python -m up70_vision.tools.aruco.gen_scenes --ids 0 1 2 3 --side-px 120
 
 # 拿图组对真值自检：ID、四角、中心逐张报数字
-python -m up70_vision.tools.aruco_check
-python -m up70_vision.tools.aruco_check --only rotated --max-err-px 1.5
+python -m up70_vision.tools.aruco.check
+python -m up70_vision.tools.aruco.check --only rotated --max-err-px 1.5
 
 # 走完整管线（检测 + 判色 + 落盘），把图组当回放素材喂进去
 python scripts/run.py --set detector.name=aruco \
@@ -43,7 +43,7 @@ python tests/test_aruco.py
 
 ```bash
 docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
-  python -m up70_vision.tools.aruco_check
+  python -m up70_vision.tools.aruco.check
 ```
 
 实测（2026-10-16，cv2 4.14.0）：9/9 张通过、**中心最大误差 0.00 px、四角最大误差 0.23 px**。
@@ -57,7 +57,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
   "dictionary": "DICT_4X4_50",
   "width": 760,
   "height": 520,
-  "generator": "up70_vision.tools.gen_aruco",
+  "generator": "up70_vision.tools.aruco.gen_scenes",
   "params": {"ids": [0, 1, 2], "side_px": 130, "cols": 3, "gap_px": 60, "angle_deg": 0.0},
   "markers": [
     {"id": 0, "center": [190.0, 260.0],
@@ -76,7 +76,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 
 ## 加新场景
 
-改 `src/up70_vision/tools/gen_aruco.py` 里的场景构造函数，重跑生成器；
+改 `src/up70_vision/tools/aruco/gen_scenes.py` 里的场景构造函数，重跑生成器；
 新图与真值 JSON 会一起写出来，`aruco_check` 与 `tests/test_aruco.py` 自动带上它——
 两者都是遍历目录的，不需要再登记一份清单。
 

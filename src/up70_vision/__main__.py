@@ -3,7 +3,7 @@
 用大白话说
     以前想跑一件事，得先猜它在哪一层：`scripts/` 还是 `src/up70_vision/tools/`？
     而且有六个动作存在两种叫法，名字还倒过来（`scripts/check_aruco.py` 背后叫
-    `tools/aruco_check.py`）。这个文件把 19 个入口收成一道门，门上有指示牌：
+    `tools/aruco/check.py`）。这个文件把 19 个入口收成一道门，门上有指示牌：
     不带参数敲 `python -m up70_vision`，就是那张十三行的指示牌（12 个功能 + clean）。
 
 放什么 / 不放什么
@@ -40,7 +40,43 @@ import os
 import shutil
 import sys
 
-from .utils.console import ensure_utf8_stdout
+
+def ensure_utf8_stdout() -> bool:
+    """把 `sys.stdout` 的编码切成 UTF-8；已经是 UTF-8 时什么都不做。
+
+    用大白话说
+        Linux 容器的终端是 UTF-8，`print("⚠️")` 一切正常。Windows 控制台默认是 GBK
+        （`cp936`），同一个 `print` 会抛 `UnicodeEncodeError`，退出码变成 1，
+        于是一个"跑完了、结果也没问题"的命令看起来像崩溃。
+
+    为什么不是把 ✅/⚠️ 换成 ASCII
+        仓库的终端输出、PR 描述、文档里都在抄这些符号；只在个别命令里换成 `[OK]`
+        会让同一份输出出现两套风格。真正的问题在"终端编码"，不在符号本身。
+
+    为什么吞掉异常
+        `reconfigure` 在 stdout 被重定向成不可重配的对象时（某些 IDE 的捕获器）
+        会抛 `AttributeError` / `OSError`。这时唯一能做的是不折腾，让调用方按原编码
+        继续跑——报错退出反而把"能出结果"变成"直接崩"。
+
+    :return: 是否真的改动过。容器里（UTF-8）返回 False，Windows 控制台返回 True。
+
+    位置说明
+        原先是 `utils/console.py`（2026-10-22 扁平化时内联到这里）：它唯一的调用方是
+        `main()`，为一个 10 行的函数保留整个 `utils/` 子包不值。副作用是没有走
+        `python -m up70_vision` 而是直接 `python -m up70_vision.tools.xxx` 时，
+        Windows 终端不会自动切 UTF-8——统一入口是文档里唯一推荐的跑法。
+    """
+    stream = sys.stdout
+    if stream is None:
+        return False
+    if str(getattr(stream, "encoding", "")).lower().replace("-", "") == "utf8":
+        return False
+    try:
+        stream.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError, ValueError):
+        return False
+    return True
+
 
 #: 子命令登记表：名字 -> (模块名, 函数名, 一行说明)。
 #: 顺序即 `--help` 里的显示顺序，按"最常用 -> 最少用"排；`_dispatch()` 只认这张表。
@@ -49,26 +85,26 @@ COMMANDS = {
             "判色/检测批处理：读完所有帧再汇总（原 scripts/run.py）"),
     "live": ("up70_vision.cli", "run_aruco_live",
              "实时 ArUco：逐帧检测 + 窗口/落盘（原 scripts/run_aruco_live.py）"),
-    "doctor": ("up70_vision.tools.check_env", "main",
+    "doctor": ("up70_vision.tools.env.check_env", "main",
                "环境自检：Python / opencv / 图像读写往返（原 scripts/check_env.py）"),
-    "check-aruco": ("up70_vision.tools.aruco_check", "main",
+    "check-aruco": ("up70_vision.tools.aruco.check", "main",
                     "按真值核对图组：ID / 四角 / 中心（原 scripts/check_aruco.py）"),
-    "pose-check": ("up70_vision.tools.pose_check", "main",
+    "pose-check": ("up70_vision.tools.pose", "main",
                    "位姿精度核对：--dir 逐图 / --sweep 批量扫描（原 scripts/pose_check.py）"),
-    "calibrate": ("up70_vision.tools.calibrate_camera", "main",
+    "calibrate": ("up70_vision.tools.calibration.calibrate", "main",
                   "相机标定：采棋盘图 -> 内参 + 畸变（原 scripts/calibrate_camera.py）"),
-    "gen-chessboard": ("up70_vision.tools.gen_chessboard", "main",
+    "gen-chessboard": ("up70_vision.tools.calibration.gen_board", "main",
                        "生成棋盘 PNG + PDF，打印时选「实际大小」（原 scripts/gen_chessboard.py）"),
-    "gen-aruco": ("up70_vision.tools.gen_aruco", "main",
+    "gen-aruco": ("up70_vision.tools.aruco.gen_scenes", "main",
                   "生成 ArUco 测试图组 + 真值 JSON（原 scripts/gen_aruco.py）"),
-    "gen-scenes": ("up70_vision.tools.gen_pose_scenes", "main",
+    "gen-scenes": ("up70_vision.tools.pose.gen_scenes", "main",
                    "生成带真值的位姿测试图（原 scripts/gen_pose_scenes.py）"),
-    "export-yolo": ("up70_vision.tools.export_yolo", "main",
+    "export-yolo": ("up70_vision.tools.yolo.export", "main",
                     "把 YOLO .pt 导出成 ONNX + 类名表（原 scripts/export_yolo.py）"),
-    "hsv-tuner": ("up70_vision.tools.hsv_tuner", "main",
-                  "拖滑条调 HSV 阈值，回车写回 color_thresholds.yaml（原 tools/hsv_tuner.py）"),
-    "mvs-color": ("up70_vision.tools.mvs_color_measure", "main",
-                  "海康 MVS 相机实时判色窗口（原 tools/mvs_color_measure.py）"),
+    "hsv-tuner": ("up70_vision.tools.blob.hsv_tuner", "main",
+                  "拖滑条调 HSV 阈值，回车写回 color_thresholds.yaml"),
+    "mvs-color": ("up70_vision.tools.blob.color_measure", "main",
+                  "海康 MVS 相机实时判色窗口"),
 }
 
 #: 不吃命令行的子命令：目标是自包含脚本（没有 argparse），多给参数说明用错了。

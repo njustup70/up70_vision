@@ -5,7 +5,7 @@
 
 ## 需要什么
 
-`core/detectors/yolo.py` 只认 **ONNX**（用 `cv2.dnn` 推理，容器里不需要 torch）：
+`detectors/yolo.py` 只认 **ONNX**（用 `cv2.dnn` 推理，容器里不需要 torch）：
 
 ```
 assets/models/yolov8n.onnx        12.9 MB   模型本体

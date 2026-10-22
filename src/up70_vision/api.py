@@ -7,13 +7,13 @@
 
 放什么 / 不放什么
     只放 `detect()` 这一个门面函数。**不复制任何逻辑**：内部仍然走
-    `config.loader` -> `core.detectors.base.build_detector` -> `core.pipeline`
+    `config.loader` -> `detectors.base.build_detector` -> `pipeline`
     这条原链路，所以门面与 CLI 的行为永远一致（改算法只改一处）。
     不放 IO / 落盘 / 画图：相机、窗口、文件是 `io/` 与 `viz/` 的事，
     调用方自己决定什么时候用；门面只处理"已经拿到的那一帧"。
 
 依赖谁 / 被谁用
-    `config`（读配置与阈值表）+ `core`（检测器工厂与管线）。
+    `config`（读配置与阈值表）+ 根级算法模块（检测器工厂与管线）。
     **不 import io / viz / cli**——不替调用方管相机、窗口和输出目录。
     上层：ROS 2 节点、临时脚本、notebook；回归测试见 `tests/test_api.py`。
 
@@ -23,7 +23,7 @@
           （`color` 为 `None` 表示没判出来，与 CLI 一致）
         · ArUco（`aruco` / `stub_aruco`）返回 `list[ArucoMarker]`
         · 无目标返回 `[]`，不是 None，也不抛异常
-        · 图不是 HxWx3 的 BGR 时抛 `ValueError`（与 `core.types.Frame` 同一条校验）
+        · 图不是 HxWx3 的 BGR 时抛 `ValueError`（与 `types.Frame` 同一条校验）
     `params` 的键与 `configs/default.yaml` 的 `detector.<name>` 段同名
     （如 `min_area_px=800` / `conf=0.4` / `dictionary="DICT_4X4_50"`），
     写了的覆盖配置值，没写的取配置值。
@@ -42,9 +42,9 @@ import os
 from .config.loader import (DEFAULT_THRESHOLDS, load_config, load_thresholds,
                            resolve_thresholds_path)
 from .config.schema import DETECTOR_DEFAULT_PARAMS, ConfigError, from_dict
-from .core.detectors.base import build_detector
-from .core.pipeline import ColorConfig, process_frame
-from .core.types import Frame
+from .detectors.base import build_detector
+from .pipeline import ColorConfig, process_frame
+from .types import Frame
 
 
 def _resolve_thresholds(cfg, config_path):

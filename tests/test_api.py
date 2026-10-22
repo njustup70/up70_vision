@@ -10,11 +10,11 @@ from pathlib import Path
 
 try:
     from up70_vision.api import detect
-    from up70_vision.core.types import ArucoMarker, Detection
+    from up70_vision.types import ArucoMarker, Detection
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from up70_vision.api import detect
-    from up70_vision.core.types import ArucoMarker, Detection
+    from up70_vision.types import ArucoMarker, Detection
 
 import numpy as np
 

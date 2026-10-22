@@ -136,10 +136,10 @@ YOLOv8 的代码与权重都是 **AGPL-3.0**。队内自用没问题；但如果
 
 | 东西 | 位置 |
 |---|---|
-| 检测器实现 | `src/up70_vision/core/detectors/yolo.py` |
-| 工厂与注册 | `src/up70_vision/core/detectors/base.py`（`DETECTOR_NAMES`） |
+| 检测器实现 | `src/up70_vision/detectors/yolo.py` |
+| 工厂与注册 | `src/up70_vision/detectors/base.py`（`DETECTOR_NAMES`） |
 | 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`src/up70_vision/config/schema.py` |
-| 导出脚本 | `python -m up70_vision export-yolo`（实现 `src/up70_vision/tools/export_yolo.py`） |
+| 导出脚本 | `python -m up70_vision export-yolo`（实现 `src/up70_vision/tools/yolo/export.py`） |
 | 权重与说明 | `assets/models/`（权重被 gitignore，只有 README 入库） |
 | 测试 | `tests/test_yolo.py`（20 项，不需要权重也能跑） |
 

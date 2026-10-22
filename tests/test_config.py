@@ -258,7 +258,7 @@ def test_calibration_path_is_relative_to_config():
 
 def test_load_intrinsics_roundtrip_and_missing_file():
     """标定 YAML 能原样读回；文件缺失时报错里给出标定命令。"""
-    from up70_vision.core.calibration import CameraIntrinsics
+    from up70_vision.calibration import CameraIntrinsics
 
     matrix = np.array([[796.9, 0.0, 641.2], [0.0, 797.3, 508.7], [0.0, 0.0, 1.0]])
     dist = np.array([[-0.296, 0.121, 0.0008, -0.0012, 0.0]])

@@ -7,7 +7,7 @@
         · 400 mm 与 800 mm 两张图：距离比 2.0 ± 2%
         · 边长翻倍 → 距离翻倍（尺度只由边长决定，这条错了所有距离都错且不报错）
         · 面内转 0/90/180/270°：距离与倾角不变，只有 yaw 跟着转
-    真值不是量出来的，是"先填位姿再渲染"得到的（tools/gen_pose_scenes.py），
+    真值不是量出来的，是"先填位姿再渲染"得到的（tools/pose/gen_scenes.py），
     所以误差里不含卷尺误差。
 
 为什么还要写 4 条"应该报错/应该不动"的用例
@@ -29,20 +29,20 @@ import unittest
 from pathlib import Path
 
 try:
-    from up70_vision.core.calibration import CameraIntrinsics, undistort_points
-    from up70_vision.core.detectors.aruco import ArucoDetector
-    from up70_vision.core.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    from up70_vision.calibration import CameraIntrinsics, undistort_points
+    from up70_vision.detectors.aruco import ArucoDetector
+    from up70_vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from up70_vision.core.types import ArucoMarker, MarkerPose
-    from up70_vision.tools.gen_pose_scenes import PoseSpec, render_scene
+    from up70_vision.types import ArucoMarker, MarkerPose
+    from up70_vision.tools.pose.gen_scenes import PoseSpec, render_scene
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.calibration import CameraIntrinsics, undistort_points
-    from up70_vision.core.detectors.aruco import ArucoDetector
-    from up70_vision.core.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    from up70_vision.calibration import CameraIntrinsics, undistort_points
+    from up70_vision.detectors.aruco import ArucoDetector
+    from up70_vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from up70_vision.core.types import ArucoMarker, MarkerPose
-    from up70_vision.tools.gen_pose_scenes import PoseSpec, render_scene
+    from up70_vision.types import ArucoMarker, MarkerPose
+    from up70_vision.tools.pose.gen_scenes import PoseSpec, render_scene
 
 import cv2
 import numpy as np
@@ -244,7 +244,7 @@ def test_bad_marker_size_and_empty_input_are_handled():
             continue
         raise AssertionError(f"边长 {bad!r} 应当被拒绝")
 
-    from up70_vision.core.pose import estimate_poses
+    from up70_vision.pose import estimate_poses
     matrix = np.array([[800.0, 0, 640.0], [0, 800.0, 512.0], [0, 0, 1.0]])
     assert estimate_poses([], MARKER_MM, matrix, None) == []
 

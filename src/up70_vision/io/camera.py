@@ -26,8 +26,8 @@ from ctypes import POINTER, byref, c_ubyte, cast, memset, sizeof
 
 import numpy as np
 
-from ..core.types import Frame
-from ..utils.logging import get_logger
+from ..types import Frame
+from ..logging import get_logger
 from .base import FrameSource
 
 log = get_logger("io.camera")

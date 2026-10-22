@@ -51,7 +51,7 @@ step "环境自检（末行应是「结果：全部通过」）" \
     "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision doctor
 
 step "OpenCV 冒烟（末行应是「OpenCV 冒烟测试 -> PASS」）" \
-    "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision.tools.demo
+    "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision.tools.env.demo
 
 step "跑一批合成图（产出 output/demo/）" \
     "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision run --set input.source=synthetic

@@ -46,7 +46,7 @@ clips/
 
 ## 与算法开发的关系
 
-有素材之前，用合成图开发算法（**待 `cli.py` 与 `io/synthetic.py` 重建后生效**）——合成图的颜色、位置、噪声完全可控，比真实数据更适合定位算法 bug。
+有素材之前，用合成图开发算法（`python -m up70_vision run --set input.source=synthetic`）——合成图的颜色、位置、噪声完全可控，比真实数据更适合定位算法 bug。
 
 有素材之后，用回放验证（**待 `io/replay.py` 与回放入口重建后生效**）：
 

@@ -8,19 +8,19 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
+    from up70_vision.detectors.base import build_detector
+    from up70_vision.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import ArucoMarker, Detection, is_marker
+    from up70_vision.color import parse_thresholds
+    from up70_vision.types import ArucoMarker, Detection, is_marker
     from up70_vision.io.synthetic import SyntheticSource
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
+    from up70_vision.detectors.base import build_detector
+    from up70_vision.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import ArucoMarker, Detection, is_marker
+    from up70_vision.color import parse_thresholds
+    from up70_vision.types import ArucoMarker, Detection, is_marker
     from up70_vision.io.synthetic import SyntheticSource
 
 import numpy as np

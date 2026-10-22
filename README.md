@@ -21,7 +21,7 @@ docker compose -f .devcontainer/docker-compose.yml build
 docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision doctor
 
 # 3) OpenCV 冒烟：应看到「OpenCV 冒烟测试 -> PASS」
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision.tools.demo
+docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision.tools.env.demo
 ```
 
 **一条命令版**：`./demo.sh` 把上面三步再加一步「跑一批合成图」串起来，
@@ -165,20 +165,22 @@ python -m up70_vision calibrate --capture 15 --board 9x6 --square-mm 23
 
 ```text
 up70_vision/
-├── src/up70_vision/
-│   ├── core/            纯算法层：不读文件、不开窗口
-│   │   ├── detectors/   blob 判色 / stub_aruco 假码 / aruco 真码 / yolo
-│   │   ├── pose.py      solvePnP + 两条硬校验（重投影 RMS、z 前向性）
-│   │   ├── calibration.py 内参、去畸变、按分辨率等比缩放
-│   │   └── types.py     Detection / ArucoMarker / MarkerPose
-│   ├── io/              输入源：camera（MVS）/ replay / synthetic
-│   ├── viz/             画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
-│   ├── config/          YAML 加载、字段校验、--set 覆盖
-│   ├── utils/           图像读写、日志、控制台编码
-│   ├── tools/           生成器与自检工具（gen_* / *_check / calibrate_camera / hsv_tuner）
-│   ├── cli/             唯一业务实现：parsers / run / live / report
-│   ├── api.py           库调用门面：detect(image_bgr, "aruco")
-│   └── __main__.py      单一命令入口：python -m up70_vision <子命令>
+├── src/up70_vision/            # 平铺：算法模块都在包根（2026-10-22 去掉 core/ 与 utils/）
+│   ├── types.py                Detection / ArucoMarker / MarkerPose 数据结构
+│   ├── color.py                HSV 判色：多段阈值、红色跨色相环绕、命中率
+│   ├── pipeline.py             逐帧「检测 -> 判色 -> 匹配计分」
+│   ├── calibration.py          内参、去畸变、按分辨率等比缩放
+│   ├── pose.py                 solvePnP + 两条硬校验（重投影 RMS、z 前向性）
+│   ├── image_io.py             图像读写（中文路径兜底）
+│   ├── logging.py              日志配置（整个进程调一次）
+│   ├── detectors/              blob 判色 / stub_aruco 假码 / aruco 真码 / yolo
+│   ├── io/                     输入源：camera（MVS）/ replay / synthetic
+│   ├── viz/                    画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
+│   ├── config/                 YAML 加载、字段校验、--set 覆盖
+│   ├── tools/                  工具按功能分组：env / aruco / blob / yolo / calibration / pose / doc
+│   ├── cli/                    命令行编排：parsers / run / live
+│   ├── api.py                  库调用门面：detect(image_bgr, "aruco")
+│   └── __main__.py             单一命令入口：python -m up70_vision <子命令>
 ├── configs/             default.yaml、color_thresholds.yaml、内参快照
 ├── assets/              aruco/（9 张真值图）、calib/（棋盘 PNG+PDF）、models/、readme/
 ├── tests/               回归测试 103 项，可 python tests/test_xxx.py 独立跑
@@ -191,12 +193,12 @@ up70_vision/
 依赖方向是硬约束，下层不知道上层存在：
 
 ```text
-utils ┐
-      ├─> core ─> io ─> viz ─> cli ─> __main__.py
-config ┘
+config ┐
+       ├─> 根级算法模块（types/color/pipeline/calibration/pose/detectors）─> io ─> viz ─> cli ─> __main__.py
+image_io/logging ┘                                                                          └─> api.py
 ```
 
-`core/` 不 import ROS、不读文件、不开窗口；`viz/` 只画和写文件，不改检测结果；
+根级算法模块不 import ROS、不读文件、不开窗口；`viz/` 只画和写文件，不改检测结果；
 `cli/` 是编排层，`api.py` 与 `__main__.py` 是它之上的两个门面（库调用 / 命令行）。
 
 ---
@@ -227,7 +229,7 @@ config ┘
 
 | 项 | 命令 | 期望 |
 |---|---|---|
-| 环境 / 冒烟 | `python -m up70_vision doctor`、`python -m up70_vision.tools.demo` | 末行「结果：全部通过」/ `PASS` |
+| 环境 / 冒烟 | `python -m up70_vision doctor`、`python -m up70_vision.tools.env.demo` | 末行「结果：全部通过」/ `PASS` |
 | ArUco 图组 | `python -m up70_vision check-aruco` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
 | 真机链路 | `python -m up70_vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
 | 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **103 项全过** |
@@ -235,8 +237,7 @@ config ┘
 约定：
 
 - 镜像里没有 pytest，`tests/` 每个文件都能用 `python` 直接跑（内置独立运行器）；CI 里用 `pytest`。
-- 在 **Windows 宿主机**上跑会有 1 项失败：`test_config` 里断言 POSIX 绝对路径（`/abs` 在 Windows 上不是绝对路径），
-  与业务无关，容器 / CI（Ubuntu）里 103 项全过。
+- `test_config` 里那条绝对路径断言已按平台规整（`os.path.normpath`），Windows 与容器都是 103/103。
 - 断言必须带具体数字（如 `9/9`、`≤ 0.23 px`），不写 `assert x > 0`。
 - 改 `src/` 前先跑 `doctor`；碰 ArUco 跑 `check-aruco`，碰位姿跑一次真机实时。
 - 合成图上的精度基线（82.5 mm 码：距离 0.02%–0.42%、倾角 15°–75° 误差 0.05–0.42°）用
@@ -256,7 +257,7 @@ config ┘
 | `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m up70_vision clean` 清掉 |
 | `__pycache__/`、`*.pyc` | Python 字节码缓存 | 同上，一并清掉 |
 | `data/` | 数据集、回放素材、标定原图（几十 MB 到几 GB） | 按 `data/README.md` 各自本地准备 |
-| `docs/*.html` | 教程的构建产物 | 要就 `python -m up70_vision.tools.gen_html` 自己生成 |
+| `docs/*.html` | 教程的构建产物 | 要就 `python -m up70_vision.tools.doc.gen_html` 自己生成 |
 | `assets/models/*.onnx`、`*.pt` | 模型权重 | `python -m up70_vision export-yolo` 自己导出 |
 | `configs/camera_calibration*.yaml` | 每台相机一份的内参 | 向做过标定的队友要，或自己标 |
 

@@ -8,8 +8,8 @@
     不放检测或判色逻辑。
 
 依赖谁
-    只依赖 core.types（Frame）。**不 import config** —— 配置由 cli.py 拆成普通参数
-    传给 build_source（见 base.py）。这一行以前写的是"依赖 core.types 与 config"，
+    只依赖 types（Frame）。**不 import config** —— 配置由 `cli/run.py` 拆成普通参数
+    传给 build_source（见 base.py）。这一行以前写的是"依赖 types 与 config"，
     与 base.py 和 docs/interface.md 第 5 节矛盾，按契约欠账三改正。
 
 当前状态

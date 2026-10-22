@@ -47,7 +47,7 @@ color:
   min_valid_pixels: 25
 
 # ================================================================ 颜色范围
-# 调参方式（tools/hsv_tuner.py，需要 GUI）：
+# 调参方式（tools/blob/hsv_tuner.py，需要 GUI）：
 #   python -m up70_vision hsv-tuner --image <一张包含该颜色的图>
 #   拖滑条调到只剩目标颜色在掩码里发白，回车会把阈值写回本文件（注释全部保留）。
 

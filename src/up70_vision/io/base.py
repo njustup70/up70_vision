@@ -4,7 +4,7 @@
     None 表示这一路输入已经结束。上层管线不关心图像是合成的、回放的、还是实拍的。
 
 依赖谁
-    只依赖 core.types（Frame）。配置由上层拆成普通参数传进来，
+    只依赖 types（Frame）。配置由上层拆成普通参数传进来，
     因此本模块不 import config，避免包级依赖打结。
 
 摄像头（camera.py）
@@ -18,8 +18,8 @@
 
 from abc import ABC, abstractmethod
 
-from ..core.types import Frame
-from ..utils.logging import get_logger
+from ..types import Frame
+from ..logging import get_logger
 
 log = get_logger("io.base")
 

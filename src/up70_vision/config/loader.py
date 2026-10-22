@@ -14,8 +14,8 @@
     同名键就以它为准），所以 `--set color.hit_ratio_min=0.6` 与 `cfg.color.*` 的
     语义完全没变，只是默认值的来源换了一个文件。
 
-为什么读文件的事都在这里而不在 core/
-    `core/` 是纯算法层，不读文件（契约第 5 节）。内参 YAML 的解析属于"加载"，
+为什么读文件的事都在这里而不在算法模块
+    根级算法模块是纯算法层，不读文件（契约第 5 节）。内参 YAML 的解析属于"加载"，
     和阈值表同性质，所以放这一层：`load_thresholds()` 给判色，`load_intrinsics()` 给位姿。
     两处的相对路径都相对配置文件目录解析——换工作目录不会读错文件。
 """
@@ -24,7 +24,7 @@ import os
 
 import yaml
 
-from ..core.color import parse_thresholds
+from ..color import parse_thresholds
 from .schema import AppConfig, ConfigError, from_dict
 
 DEFAULT_CONFIG_CANDIDATES = (
@@ -212,7 +212,7 @@ def merge_color_settings(data: dict, config_path: str) -> dict:
 def load_thresholds(path: str) -> dict:
     """读阈值表 YAML 并校验成内部结构（丢掉文件头的 `color:` 门槛段）。
 
-    core.color.parse_thresholds 抛的是 ValueError，这里统一成 ConfigError，
+    color.parse_thresholds 抛的是 ValueError，这里统一成 ConfigError，
     让 CLI 只需处理一种异常。
 
     :param path: 阈值表路径
@@ -245,13 +245,13 @@ def load_intrinsics(path: str):
         那些数由 `python -m up70_vision calibrate` 标定完写成一个 YAML，这里只是把它读回来。
 
     :param path: 标定文件路径
-    :return: `core.calibration.CameraIntrinsics`
+    :return: `calibration.CameraIntrinsics`
     :raises ConfigError: 文件不存在、不是合法 YAML、缺字段或字段取值非法。
 
         文件不存在是**最常见**的一种：它被 `.gitignore` 排除（每台相机一份），
         新 clone 的仓库一定没有，所以报错里直接给出生成命令，别让人去猜。
     """
-    from ..core.calibration import CameraIntrinsics
+    from ..calibration import CameraIntrinsics
 
     if not os.path.isfile(path):
         raise ConfigError(

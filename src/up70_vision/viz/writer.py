@@ -17,9 +17,9 @@ import csv
 import json
 import os
 
-from ..core.types import is_marker
-from ..utils.image_io import ensure_dir, write_image
-from ..utils.logging import get_logger
+from ..types import is_marker
+from ..image_io import ensure_dir, write_image
+from ..logging import get_logger
 
 log = get_logger("viz.writer")
 

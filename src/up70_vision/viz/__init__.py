@@ -7,7 +7,7 @@
     不改变检测结果，只负责呈现。落盘的数据要能被 pandas / numpy 直接读成数组。
 
 依赖谁
-    只依赖 core.types。
+    只依赖 types。
 
 当前为空，未来第一件事
     先写 viz/draw.py（在 BGR 图上画框与标签），再写 viz/writer.py（落盘与目录管理）。

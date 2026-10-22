@@ -14,7 +14,7 @@ from math import ceil, sqrt
 import cv2
 import numpy as np
 
-from ..core.types import Frame, bbox_from_xywh
+from ..types import Frame, bbox_from_xywh
 from .base import FrameSource
 
 # 内置颜色 → BGR。判色用的是 HSV 阈值表，这里只负责"把颜色画出来"。
