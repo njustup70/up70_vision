@@ -63,3 +63,10 @@ knowledge/docs/*.html
 
 # 相机标定结果：每台相机/每个场地一份，由 scripts/calibrate_camera.py 生成
 configs/camera_calibration*.yaml
+
+# 录制的 bag：体积大（深度 848x480@30fps 约 27 MB/s，35 秒就是 930 MB），不进版本库；
+#   每个 bag 目录里必须有一份 meta.yaml（计划书要求 bag 与 meta 同存），meta 是文本、要入库。
+#   注意这里写成 bags/*/* 而不是 bags/*：写成 bags/* 会连 raw_001/ 目录本身一起忽略，
+#   而 Git 里父目录一旦被忽略，就没法用 ! 把里面的 meta.yaml 捞回来。
+bags/*/*
+!bags/*/meta.yaml

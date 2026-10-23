@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vision_depth</name>
+  <version>0.0.1</version>
+  <description>深度相机抓取检测的 ROS 外壳：只做收消息 / 调 vision.depth / 发消息，算法一行不放这里</description>
+  <maintainer email="up70@example.com">up70</maintainer>
+  <license>Proprietary</license>
+
+  <!-- 只声明 ROS 依赖。pip 依赖（vision 包）写在 Dockerfile，两者不混 -->
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

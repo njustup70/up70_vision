@@ -1,0 +1,29 @@
+# 336L（Gemini 330 系列）相机参数：只有 ROS 节点用，算法侧不读这个文件。
+#
+# 填 0 表示「用相机默认档」。下面这些值要等 A1 跑通后按实测结果改，
+# 改完同步更新本文件——它是 launch 默认值的唯一记录处。
+camera_name: camera
+
+depth:
+  width: 0
+  height: 0
+  fps: 0
+  # true：深度值按 scale 换算成毫米（16UC1）。关掉会让所有距离错一个量级且不报错
+  enable_depth_scale: true
+
+color:
+  enable: true
+  width: 0
+  height: 0
+  fps: 0
+
+# 官方默认 true，但同步器会等彩色帧：一旦关彩色，深度会整条停发。
+# 纯深度调试时这两项要一起关。第零段用不到同步，默认关。
+frame_sync:
+  enable: false
+
+# 点云必须关：1280x800 的 PointCloud2 是 16.4 MB/帧，30fps 近 500 MB/s，
+# 会打满 DDS 缓冲。融合节点订阅深度图自己反投影。
+point_cloud:
+  enable: false
+  enable_colored: false
