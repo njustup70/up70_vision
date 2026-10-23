@@ -181,7 +181,6 @@ lab/                        一次性工具：check_aruco / pose_check / calibra
 configs/                    场地参数（lab 与 vision 都读）
 knowledge/                  知识资产：docs（文档）、calibration（棋盘）、models（权重）、images（截图）
 tests/                      回归测试 107 项 + 测试夹具（assets/aruco）
-knowledge/docs/                       契约 / 规范 / 教程 / 进度 / archive
 .devcontainer/              Dockerfile、CPU/GPU compose、pkgs
 data/  output/              数据集与运行产物（不进版本库）
 ```
@@ -201,7 +200,7 @@ image_io/logging ┘                                                            
 
 ## 附录 B · 命令全表
 
-**主入口只有 6 条**（`knowledge/docs/迁移计划书` D3）：`python -m vision` 不带参数就是这个表。
+**主入口只有 6 条**（迁移计划书 D3）：`python -m vision` 不带参数就是这个表。
 一年用不到三次的功能全部移到 `lab/`，直接 `python lab/xxx.py` 跑。
 
 | 主入口 | 干什么 |
@@ -236,7 +235,7 @@ image_io/logging ┘                                                            
 | 环境 / 冒烟 | `python -m vision doctor`、`python -m vision demo` | 末行「结果：全部通过」/ `PASS` |
 | ArUco 图组 | `python lab/check_aruco.py` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
 | 真机链路 | `python -m vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
-| 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **103 项全过** |
+| 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **107 项全过** |
 
 约定：
 
