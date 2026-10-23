@@ -107,7 +107,7 @@ def run_aruco_live(argv=None) -> int:
         ┌─ read() 取一帧 ───────────────────────────────────────────┐
         │  1. 量帧间隔 dt，更新 fps 滑动平均                        │
         │  2. detect(image_bgr) -> list[ArucoMarker]（每帧重算）    │
-        │  3. draw_detections 画四边形/中心/id 标签                 │
+        │  3. draw_all 画四边形/中心/id 标签（按检出物类型分流）    │
         │  4. （pose.enabled 时）逐码 estimate_pose -> 画坐标轴      │
         │  5. draw_hud 画左上角 HUD（来源#帧号 / markers / fps）    │
         │  6. 输出：headless 落盘 **或** 窗口 imshow + waitKey(1)   │
@@ -284,7 +284,7 @@ def run_aruco_live(argv=None) -> int:
                 # 人话：把这一帧交给"找码工具"，它返回"这一帧里有哪几个码、在哪"。
                 #       上一帧的结果到这里就作废——否则码移走了、框还留在原地。
                 markers = detector.detect(frame.image_bgr)
-                canvas = draw_detections(frame.image_bgr, markers)   # 返回副本，不改原帧
+                canvas = draw_all(frame.image_bgr, markers)   # 返回副本，不改原帧
                 ids = [int(m.marker_id) for m in markers]           # 升序（检测器契约保证）
 
                 # ---- 位姿：逐码解算，单个码失败不影响这一帧的其它码 ----
