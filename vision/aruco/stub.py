@@ -58,7 +58,7 @@ import math
 
 import numpy as np
 
-from ..aruco.types import ArucoMarker
+from .types import ArucoMarker
 
 
 class StubArucoDetector:

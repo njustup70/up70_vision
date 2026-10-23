@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 
 from ..logging import get_logger
 from .color_check import DEFAULT_MIN_VALID_PIXELS, judge_color
-from ..aruco.types import ArucoMarker
 from ..types import Detection, Frame, iou
 
 log = get_logger("pipeline")
@@ -70,7 +69,7 @@ class FrameResult:
     @property
     def ids(self) -> list:
         """本帧检出的 ArUco 码 ID（升序）。判色族的框没有 ID，返回 `[]`。"""
-        return sorted(int(d.marker_id) for d in self.detections if isinstance(d, ArucoMarker))
+        return sorted(int(d.marker_id) for d in self.detections if hasattr(d, 'marker_id'))
 
     def color_counts(self) -> dict:
         counts = {}

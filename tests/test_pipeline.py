@@ -12,7 +12,8 @@ try:
     from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
     from vision.yolo.color_check import parse_thresholds
-    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
     from vision.types import Detection
     from vision.sources.synthetic import SyntheticSource
 except ModuleNotFoundError:
@@ -21,7 +22,8 @@ except ModuleNotFoundError:
     from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
     from vision.yolo.color_check import parse_thresholds
-    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
     from vision.types import Detection
     from vision.sources.synthetic import SyntheticSource
 

@@ -167,8 +167,3 @@ class MarkerPose:
             "reproj_rms_px": round(self.reproj_rms_px, 3),
             "ambiguous": bool(self.ambiguous),
         }
-
-
-def is_marker(det) -> bool:
-    """这个检测结果是 ArUco 码吗？（消费方用它分流判色/绘制/落盘）"""
-    return isinstance(det, ArucoMarker)

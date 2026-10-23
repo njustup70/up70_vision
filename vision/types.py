@@ -139,3 +139,12 @@ def clip_bbox(bbox: BBox, width: int, height: int) -> BBox:
 def bbox_from_xywh(x: int, y: int, w: int, h: int) -> BBox:
     """(x, y, w, h) -> (x1, y1, x2, y2)，半开上界。"""
     return (int(x), int(y), int(x + w), int(y + h))
+
+
+def is_marker(det) -> bool:
+    """判断一个检出物是不是 ArUco 码（门面与 CLI 都用它分流两种产出）。
+
+    用鸭子类型（有 `marker_id` 就是码）而不是 isinstance：
+    根级 `types.py` 是叶子，不能 import 功能包；而 `ArucoMarker` 住在 `aruco/types.py`。
+    """
+    return hasattr(det, "marker_id")

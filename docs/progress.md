@@ -45,7 +45,7 @@
 | M1 环境标准化 | ✅ 完成 | Docker 化：镜像 + compose + devcontainer；镜像已真实 build 成功 | — |
 | M2 核心算法实现 | ✅ 完成（摄像头源除外） | 根级算法模块判色与管线、`sources/` 合成图与回放、`viz/` 落盘、`config/` 加载、`cli/` 编排 | 摄像头接入见 M6 |
 | M3 回归测试 | ✅ 完成 | `tests/`：**36 项**（2026-10-16 复核整改后由 28 项增至 36）、断言带具体数字、双环境通过 | — |
-| M7 契约落地 | ✅ 完成 | `docs/interface.md` 定稿（`Frame`/`Detection`/`ArucoMarker`/`Detector`/`FrameSource`）；新增 `stub_aruco.py` 按契约返回假 `ArucoMarker`；真实现 `aruco.py` 由搭档交付 | 真实现见 ArUco 分支 |
+| M7 契约落地 | ✅ 完成 | `docs/interface.md` 定稿（`Frame`/`Detection`/`ArucoMarker`/`Detector`/`FrameSource`）；新增 `aruco/stub.py` 按契约返回假 `ArucoMarker`；真实现 `aruco.py` 由搭档交付 | 真实现见 ArUco 分支 |
 | M8 真 ArUco（飞书任务一） | ✅ 完成 | `aruco/detector.py` + `tools/aruco/gen_scenes.py` + `tools/aruco/check.py` + `assets/aruco/`（9 张图 + 真值）+ 14 项测试；按契约返回 `list[ArucoMarker]` | 位姿估计（内参 + solvePnP，附加题）顺延阶段二 |
 | M9 相机标定（尝试做 1） | ✅ 完成 | `aruco/calibration.py` + `tools/calibration/calibrate.py` + `tools/calibration/gen_board.py` + `docs/相机标定.md` + 9 项测试；输出内参与畸变系数 YAML | 真机标定要打印一块棋盘（工具已就绪） |
 | M10 位姿估计（任务单第 2、3 条） | ✅ 完成（合成数据） | `aruco/pose.py` + `viz.draw_pose_axes` + 实时入口输出 + `tools/pose/gen_scenes.py` / `pose_check.py` / `pose_sweep.py` + `docs/位姿估计.md` + 11 项测试 | 真机精度要等内参文件与实测码边长；合成图不含镜头畸变 |
@@ -75,7 +75,7 @@ M8 真 ArUco、M9 相机标定、M10 位姿估计。
    - B：镜像内下载——官方要登录，不可靠
    - C：挂载宿主机 `/opt/MVS` 进容器——省事但破坏"环境一律 Docker"
 3. `.devcontainer/docker-compose.yml` 加 `devices: ["/dev/bus/usb:/dev/bus/usb"]`（USB3 Vision 走 libusb，**不是 `/dev/video0`**）；udev 规则必须在宿主机
-4. 文档纠错：`README.md`（第 60 行附近）与 `vision/io/__init__.py` 都写的"摄像头（UVC）"，与事实不符
+4. 文档纠错：`README.md`（第 60 行附近）与 `vision/sources/__init__.py` 都写的"摄像头（UVC）"，与事实不符
 5. 配置面：`configs/default.yaml` 新增 `input.camera:`（index / 曝光 / 增益 / 超时）
 
 **第 2 步：相机标定（像素 → 毫米）**

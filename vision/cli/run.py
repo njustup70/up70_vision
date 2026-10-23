@@ -26,7 +26,7 @@ from ..config.loader import (load_config, load_thresholds,
                              resolve_thresholds_path)
 from ..config.schema import ConfigError
 from ..yolo.pipeline import ColorConfig, process_frames, summarize
-from ..aruco.types import is_marker
+from ..types import is_marker
 from ..sources import build_source
 from ..logging import setup_logging
 from .output import draw_hud
@@ -51,7 +51,7 @@ def build_detector(name: str, params: dict | None = None):
         from ..yolo.detector import YoloDetector
         return YoloDetector(**params)
     if key in ("stub_aruco", "stub"):
-        from ..yolo.stub import StubArucoDetector
+        from ..aruco.stub import StubArucoDetector
         return StubArucoDetector(**params)
     if key == "aruco":
         from ..aruco.detector import ArucoDetector
