@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import zlib
 from dataclasses import dataclass
 
