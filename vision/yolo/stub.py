@@ -58,11 +58,10 @@ import math
 
 import numpy as np
 
-from ..types import ArucoMarker
-from .base import Detector
+from ..aruco.types import ArucoMarker
 
 
-class StubArucoDetector(Detector):
+class StubArucoDetector:
     """按契约伪造 ArUco 码的检测器（无模型、无相机也能跑通链路）。
 
     用大白话说

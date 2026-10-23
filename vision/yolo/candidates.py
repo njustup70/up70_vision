@@ -3,9 +3,9 @@
 为什么先做它
     YOLO 需要标注数据集和确定的物块本体，都还没定（见 docs/progress.md 第七节）。
     而"哪里有东西"这一步用颜色分割就能先顶上，链路先跑通、接口先冻结，
-    将来把 detectors/ 换成 yolo.py 即可，判色与下游一行都不用改。
+    将来把 aruco/ 与 yolo/ 换成 yolo.py 即可，判色与下游一行都不用改。
 
-两条约定（detectors/__init__.py）
+两条约定（aruco/__init__.py 与 yolo/__init__.py）
     1. 返回的 Detection.class_name 填 "unknown"、class_id 填 -1
     2. bbox 用绝对像素坐标，右/下边界是半开上界
 """
@@ -13,12 +13,11 @@
 import cv2
 import numpy as np
 
-from ..color import valid_pixel_mask
+from .color_check import valid_pixel_mask
 from ..types import Detection, bbox_from_xywh
-from .base import Detector
 
 
-class BlobDetector(Detector):
+class BlobDetector:
     name = "blob"
 
     def __init__(self,

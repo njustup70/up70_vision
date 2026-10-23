@@ -136,8 +136,8 @@ YOLOv8 的代码与权重都是 **AGPL-3.0**。队内自用没问题；但如果
 
 | 东西 | 位置 |
 |---|---|
-| 检测器实现 | `vision/detectors/yolo.py` |
-| 工厂与注册 | `vision/detectors/base.py`（`DETECTOR_NAMES`） |
+| 检测器实现 | `vision/yolo/detector.py` |
+| 工厂与注册 | `vision/aruco/ 与 yolo/base.py`（`DETECTOR_NAMES`） |
 | 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`vision/config/schema.py` |
 | 导出脚本 | `python lab/export_yolo.py`（实现 `vision/tools/yolo/export.py`） |
 | 权重与说明 | `assets/models/`（权重被 gitignore，只有 README 入库） |

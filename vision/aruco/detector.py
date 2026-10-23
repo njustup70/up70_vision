@@ -21,8 +21,7 @@
 
 import numpy as np
 
-from ..types import ArucoMarker
-from .base import Detector
+from .types import ArucoMarker
 
 DEFAULT_DICTIONARY = "DICT_4X4_50"
 
@@ -86,7 +85,7 @@ def predefined_dictionary(name: str):
     return cv2.aruco.getPredefinedDictionary(dictionary_id), key
 
 
-class ArucoDetector(Detector):
+class ArucoDetector:
     """DICT_4X4_50 的 ArUco 检测器（同图多码 + 旋转都能出）。
 
     输出顺序：**按 `marker_id` 升序**（契约 2.2 第 2 条）——同一块码每帧都排在同一位，

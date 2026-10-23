@@ -30,8 +30,8 @@ import cv2
 from ..config.loader import (load_config, load_intrinsics, load_thresholds,
                              resolve_calibration_path, resolve_thresholds_path)
 from ..config.schema import ConfigError
-from ..detectors.base import build_detector
-from ..pose import estimate_pose
+from .run import build_detector
+from ..aruco.pose import estimate_pose
 from ..io.base import build_source
 from ..image_io import write_image
 from ..logging import setup_logging

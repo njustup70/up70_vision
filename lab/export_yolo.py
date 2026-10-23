@@ -1,7 +1,7 @@
 """把 YOLO 权重导出成 ONNX（顺带写一份类名 sidecar）。
 
 为什么需要它
-    仓库里跑推理只依赖 OpenCV（`detectors/yolo.py` 用 `cv2.dnn`），而导出
+    仓库里跑推理只依赖 OpenCV（`yolo/detector.py` 用 `cv2.dnn`），而导出
     ONNX 需要 `ultralytics` + `torch`。所以导出**只在开发机上做一次**，产物是：
         assets/models/yolov8n.onnx          12.9 MB 的模型
         assets/models/yolov8n.names.json    类名表（零依赖可读，容器里不需要 onnx 包）

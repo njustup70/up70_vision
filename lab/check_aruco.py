@@ -33,7 +33,7 @@ import sys
 
 import numpy as np
 
-from vision.detectors.aruco import ArucoDetector, check_opencv_aruco
+from vision.aruco.detector import ArucoDetector, check_opencv_aruco
 from vision.image_io import read_image_bgr
 from vision.logging import get_logger, setup_logging
 from gen_aruco import DEFAULT_OUT_DIR, iter_scene_images, load_truth

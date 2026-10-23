@@ -25,17 +25,17 @@ from pathlib import Path
 
 try:
     from vision.config.schema import ConfigError, from_dict
-    from vision.detectors.aruco import ArucoDetector
-    from vision.detectors.base import build_detector
-    from vision.types import ArucoMarker
+    from vision.aruco.detector import ArucoDetector
+    from vision.cli.run import build_detector
+    from vision.aruco.types import ArucoMarker
     from lab.gen_aruco import (load_truth, scene_rotated)
     from vision.image_io import read_image_bgr
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.config.schema import ConfigError, from_dict
-    from vision.detectors.aruco import ArucoDetector
-    from vision.detectors.base import build_detector
-    from vision.types import ArucoMarker
+    from vision.aruco.detector import ArucoDetector
+    from vision.cli.run import build_detector
+    from vision.aruco.types import ArucoMarker
     from lab.gen_aruco import (load_truth, scene_rotated)
     from vision.image_io import read_image_bgr
 

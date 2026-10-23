@@ -44,7 +44,7 @@ import yaml
 
 from vision.config.loader import (find_default_config, read_yaml, resolve_path,
                              split_thresholds_doc)
-from vision.color import mask_for_segments, parse_thresholds, valid_pixel_mask
+from vision.yolo.color_check import mask_for_segments, parse_thresholds, valid_pixel_mask
 from vision.io.base import build_source
 from vision.image_io import read_image_bgr
 from vision.logging import get_logger, setup_logging

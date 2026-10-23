@@ -10,11 +10,13 @@ from pathlib import Path
 
 try:
     from vision.api import detect
-    from vision.types import ArucoMarker, Detection
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.api import detect
-    from vision.types import ArucoMarker, Detection
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection
 
 import numpy as np
 

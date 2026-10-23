@@ -13,12 +13,12 @@ import sys
 from pathlib import Path
 
 try:
-    from vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
-                                        clip_bbox, is_marker, iou)
+    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import Detection, Frame, bbox_from_xywh, clip_bbox, iou
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
-                                        clip_bbox, is_marker, iou)
+    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import Detection, Frame, bbox_from_xywh, clip_bbox, iou
 
 import numpy as np
 

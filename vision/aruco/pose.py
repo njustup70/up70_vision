@@ -50,9 +50,9 @@ import numpy as np
 
 from .types import ArucoMarker, MarkerPose
 
-# cv2 在函数内 import 而不是模块顶部：与 `calibration.py`、`detectors/aruco.py`
+# cv2 在函数内 import 而不是模块顶部：与 `aruco/calibration.py`、`aruco/detector.py`
 # 一致，`import vision.pose` 不该顺带把 OpenCV 的初始化开销带进来。
-# （`color.py`、`detectors/blob.py` 是顶层 import，属既有的两种风格并存，未统一。）
+# （`yolo/color_check.py`、`yolo/candidates.py` 是顶层 import，属既有的两种风格并存，未统一。）
 
 #: 可选的求解方法（configs/default.yaml 的 pose.method 只能填这些）
 #:   ippe_square：专为「正方形、共面、四个点」设计，闭式解、不要初值；能给出两个解

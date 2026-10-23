@@ -34,9 +34,9 @@ import os
 import numpy as np
 
 from vision.config.loader import load_intrinsics
-from vision.calibration import scale_intrinsics
-from vision.detectors.aruco import ArucoDetector
-from vision.pose import DEFAULT_METHOD
+from vision.aruco.calibration import scale_intrinsics
+from vision.aruco.detector import ArucoDetector
+from vision.aruco.pose import DEFAULT_METHOD
 from .gen_scenes import DEFAULT_MARKER_MM
 from .check import (DEFAULT_MAX_DIST_ERR, DEFAULT_MAX_RMS_PX, DEFAULT_MAX_TILT_ERR_DEG,
                     IMAGE_SUFFIXES, K_MISMATCH_RATIO, check_one, load_truth)

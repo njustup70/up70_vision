@@ -42,8 +42,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from vision.calibration import scale_intrinsics
-from vision.pose import marker_object_points, pose_metrics
+from vision.aruco.calibration import scale_intrinsics
+from vision.aruco.pose import marker_object_points, pose_metrics
 
 #: 默认画布。与相机标定文档里的那台相机同分辨率（1280×1024）。
 DEFAULT_CANVAS = (1280, 1024)

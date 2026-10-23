@@ -8,19 +8,21 @@ import sys
 from pathlib import Path
 
 try:
-    from vision.detectors.base import build_detector
-    from vision.pipeline import (ColorConfig, match_to_truth, process_frame,
+    from vision.cli.run import build_detector
+    from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from vision.color import parse_thresholds
-    from vision.types import ArucoMarker, Detection, is_marker
+    from vision.yolo.color_check import parse_thresholds
+    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import Detection
     from vision.io.synthetic import SyntheticSource
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from vision.detectors.base import build_detector
-    from vision.pipeline import (ColorConfig, match_to_truth, process_frame,
+    from vision.cli.run import build_detector
+    from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from vision.color import parse_thresholds
-    from vision.types import ArucoMarker, Detection, is_marker
+    from vision.yolo.color_check import parse_thresholds
+    from vision.aruco.types import ArucoMarker, is_marker
+    from vision.types import Detection
     from vision.io.synthetic import SyntheticSource
 
 import numpy as np

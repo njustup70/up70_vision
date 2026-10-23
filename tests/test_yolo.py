@@ -22,16 +22,16 @@ import numpy as np
 
 try:
     from vision.config.schema import ConfigError, from_dict
-    from vision.detectors.base import DETECTOR_NAMES, build_detector
-    from vision.detectors.yolo import (YoloDetector, decode_predictions,
+    from vision.cli.run import build_detector
+    from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
     from vision.viz.draw import detection_label
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.config.schema import ConfigError, from_dict
-    from vision.detectors.base import DETECTOR_NAMES, build_detector
-    from vision.detectors.yolo import (YoloDetector, decode_predictions,
+    from vision.cli.run import build_detector
+    from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
     from vision.viz.draw import detection_label
@@ -225,7 +225,6 @@ def test_label_stays_unknown_when_nothing_is_known():
 
 # ---------------------------------------------------------------- 注册与配置
 def test_factory_registers_yolo():
-    assert "yolo" in DETECTOR_NAMES, DETECTOR_NAMES
     det = build_detector("yolo", {"weights": "dummy.onnx"})
     assert isinstance(det, YoloDetector)
     assert det.name == "yolo"

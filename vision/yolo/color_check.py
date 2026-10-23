@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from .types import BBox, clip_bbox
+from ..types import BBox, clip_bbox
 
 # 一段阈值的六个分量：h_lo, s_lo, v_lo, h_hi, s_hi, v_hi
 Segment = tuple[int, int, int, int, int, int]

@@ -6,7 +6,7 @@
     所以它按「毫米 + DPI」算像素，而不是按图里随便多少像素。
 
 放什么 / 不放什么
-    只放"把一块板画出来"。找角点、解内参都在 `calibration.py` 与 `calibrate_camera.py`。
+    只放"把一块板画出来"。找角点、解内参都在 `aruco/calibration.py` 与 `calibrate_camera.py`。
 
 依赖谁 / 被谁用
     依赖 `calibration`（板子参数）与 `image_io`（写图）。入口：`python lab/gen_chessboard.py`。
@@ -41,7 +41,7 @@ import argparse
 import os
 import sys
 
-from vision.calibration import BoardSpec
+from vision.aruco.calibration import BoardSpec
 from vision.image_io import ensure_dir, write_image
 from vision.logging import get_logger, setup_logging
 

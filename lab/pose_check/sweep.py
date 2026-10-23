@@ -32,9 +32,9 @@ import cv2
 import numpy as np
 
 from vision.config.loader import load_intrinsics
-from vision.calibration import scale_camera_matrix
-from vision.detectors.aruco import ArucoDetector
-from vision.pose import estimate_pose
+from vision.aruco.calibration import scale_camera_matrix
+from vision.aruco.detector import ArucoDetector
+from vision.aruco.pose import estimate_pose
 from vision.viz.draw import put_text
 from .gen_scenes import (DEFAULT_MARKER_MM, build_suite, render_scene,
                                synthetic_intrinsics)

@@ -32,7 +32,6 @@ import cv2
 import numpy as np
 
 from ..types import Detection
-from .base import Detector
 
 #: letterbox 的填充色（YOLO 官方预处理用 114 的灰，模型见过这个值，别改成 0）
 PAD_VALUE = 114
@@ -189,7 +188,7 @@ def decode_predictions(raw: np.ndarray, conf_threshold: float, iou_threshold: fl
     return results
 
 
-class YoloDetector(Detector):
+class YoloDetector:
     """ONNX 权重 + `cv2.dnn` 的 YOLO 检测器（默认 CPU）。"""
 
     name = "yolo"

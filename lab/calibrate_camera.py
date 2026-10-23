@@ -4,11 +4,11 @@
     标定分两步，这个工具一步做完：
       第一步「采图」：把棋盘板在镜头前摆十几个不同姿势各拍一张（太正、太斜、靠近、退远、转到
         画面四角都拍一点）。程序自动判断这张图能不能用——找不到板子就不收。
-      第二步「解算」：把这些图交给 `calibration.py`，得到焦距、光心、畸变系数，
+      第二步「解算」：把这些图交给 `aruco/calibration.py`，得到焦距、光心、畸变系数，
         再写进 `configs/camera_calibration.yaml` 给阶段二的位姿估计用。
 
 放什么 / 不放什么
-    放"采图 + 解算 + 落盘 + 打印报告"。**纯算法在 `calibration.py`**：
+    放"采图 + 解算 + 落盘 + 打印报告"。**纯算法在 `aruco/calibration.py`**：
     找角点、解 K、去畸变都在那边，这里只做 IO 与命令行。
     不碰实时检测/绘制——那是 `cli/run.py` 的事。
 
@@ -43,7 +43,7 @@ import sys
 import numpy as np
 
 from vision.config.loader import load_config, load_thresholds, resolve_thresholds_path
-from vision.calibration import (MIN_VIEWS, RMS_USABLE, BoardSpec, CameraIntrinsics,
+from vision.aruco.calibration import (MIN_VIEWS, RMS_USABLE, BoardSpec, CameraIntrinsics,
                                 calibrate, find_board_corners, undistort_image)
 from vision.io.base import build_source
 from vision.image_io import ensure_dir, read_image_bgr, write_image

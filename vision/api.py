@@ -7,7 +7,7 @@
 
 放什么 / 不放什么
     只放 `detect()` 这一个门面函数。**不复制任何逻辑**：内部仍然走
-    `config.loader` -> `detectors.base.build_detector` -> `pipeline`
+    `config.loader` -> `cli.run.build_detector` -> `pipeline`
     这条原链路，所以门面与 CLI 的行为永远一致（改算法只改一处）。
     不放 IO / 落盘 / 画图：相机、窗口、文件是 `io/` 与 `viz/` 的事，
     调用方自己决定什么时候用；门面只处理"已经拿到的那一帧"。
@@ -42,8 +42,8 @@ import os
 from .config.loader import (DEFAULT_THRESHOLDS, load_config, load_thresholds,
                            resolve_thresholds_path)
 from .config.schema import DETECTOR_DEFAULT_PARAMS, ConfigError, from_dict
-from .detectors.base import build_detector
-from .pipeline import ColorConfig, process_frame
+from .cli.run import build_detector
+from .yolo.pipeline import ColorConfig, process_frame
 from .types import Frame
 
 

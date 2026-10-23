@@ -97,7 +97,7 @@ class MarkerPose:
 
 ---
 
-## 3. 检测器接口：`detectors/`
+## 3. 检测器接口：`aruco/` 与 `yolo/`
 
 ### 3.1 `Detector` ✅
 
@@ -117,7 +117,7 @@ class Detector(ABC):
 
 | 取值 | 产出 | `class_name` / `class_id` |
 |---|---|---|
-| `blob` | `list[Detection]` | `"unknown"` / `-1`（颜色由 `color.py` 后续填） |
+| `blob` | `list[Detection]` | `"unknown"` / `-1`（颜色由 `yolo/color_check.py` 后续填） |
 | `aruco` / `stub_aruco` | `list[ArucoMarker]` | —（码没有颜色） |
 | `yolo` ✅（阶段二新增） | `list[Detection]` | **模型自己的类名与索引**（如 `"person"` / `0`） |
 
@@ -127,7 +127,7 @@ class Detector(ABC):
 
 ### 3.2 `ArucoDetector` ✅（任务二）
 
-同名同签名的两个实现：`detectors/aruco.py`（真，搭档交付）、`detectors/stub_aruco.py`（假，脚本化场景）。
+同名同签名的两个实现：`aruco/detector.py`（真，搭档交付）、`yolo/stub.py`（假，脚本化场景）。
 
 ```python
 def detect(self, image_bgr) -> list[ArucoMarker]
@@ -141,7 +141,7 @@ def detect(self, image_bgr) -> list[ArucoMarker]
 
 ---
 
-### 3.3 位姿接口（`pose.py`，**不是** `Detector`）
+### 3.3 位姿接口（`aruco/pose.py`，**不是** `Detector`）
 
 位姿不实现 `Detector`：它不吃图、吃的是检测结果，产出的是 `MarkerPose`。
 
@@ -228,5 +228,5 @@ class FrameSource(ABC):
 | 2026-10-16 | 复核：补 `utils` 与 `viz` 的规矩，标注 `input.camera` 尚未进 main | 逐文件对照源码 |
 | 2026-10-16 | 精简：9 节压到 6 节；判色族内容收进 2.3 一张表；配置字段、依赖方向、运行平台各压成一两句 | 当前只有 ArUco 部分是待建的，其余是已实现的事实登记；将来要用的等用得到时再展开 |
 | 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`stub_aruco.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
-| 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`pose.py` + `tests/test_pose.py` |
+| 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`aruco/pose.py` + `tests/test_pose.py` |
 | 2026-10-18 | 3.3 的签名补 `ambiguity_ratio` / `ambiguity_deg`；2.3 的 `yaw_deg` 区间笔误 `(180, 180]` 改为 `(−180, 180]` | 复核意见 P2-1（字段原本是死的）与 P3-4（笔误） |

@@ -7,7 +7,7 @@
 
 放什么 / 不放什么
     放**编排**：按什么顺序建资源、什么时候收尾、退出码怎么定。
-    不放具体实现——检测在 `detectors/`、读帧在 `io/`、画图落盘在 `viz/`、
+    不放具体实现——检测在 `aruco/` 与 `yolo/`、读帧在 `io/`、画图落盘在 `viz/`、
     打印与自检判定在本文件末尾的「终端输出」一节。本文件读起来应该像一份流程说明。
 
 依赖谁 / 被谁用
@@ -25,14 +25,37 @@ import sys
 from ..config.loader import (load_config, load_thresholds,
                              resolve_thresholds_path)
 from ..config.schema import ConfigError
-from ..detectors.base import build_detector
-from ..pipeline import ColorConfig, process_frames, summarize
-from ..types import is_marker
+from ..yolo.pipeline import ColorConfig, process_frames, summarize
+from ..aruco.types import is_marker
 from ..io.base import build_source
 from ..logging import setup_logging
 from ..viz.draw import draw_detections, draw_hud
 from ..viz.writer import OutputWriter
 from .parsers import build_parser
+
+
+def build_detector(name: str, params: dict | None = None):
+    """按配置构造检测器（D5 之后不再有通用插槽，这里按名字直接建）。
+
+    :param name: `blob` / `stub_aruco` / `aruco` / `yolo`
+    :param params: 该检测器的参数字典（来自 `detector.<name>` 段）
+    :raises ValueError: 名字未知（报错里列出可用值）
+    """
+    params = dict(params or {})
+    key = str(name).strip().lower()
+    if key == "blob":
+        from ..yolo.candidates import BlobDetector
+        return BlobDetector(**params)
+    if key == "yolo":
+        from ..yolo.detector import YoloDetector
+        return YoloDetector(**params)
+    if key in ("stub_aruco", "stub"):
+        from ..yolo.stub import StubArucoDetector
+        return StubArucoDetector(**params)
+    if key == "aruco":
+        from ..aruco.detector import ArucoDetector
+        return ArucoDetector(**params)
+    raise ValueError(f"未知检测器 {name!r}；当前可用：['blob', 'stub_aruco', 'aruco', 'yolo']")
 
 
 def run(argv=None) -> int:

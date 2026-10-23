@@ -9,7 +9,7 @@
 import cv2
 import numpy as np
 
-from ..types import is_marker
+from ..aruco.types import is_marker
 
 # 判色结果 -> 画框颜色（BGR）。unknown 用灰色，表示"没判出颜色"。
 COLOR_DRAW_BGR = {

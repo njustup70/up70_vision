@@ -29,19 +29,19 @@ import unittest
 from pathlib import Path
 
 try:
-    from vision.calibration import CameraIntrinsics, undistort_points
-    from vision.detectors.aruco import ArucoDetector
-    from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    from vision.aruco.calibration import CameraIntrinsics, undistort_points
+    from vision.aruco.detector import ArucoDetector
+    from vision.aruco.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from vision.types import ArucoMarker, MarkerPose
+    from vision.aruco.types import ArucoMarker, MarkerPose
     from lab.pose_check.gen_scenes import PoseSpec, render_scene
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from vision.calibration import CameraIntrinsics, undistort_points
-    from vision.detectors.aruco import ArucoDetector
-    from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    from vision.aruco.calibration import CameraIntrinsics, undistort_points
+    from vision.aruco.detector import ArucoDetector
+    from vision.aruco.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from vision.types import ArucoMarker, MarkerPose
+    from vision.aruco.types import ArucoMarker, MarkerPose
     from lab.pose_check.gen_scenes import PoseSpec, render_scene
 
 import cv2
@@ -244,7 +244,7 @@ def test_bad_marker_size_and_empty_input_are_handled():
             continue
         raise AssertionError(f"边长 {bad!r} 应当被拒绝")
 
-    from vision.pose import estimate_poses
+    from vision.aruco.pose import estimate_poses
     matrix = np.array([[800.0, 0, 640.0], [0, 800.0, 512.0], [0, 0, 1.0]])
     assert estimate_poses([], MARKER_MM, matrix, None) == []
 

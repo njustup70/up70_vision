@@ -173,7 +173,7 @@ vision/
 │   ├── pose.py                 solvePnP + 两条硬校验（重投影 RMS、z 前向性）
 │   ├── image_io.py             图像读写（中文路径兜底）
 │   ├── logging.py              日志配置（整个进程调一次）
-│   ├── detectors/              blob 判色 / stub_aruco 假码 / aruco 真码 / yolo
+│   ├── aruco/ 与 yolo/              blob 判色 / stub_aruco 假码 / aruco 真码 / yolo
 │   ├── io/                     输入源：camera（MVS）/ replay / synthetic
 │   ├── viz/                    画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
 │   ├── config/                 YAML 加载、字段校验、--set 覆盖

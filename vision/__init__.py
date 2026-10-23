@@ -13,7 +13,7 @@
     pose.py         solvePnP 位姿解算 + 重投影与前向性两条硬校验
     image_io.py     图像读写（Windows 中文路径兜底）
     logging.py      日志配置（整个进程调一次）
-    detectors/      检测器一族：blob 判色 / aruco 真码 / stub_aruco 假码 / yolo
+    aruco/ 与 yolo/      检测器一族：blob 判色 / aruco 真码 / stub_aruco 假码 / yolo
     config/         配置与阈值表的加载、校验（自成子系统，保留为子包）
     io/             输入源：camera（MVS）/ replay / synthetic
     viz/            画框、坐标轴、HUD、落盘
@@ -32,7 +32,7 @@
     扁平之前是 `core/` + `utils/`：改一行判色要在 `core/color.py` 与 `utils/logging.py`
     之间来回跳，import 写成 `from ..core.pipeline import`（数点数、错一个点就 ImportError）。
     扁平后同类文件都躺在包根，一眼能看完；只保留两个"真的是一族"的子包：
-    `config/`（配置子系统）与 `detectors/`（可替换的检测器实现）。
+    `config/`（配置子系统）与 `aruco/` 与 `yolo/`（可替换的检测器实现）。
 """
 
 __version__ = "0.0.1"

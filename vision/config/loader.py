@@ -24,7 +24,7 @@ import os
 
 import yaml
 
-from ..color import parse_thresholds
+from ..yolo.color_check import parse_thresholds
 from .schema import AppConfig, ConfigError, from_dict
 
 DEFAULT_CONFIG_CANDIDATES = (
@@ -251,7 +251,7 @@ def load_intrinsics(path: str):
         文件不存在是**最常见**的一种：它被 `.gitignore` 排除（每台相机一份），
         新 clone 的仓库一定没有，所以报错里直接给出生成命令，别让人去猜。
     """
-    from ..calibration import CameraIntrinsics
+    from ..aruco.calibration import CameraIntrinsics
 
     if not os.path.isfile(path):
         raise ConfigError(
