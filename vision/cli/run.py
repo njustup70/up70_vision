@@ -7,7 +7,7 @@
 
 放什么 / 不放什么
     放**编排**：按什么顺序建资源、什么时候收尾、退出码怎么定。
-    不放具体实现——检测在 `aruco/` 与 `yolo/`、读帧在 `io/`、画图落盘在 `viz/`、
+    不放具体实现——检测在 `aruco/` 与 `yolo/`、读帧在 `sources/`、画图落盘在 `viz/`、
     打印与自检判定在本文件末尾的「终端输出」一节。本文件读起来应该像一份流程说明。
 
 依赖谁 / 被谁用
@@ -27,10 +27,11 @@ from ..config.loader import (load_config, load_thresholds,
 from ..config.schema import ConfigError
 from ..yolo.pipeline import ColorConfig, process_frames, summarize
 from ..aruco.types import is_marker
-from ..io.base import build_source
+from ..sources import build_source
 from ..logging import setup_logging
-from ..viz.draw import draw_detections, draw_hud
-from ..viz.writer import OutputWriter
+from .output import draw_hud
+from ..yolo.draw import draw_detections
+from .output import OutputWriter
 from .parsers import build_parser
 
 

@@ -164,31 +164,26 @@ python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 ## 附录 A · 目录导览
 
 ```text
-vision/
-├── vision/            # 平铺：算法模块都在包根（2026-10-22 去掉 core/ 与 utils/）
-│   ├── types.py                Detection / ArucoMarker / MarkerPose 数据结构
-│   ├── color.py                HSV 判色：多段阈值、红色跨色相环绕、命中率
-│   ├── pipeline.py             逐帧「检测 -> 判色 -> 匹配计分」
-│   ├── calibration.py          内参、去畸变、按分辨率等比缩放
-│   ├── pose.py                 solvePnP + 两条硬校验（重投影 RMS、z 前向性）
-│   ├── image_io.py             图像读写（中文路径兜底）
-│   ├── logging.py              日志配置（整个进程调一次）
-│   ├── aruco/ 与 yolo/              blob 判色 / stub_aruco 假码 / aruco 真码 / yolo
-│   ├── io/                     输入源：camera（MVS）/ replay / synthetic
-│   ├── viz/                    画框、坐标轴、HUD、落盘（PNG / JSON / CSV）
-│   ├── config/                 YAML 加载、字段校验、--set 覆盖
-│   ├── tools/                  工具按功能分组：env / aruco / blob / yolo / calibration / pose / doc
-│   ├── cli/                    命令行编排：parsers / run / live
-│   ├── api.py                  库调用门面：detect(image_bgr, "aruco")
-│   └── __main__.py             单一命令入口：python -m vision <子命令>（6 条）
-├── lab/               一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束）
-├── configs/             default.yaml、color_thresholds.yaml、内参快照
-├── assets/              aruco/（9 张真值图）、calib/（棋盘 PNG+PDF）、models/、readme/
-├── tests/               回归测试 103 项，可 python tests/test_xxx.py 独立跑
-├── docs/                索引 + 契约 + 三个规范 + 标定/位姿/YOLO 说明 + 教程 + archive/
-├── .devcontainer/       Dockerfile、CPU/GPU compose、pkgs/
-├── data/                数据集与回放素材（不进版本库）
-└── output/              运行产物：demo/、aruco/、pose_*/（不进版本库）
+vision/                      # 运行时代码：要 import、要测、要评审、有架构约束
+├── __init__.py              包声明与依赖方向说明
+├── __main__.py              进程入口：python -m vision <子命令>（6 条）
+├── api.py                   库门面：detect(image_bgr, detector)
+├── types.py                 唯一共用件：Frame / Detection / 几何函数
+├── logging.py               日志配置（进程内调一次）
+├── cli/                     命令适配层：parsers / run / live / output（落盘 + HUD）
+├── config/                  YAML 加载、字段校验、--set 覆盖
+├── sources/                 输入源：camera（MVS）/ replay / synthetic + read_image_bgr
+├── aruco/                   功能包：detector / pose / calibration / draw / types
+├── yolo/                    功能包：detector / candidates / color_check / pipeline / stub / draw
+└── depth/                   深度相机占位（只有 README，没有 .py；D11）
+
+lab/                        一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束）
+configs/                    场地参数（lab 与 vision 都读）
+assets/                     aruco（图 + 真值）、calib（棋盘 PNG+PDF）、models、readme
+tests/                      回归测试 103 项，可 python tests/test_xxx.py 独立跑
+docs/                       契约 / 规范 / 教程 / 进度 / archive
+.devcontainer/              Dockerfile、CPU/GPU compose、pkgs
+data/  output/              数据集与运行产物（不进版本库）
 ```
 
 依赖方向是硬约束，下层不知道上层存在：

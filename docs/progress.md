@@ -15,7 +15,7 @@
 
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
-- `vision/` 的根级算法模块（判色 `yolo/color_check.py` 与管线 `yolo/pipeline.py`、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli/`（编排，已拆成 parsers/run/live/report 四个文件）、`tools/`（生成器与自检工具）、`api.py`（库调用门面）均已实现
+- `vision/` 的根级算法模块（判色 `yolo/color_check.py` 与管线 `yolo/pipeline.py`、`Detection`/`ArucoMarker` 两种检出物）、`sources/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli/`（编排，已拆成 parsers/run/live/report 四个文件）、`tools/`（生成器与自检工具）、`api.py`（库调用门面）均已实现
 - 回归测试 **103 项**（判色/几何/配置 39 + ArUco 14 + 相机标定 12 + 位姿 13 + YOLO 20 + api 门面 5，全部通过）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
@@ -43,7 +43,7 @@
 |---|---|---|---|
 | M0 仓库初始化 | ✅ 完成 | 目录规范、工程元文件、配置层参数面 | — |
 | M1 环境标准化 | ✅ 完成 | Docker 化：镜像 + compose + devcontainer；镜像已真实 build 成功 | — |
-| M2 核心算法实现 | ✅ 完成（摄像头源除外） | 根级算法模块判色与管线、`io/` 合成图与回放、`viz/` 落盘、`config/` 加载、`cli/` 编排 | 摄像头接入见 M6 |
+| M2 核心算法实现 | ✅ 完成（摄像头源除外） | 根级算法模块判色与管线、`sources/` 合成图与回放、`viz/` 落盘、`config/` 加载、`cli/` 编排 | 摄像头接入见 M6 |
 | M3 回归测试 | ✅ 完成 | `tests/`：**36 项**（2026-10-16 复核整改后由 28 项增至 36）、断言带具体数字、双环境通过 | — |
 | M7 契约落地 | ✅ 完成 | `docs/interface.md` 定稿（`Frame`/`Detection`/`ArucoMarker`/`Detector`/`FrameSource`）；新增 `stub_aruco.py` 按契约返回假 `ArucoMarker`；真实现 `aruco.py` 由搭档交付 | 真实现见 ArUco 分支 |
 | M8 真 ArUco（飞书任务一） | ✅ 完成 | `aruco/detector.py` + `tools/aruco/gen_scenes.py` + `tools/aruco/check.py` + `assets/aruco/`（9 张图 + 真值）+ 14 项测试；按契约返回 `list[ArucoMarker]` | 位姿估计（内参 + solvePnP，附加题）顺延阶段二 |
@@ -67,9 +67,9 @@ M8 真 ArUco、M9 相机标定、M10 位姿估计。
 ## 四、进行中 / 下一步
 
 **已清的第 1 步：把相机接进来（M6，2026-10-14 完成）** —— 留档备查，方案与实测见第三节。
-下面 5 条当时是待办，现已全部落地（`io/camera.py`、MVS 进镜像、compose 透传、文档纠错、`input.camera:` 配置面）：
+下面 5 条当时是待办，现已全部落地（`sources/camera.py`、MVS 进镜像、compose 透传、文档纠错、`input.camera:` 配置面）：
 
-1. `vision/io/camera.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
+1. `vision/sources/camera.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
 2. **MVS 怎么进镜像**（三选一，推荐 A）：
    - A：deb 放 `.devcontainer/pkgs/`（加进 `.gitignore`）+ Dockerfile `COPY` 后 `apt install`
    - B：镜像内下载——官方要登录，不可靠
@@ -86,7 +86,7 @@ M8 真 ArUco、M9 相机标定、M10 位姿估计。
 
 **后续（阻塞中）**：M4 ROS 2 对接、M5 YOLO 接入。
 
-**实现顺序参考（已完成部分）**：`logging.py` → `image_io.py` → `types.py` → `yolo/color_check.py` → `yolo/pipeline.py` → `aruco/ 与 yolo/base.py` → `blob.py` → `io/base.py` → `synthetic.py` → `replay.py` → `viz/draw.py` → `writer.py` → `config/schema.py` → `loader.py` → `cli.py` → `tests/`
+**实现顺序参考（已完成部分）**：`logging.py` → `sources/__init__.py`（读）与 `cli/output.py`（写） → `types.py` → `yolo/color_check.py` → `yolo/pipeline.py` → `aruco/ 与 yolo/base.py` → `blob.py` → `sources/__init__.py` → `synthetic.py` → `replay.py` → `aruco/draw.py` 与 `yolo/draw.py` → `writer.py` → `config/schema.py` → `loader.py` → `cli.py` → `tests/`
 
 ---
 

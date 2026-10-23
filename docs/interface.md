@@ -162,7 +162,7 @@ def estimate_poses(markers, marker_size_mm, camera_matrix, ...) -> list[MarkerPo
 
 ---
 
-## 4. 输入源接口：`io/`
+## 4. 输入源接口：`sources/`
 
 ### 4.1 `FrameSource` ✅
 
@@ -179,7 +179,7 @@ class FrameSource(ABC):
 - `read()` 返回 `None` = **这路输入不会再有帧了**，调用方一律当结束。
 - `read()` 抛异常 = 配置或环境错误（路径不存在、SDK 缺失），**不要吞掉**。
 - 支持 `with` 与 `for`。
-- 工厂 `build_source(source_type, synthetic_params, replay_params, camera_params, colors)`：参数是普通 dict，由 `cli/run.py` 从配置拆出来 —— **`io/` 不 import `config`**。
+- 工厂 `build_source(source_type, synthetic_params, replay_params, camera_params, colors)`：参数是普通 dict，由 `cli/run.py` 从配置拆出来 —— **`sources/` 不 import `config`**。
 
 ### 4.2 三个源的 `None` 语义不同（最常踩的一条）
 
@@ -198,9 +198,9 @@ class FrameSource(ABC):
 - **依赖方向**：`config`/`image_io`/`logging` → 根级算法模块 → `io` → `viz` → `cli` → `__main__.py`。根级算法模块不 import `io`/`viz`/`config`，不读文件、不开窗口；逻辑写在 `cli/`（参数解析 / 批处理 / 实时循环 / 终端输出四个文件）。
 - **`viz/` 的规矩**：画**检测结果**（框、标签、中心、角点、ID）→ 返回新图（照 `draw_detections` 的写法）；画 **HUD**（帧号、汇总行）→ 可以原地改。任务二加角点绘制走前者。
 - **日志**：取 logger 一律 `get_logger("<模块路径>")`（如 `get_logger("viz.draw")`）。自己用 `logging.getLogger` 拼名字会让这条链路断掉，症状是"这个模块的日志不出现"。
-- **读写图片**：一律走 `image_io.py`（`read_image_bgr` / `write_image`），**不要直接调 `cv2.imread` / `cv2.imwrite`** —— 这两个失败时返回 `None` / `False` 而不抛异常。
-- **配置**：`configs/default.yaml` 的字段名是契约（改名会让对方的 `--set` 静默失效）。改 `input.source` 的取值集合要同步 `io/base.py` 的 `SOURCE_NAMES`。
-- **平台**：`io/camera.py` 只在原生跑（容器需装 MVS 的 deb + USB 透传），PR 里附原生日志与截图；其余全部在容器里验收。
+- **读写图片**：一律走 `sources/__init__.py`（读）与 `cli/output.py`（写）（`read_image_bgr` / `write_image`），**不要直接调 `cv2.imread` / `cv2.imwrite`** —— 这两个失败时返回 `None` / `False` 而不抛异常。
+- **配置**：`configs/default.yaml` 的字段名是契约（改名会让对方的 `--set` 静默失效）。改 `input.source` 的取值集合要同步 `sources/__init__.py` 的 `SOURCE_NAMES`。
+- **平台**：`sources/camera.py` 只在原生跑（容器需装 MVS 的 deb + USB 透传），PR 里附原生日志与截图；其余全部在容器里验收。
 
 ---
 
@@ -210,13 +210,13 @@ class FrameSource(ABC):
 
 `camera` 源把「取帧超时 / 相机被拔 / 达到 `max_frames`」统一表示成 `None`，且**一次取帧超时就结束整路**。偶发丢帧（自动曝光切换、USB 带宽抖动）会让程序在正常使用中随机退出。这是任务二 S5 的正面验收对象，改它**属于动契约**，要两人同意。
 
-**二、`io/camera.py` 半初始化时泄漏设备句柄。** ⬜
+**二、`sources/camera.py` 半初始化时泄漏设备句柄。** ⬜
 
 `MV_CC_OpenDevice` 成功后、`MV_CC_StartGrabbing` 失败时构造函数抛异常，此后没人调 `close()`，相机被占住，下次打开必失败。
 
 **三、`io/__init__.py` 的文档与第 5 节矛盾。** ⬜
 
-那行写着「依赖 `types` 与 **config**」，而 `io/base.py` 与第 5 节都明确「`io/` 不 import `config`」。以 `base.py` 为准，`__init__.py` 那句是笔误，提给对方改。
+那行写着「依赖 `types` 与 **config**」，而 `sources/__init__.py` 与第 5 节都明确「`sources/` 不 import `config`」。以 `base.py` 为准，`__init__.py` 那句是笔误，提给对方改。
 
 ---
 

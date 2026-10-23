@@ -42,7 +42,7 @@ import cv2
 import numpy as np
 
 from vision.aruco.detector import check_opencv_aruco, predefined_dictionary
-from vision.image_io import ensure_dir, write_image_with_truth
+from vision.cli.output import ensure_dir, write_image_with_truth
 from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.aruco.gen_scenes")

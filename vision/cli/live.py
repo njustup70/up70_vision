@@ -32,10 +32,12 @@ from ..config.loader import (load_config, load_intrinsics, load_thresholds,
 from ..config.schema import ConfigError
 from .run import build_detector
 from ..aruco.pose import estimate_pose
-from ..io.base import build_source
-from ..image_io import write_image
+from ..sources import build_source
+from .output import write_image
 from ..logging import setup_logging
-from ..viz.draw import draw_detections, draw_hud, draw_pose_axes
+from .output import draw_hud
+from ..aruco.draw import draw_pose_axes
+from ..yolo.draw import draw_detections
 from .parsers import build_live_parser
 
 # ================================================================ 实时循环（任务二）

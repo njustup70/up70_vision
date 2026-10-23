@@ -26,7 +26,7 @@ try:
     from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
-    from vision.viz.draw import detection_label
+    from vision.yolo.draw import detection_label
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.config.schema import ConfigError, from_dict
@@ -34,7 +34,7 @@ except ModuleNotFoundError:
     from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
-    from vision.viz.draw import detection_label
+    from vision.yolo.draw import detection_label
 
 
 # ---------------------------------------------------------------- 假网络

@@ -321,7 +321,7 @@ def write_scene(out_dir: str, spec: PoseSpec, image_bgr: np.ndarray, truth: dict
 
     :return: `(png 路径, json 路径)`
     """
-    from vision.image_io import write_image_with_truth
+    from vision.cli.output import write_image_with_truth
     os.makedirs(out_dir, exist_ok=True)
     png_path = os.path.join(out_dir, f"{spec.name}.png")
     return write_image_with_truth(image_bgr, png_path, truth)

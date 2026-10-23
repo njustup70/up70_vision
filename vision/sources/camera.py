@@ -28,7 +28,7 @@ import numpy as np
 
 from ..types import Frame
 from ..logging import get_logger
-from .base import FrameSource
+from . import FrameSource
 
 log = get_logger("io.camera")
 

@@ -29,7 +29,7 @@ try:
     from vision.cli.run import build_detector
     from vision.aruco.types import ArucoMarker
     from lab.gen_aruco import (load_truth, scene_rotated)
-    from vision.image_io import read_image_bgr
+    from vision.sources import read_image_bgr
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.config.schema import ConfigError, from_dict
@@ -37,7 +37,7 @@ except ModuleNotFoundError:
     from vision.cli.run import build_detector
     from vision.aruco.types import ArucoMarker
     from lab.gen_aruco import (load_truth, scene_rotated)
-    from vision.image_io import read_image_bgr
+    from vision.sources import read_image_bgr
 
 import cv2
 import numpy as np

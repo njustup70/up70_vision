@@ -12,7 +12,7 @@
 放什么 / 不放什么
     放纯算法：给 numpy 角点 + 边长 + 内参 → 返回 `MarkerPose`。
     **不读文件、不保存文件、不开窗口、不 import io/viz/config**（契约第 5 节）。
-    读内参 YAML 在 `config/loader.py`，画坐标轴在 `viz/draw.py`，打印在 `cli/live.py`，
+    读内参 YAML 在 `config/loader.py`，画坐标轴在 `aruco/draw.py` 与 `yolo/draw.py`，打印在 `cli/live.py`，
     批量核误差在 `tools/pose/__init__.py`。
 
 依赖谁 / 被谁用

@@ -14,7 +14,7 @@ try:
     from vision.yolo.color_check import parse_thresholds
     from vision.aruco.types import ArucoMarker, is_marker
     from vision.types import Detection
-    from vision.io.synthetic import SyntheticSource
+    from vision.sources.synthetic import SyntheticSource
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.cli.run import build_detector
@@ -23,7 +23,7 @@ except ModuleNotFoundError:
     from vision.yolo.color_check import parse_thresholds
     from vision.aruco.types import ArucoMarker, is_marker
     from vision.types import Detection
-    from vision.io.synthetic import SyntheticSource
+    from vision.sources.synthetic import SyntheticSource
 
 import numpy as np
 

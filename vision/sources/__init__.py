@@ -1,27 +1,41 @@
-"""输入层接口：把「图像从哪来」收进统一接口。
+"""输入层：把「图像从哪来」收进统一接口。
 
-对外只暴露 read() -> Frame | None：
-    None 表示这一路输入已经结束。上层管线不关心图像是合成的、回放的、还是实拍的。
+放什么
+    所有输入源，对外只暴露 read() -> Frame | None。上层管线不关心图像是
+    合成的、回放的、还是摄像头实拍的。
+
+不放什么
+    不放检测或判色逻辑。
 
 依赖谁
-    只依赖 types（Frame）。配置由上层拆成普通参数传进来，
-    因此本模块不 import config，避免包级依赖打结。
+    只依赖 types（Frame）。**不 import config** —— 配置由 `cli/run.py` 拆成普通参数
+    传给 build_source（见本文件的 build_source）。这一行以前写的是"依赖 types 与 config"，
+    与 base.py 和 docs/interface.md 第 5 节矛盾，按契约欠账三改正。
 
-摄像头（camera.py）
-    本节目的相机是海康 MV-CU013-A0UC，走 **USB3 Vision（GenICam）**，
-    不是 UVC，也没有 /dev/video*，因此 cv2.VideoCapture 打不开它。
-    已实测：Aravis 0.8.20 / 0.8.33 都取不到帧（相机 SIRM_PAYLOAD_SIZE 恒为 1MB、
-    不随请求更新），只有官方 MVS SDK 能出帧。详见 docs/progress.md 第五节。
-    因此 camera 源实现在 io/camera.py（MVS SDK），**没有 MVS 的机器也能
-    import 本包**，只在真正接相机时报错并提示怎么装（见 .devcontainer/pkgs/README.md）。
+当前状态
+    本文件（FrameSource 接口 + build_source 工厂 + read_image_bgr）、synthetic.py（合成图，带 ground truth）、
+    replay.py（图片 / 视频回放）、camera.py（真相机，走 MVS SDK）均已就位。
+
+关于真相机（重要）
+    本节目的相机是海康 MV-CU013-A0UC，走 **USB3 Vision（GenICam），不是 UVC**：
+    宿主机上没有 /dev/video*，也没有"用户在 video 组"这回事——权限靠 udev 规则给，
+    设备节点是 /dev/bus/usb/...。所以 cv2.VideoCapture 打不开它，OpenCV 的 UVC 路径
+    在这颗相机上用不了；必须走厂商 SDK（MVS），实现见 camera.py。
 """
 
+from __future__ import annotations
+
+import os
 from abc import ABC, abstractmethod
+
+import cv2
+import numpy as np
 
 from ..types import Frame
 from ..logging import get_logger
 
-log = get_logger("io.base")
+log = get_logger(__name__)
+
 
 SOURCE_NAMES = ("synthetic", "replay", "camera")
 
@@ -81,3 +95,17 @@ def build_source(source_type: str,
         from .camera import MvsCameraSource
         return MvsCameraSource(**dict(camera_params or {}))
     raise ValueError(f"未知输入源 {source_type!r}；可用值：{list(SOURCE_NAMES)}")
+
+
+def read_image_bgr(path: str) -> np.ndarray:
+    """读图，返回 BGR uint8 数组（H, W, 3）。
+
+    :raises FileNotFoundError: 路径不存在或不是可解码的图片
+    """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"图片不存在: {path}")
+    image_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        raise FileNotFoundError(f"cv2.imread 返回 None（文件损坏或不是图片）: {path}")
+    log.debug("读入图片 %s 形状=%s", path, image_bgr.shape)
+    return image_bgr

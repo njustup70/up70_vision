@@ -1,33 +1,81 @@
-"""落盘：把结果写成叠加图 / JSON / CSV，并管理输出目录。
+"""CLI 的输出层：落盘（PNG/JSON/CSV/summary）与 HUD 绘制（D13/D15）。
 
-放什么
-    叠加图、逐帧 JSON、逐检测 CSV 的写入与目录管理。
-不放什么
-    不改变检测结果，只负责呈现。落盘的数据要能被 pandas / numpy 直接读成数组
-    （CSV 一行一个检测；JSON 一帧一个对象）。
-
-三个文件
-    <dir>/frame_0000.png   叠加图（每帧一张；save_overlay 控制）
-    <dir>/results.json     每帧一条记录（含 detections 明细）
-    <dir>/detections.csv   一行一个检测，列固定（便于 pandas.read_csv 直接读）
-    <dir>/summary.json     summarize() 的汇总（自检数字都在这）
+为什么在 cli/ 而不是根级或功能包：
+    `OutputWriter` 只有批处理路径用；`write_image_with_truth` 是 lab 借用。
+    它不是「两个功能包都要用」的共用件，所以不进根级（D15 的判据）。
 """
+
+from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 
-from ..aruco.types import is_marker
-from ..image_io import ensure_dir, write_image
-from ..logging import get_logger
+import cv2
+import numpy as np
 
-log = get_logger("viz.writer")
+from ..types import Detection, Frame
 
-# 后两列是给 ArUco 加的（追加在末尾，老读者按列名取不受影响）：
-#   kind      = "detection"（判色族）或 "marker"（ArUco 码）
-#   marker_id = 码 ID；判色族的行留空
-CSV_HEADER = ["frame", "source", "color", "ratio", "valid_pixels", "score",
-              "x1", "y1", "x2", "y2", "cx", "cy", "kind", "marker_id"]
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+
+def put_text(image_bgr, text: str, org, scale: float = 0.5,
+             color=(255, 255, 255), thickness: int = 1, outline: bool = False) -> None:
+    """在图上写一行 ASCII 文字（可带黑描边）；中文会变成 ???（Hershey 无汉字）。"""
+    if outline:
+        cv2.putText(image_bgr, text, org, FONT, scale, (0, 0, 0),
+                    thickness + 2, cv2.LINE_AA)
+    cv2.putText(image_bgr, text, org, FONT, scale, color, thickness, cv2.LINE_AA)
+
+def ensure_dir(path: str) -> str:
+    """确保目录存在，返回该目录（方便链式调用）。"""
+    if not path:
+        raise ValueError("目录路径不能为空")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def write_image(path: str, image_bgr: np.ndarray) -> str:
+    """写图，显式检查返回值。
+
+    :raises IOError: cv2.imwrite 返回 False（父目录不存在、无写权限、扩展名不支持等）
+    """
+    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+        raise ValueError("要写入的图像为空")
+    parent = os.path.dirname(path)
+    if parent:
+        ensure_dir(parent)
+    ok = cv2.imwrite(path, image_bgr)
+    if not ok:
+        raise IOError(f"cv2.imwrite 返回 False，写入失败: {path}")
+    log.debug("写出图片 %s 形状=%s", path, image_bgr.shape)
+    return path
+
+def write_image_with_truth(image_bgr: np.ndarray, image_path: str, truth: dict) -> tuple:
+    """把一张图和它的真值写成 `<name>.png` + `<name>.json`（同名同目录）。
+
+    两个生成器（`gen_aruco`、`gen_pose_scenes`）原先各写一遍这段"存图 + 存 JSON"，
+    产物还略有出入（一个末尾带换行、一个不带）；合并后真值文件的格式只有一处定义。
+
+    :param image_bgr: 要写的图（HxWx3 BGR）
+    :param image_path: 图片路径；真值路径由它换后缀得到
+    :param truth: 真值字典（直接 `json.dump`）
+    :return: `(png 路径, json 路径)`
+    """
+    json_path = os.path.splitext(image_path)[0] + ".json"
+    ensure_dir(os.path.dirname(image_path) or ".")
+    write_image(image_path, image_bgr)
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(truth, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return image_path, json_path
+
+def draw_hud(canvas: np.ndarray, lines, origin=(10, 22), scale: float = 0.6,
+             color=(0, 255, 255), line_gap: int = 22) -> None:
+    """左上角信息栏（帧号/检出数/汇总之类），原图就地修改。"""
+    x, y = origin
+    for i, text in enumerate(lines):
+        put_text(canvas, text, (x, y + i * line_gap), scale, color, 2, outline=True)
 
 
 class OutputWriter:

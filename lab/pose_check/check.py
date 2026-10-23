@@ -31,7 +31,7 @@ import json
 import os
 
 from vision.aruco.pose import DEFAULT_METHOD, estimate_pose
-from vision.image_io import read_image_bgr
+from vision.sources import read_image_bgr
 
 #: 判定"通过"的默认门槛。依据见 docs/位姿估计.md 的实测表：
 #: 450–600 mm、40 mm 码时距离误差 < 1%、倾角误差 < 2°，留一倍余量。

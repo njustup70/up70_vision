@@ -35,18 +35,25 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# lab/ 不是包：直接 python lab/xxx.py 跑时，把仓库根补进 sys.path 才能 import vision
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
 import argparse
 import glob
 import os
-import sys
 
 import numpy as np
 
 from vision.config.loader import load_config, load_thresholds, resolve_thresholds_path
 from vision.aruco.calibration import (MIN_VIEWS, RMS_USABLE, BoardSpec, CameraIntrinsics,
                                 calibrate, find_board_corners, undistort_image)
-from vision.io.base import build_source
-from vision.image_io import ensure_dir, read_image_bgr, write_image
+from vision.sources import build_source
+from vision.cli.output import ensure_dir, write_image
+from vision.sources import read_image_bgr
 from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.calibration.calibrate")
@@ -595,3 +602,7 @@ def main(argv=None) -> int:
             print(f"⚠️  预览窗口打不开（{exc}）；不影响标定结果")
 
     return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

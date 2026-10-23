@@ -15,9 +15,9 @@ import os
 import cv2
 
 from ..types import Frame
-from ..image_io import read_image_bgr
+from ..sources import read_image_bgr
 from ..logging import get_logger
-from .base import FrameSource
+from . import FrameSource
 
 log = get_logger("io.replay")
 
