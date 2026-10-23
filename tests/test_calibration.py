@@ -13,18 +13,18 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
+    from vision.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from up70_vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
+    from vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from up70_vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
+    from vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
 
 import numpy as np
 
@@ -193,7 +193,7 @@ def test_camera_intrinsics_dict_roundtrip_and_quality():
 
 def test_scale_camera_matrix_keeps_the_field_of_view():
     """换分辨率时内参等比缩放：宽高减半 → fx/cx/fy/cy 都减半，视场角不变。"""
-    from up70_vision.calibration import scale_camera_matrix, scale_intrinsics
+    from vision.calibration import scale_camera_matrix, scale_intrinsics
 
     matrix = np.array([[1321.0, 0.0, 642.8], [0.0, 1324.6, 532.3], [0.0, 0.0, 1.0]])
     # 尺寸相同：原样返回拷贝，且不改入参

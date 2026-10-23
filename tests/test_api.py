@@ -1,6 +1,6 @@
 """api 门面的回归测试：一次调用拿结果、参数能盖住默认值、坏图明确报错。
 
-被测的是 `src/up70_vision/api.py`，它不复制逻辑、只把
+被测的是 `vision/api.py`，它不复制逻辑、只把
 「配置 -> 工厂 -> 管线」这条原链路包成一个函数，所以这里只验门面本身：
 返回类型对不对、参数有没有真的传下去、坏输入是不是明确失败。
 """
@@ -9,12 +9,12 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.api import detect
-    from up70_vision.types import ArucoMarker, Detection
+    from vision.api import detect
+    from vision.types import ArucoMarker, Detection
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.api import detect
-    from up70_vision.types import ArucoMarker, Detection
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.api import detect
+    from vision.types import ArucoMarker, Detection
 
 import numpy as np
 

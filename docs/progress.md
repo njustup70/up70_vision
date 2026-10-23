@@ -15,7 +15,7 @@
 
 **M2 核心算法、M3 回归测试、M6 相机接入均已实现；接口契约按 `docs/interface.md` 落地（含 ArUco 的 `ArucoMarker` 与 `stub_aruco`）；M6 只剩场地标定。**
 
-- `src/up70_vision/` 的根级算法模块（判色 `color.py` 与管线 `pipeline.py`、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli/`（编排，已拆成 parsers/run/live/report 四个文件）、`tools/`（生成器与自检工具）、`api.py`（库调用门面）均已实现
+- `vision/` 的根级算法模块（判色 `color.py` 与管线 `pipeline.py`、`Detection`/`ArucoMarker` 两种检出物）、`io/`（合成图 / 回放 / **真相机 MVS 源**）、`viz/`（画图与落盘）、`config/`（加载与校验）、`cli/`（编排，已拆成 parsers/run/live/report 四个文件）、`tools/`（生成器与自检工具）、`api.py`（库调用门面）均已实现
 - 回归测试 **103 项**（判色/几何/配置 39 + ArUco 14 + 相机标定 12 + 位姿 13 + YOLO 20 + api 门面 5，全部通过）；容器与宿主 venv 都通过（宿主 apt 版 `check_env.py` 会报 4 项版本不符，属预期）
 - 端到端自检：合成图 3 帧 × 6 块 = **18 个色块，实得 18 个、判色 18/18 全对、平均命中率 1.0**
 - 真相机已可跑：`input.source=camera` 走厂商 **MVS SDK**（deb 放 `.devcontainer/pkgs/` 由 Dockerfile 装进镜像；compose 已透传 `/dev/bus/usb`）
@@ -30,7 +30,7 @@
   合成图（23 mm 码、真机内参 fx=1321）实测：**距离误差 0.11–1.1%（300–1500 mm）、2000 mm 处 3.9%**；
   倾角在真值 ≥15° 时误差 0.05–0.71°，**但接近正视时 4–16°（该自由度弱可观，不是 bug）**；
   过曝 3.0 倍未检出，运动模糊 9 px 起距离偏 9.9%，640×480 下每格 5.5 px 仍可用
-- **2026-10-22 结构与入口精简**：入口从 19 个收敛为 `python -m up70_vision`（**14 个功能子命令 + clean**），
+- **2026-10-22 结构与入口精简**：入口从 19 个收敛为 `python -m vision`（**14 个功能子命令 + clean**），
   `scripts/` 整体删除；包内去掉 `core/`/`utils/` 中间层（算法模块平铺包根）、`detectors/` 提升为顶层、
   `cli/report.py` 合并进 `run.py`/`live.py`、`tools/` 按功能分七组；回归仍 **103 项**
 - **还没做**：场地 HSV 阈值重调（等场地与物块）；位姿的**真机**抽测（需内参文件与实测码边长）
@@ -69,13 +69,13 @@ M8 真 ArUco、M9 相机标定、M10 位姿估计。
 **已清的第 1 步：把相机接进来（M6，2026-10-14 完成）** —— 留档备查，方案与实测见第三节。
 下面 5 条当时是待办，现已全部落地（`io/camera.py`、MVS 进镜像、compose 透传、文档纠错、`input.camera:` 配置面）：
 
-1. `src/up70_vision/io/camera.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
+1. `vision/io/camera.py`：实现 `FrameSource`（`read() -> Frame | None`），走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）；**MVS 不是 pip 包**，属于环境改动
 2. **MVS 怎么进镜像**（三选一，推荐 A）：
    - A：deb 放 `.devcontainer/pkgs/`（加进 `.gitignore`）+ Dockerfile `COPY` 后 `apt install`
    - B：镜像内下载——官方要登录，不可靠
    - C：挂载宿主机 `/opt/MVS` 进容器——省事但破坏"环境一律 Docker"
 3. `.devcontainer/docker-compose.yml` 加 `devices: ["/dev/bus/usb:/dev/bus/usb"]`（USB3 Vision 走 libusb，**不是 `/dev/video0`**）；udev 规则必须在宿主机
-4. 文档纠错：`README.md`（第 60 行附近）与 `src/up70_vision/io/__init__.py` 都写的"摄像头（UVC）"，与事实不符
+4. 文档纠错：`README.md`（第 60 行附近）与 `vision/io/__init__.py` 都写的"摄像头（UVC）"，与事实不符
 5. 配置面：`configs/default.yaml` 新增 `input.camera:`（index / 曝光 / 增益 / 超时）
 
 **第 2 步：相机标定（像素 → 毫米）**

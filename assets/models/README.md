@@ -17,7 +17,7 @@ assets/models/yolov8n.names.json  类名表    导出时自动生成（容器里
 ```bash
 # 本机是 ~/.venvs/yolo（torch CPU 版 + ultralytics）
 # 该 venv 需要能 import 本包：在里面 `pip install -e .`，或按下面这样带 PYTHONPATH
-PYTHONPATH=src ~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolov8n.pt
+PYTHONPATH=src ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolov8n.pt
 ```
 
 输入 `.pt` 不存在时 ultralytics 会自动下载（约 6 MB）。导出脚本会把 ONNX 和类名
@@ -27,7 +27,7 @@ sidecar 一起写进本目录，并打印运行时该用的 `--set` 参数。
 
 ```bash
 # 更准但更慢 / 更快但更粗
-PYTHONPATH=src ~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolo11s.pt --imgsz 640
+PYTHONPATH=src ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolo11s.pt --imgsz 640
 ```
 
 导完把 `configs/default.yaml` 的 `detector.yolo.weights` 指过去即可。

@@ -4,7 +4,7 @@
   "dictionary": "DICT_4X4_50",
   "width": 820,
   "height": 480,
-  "generator": "up70_vision.tools.gen_aruco",
+  "generator": "vision.tools.gen_aruco",
   "params": {
     "ids": [
       0

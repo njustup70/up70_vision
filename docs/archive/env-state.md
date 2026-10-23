@@ -10,7 +10,7 @@
 | 团队标准环境 | Docker 镜像：`ubuntu:22.04` + 系统 Python 3.10；镜像名 `up70-vision:dev`，**已 build 成功**（862 MB） |
 | 镜像内容 | numpy / opencv-python / PyYAML，`pip install -e .`；实测 cv2 4.14.0 / numpy 2.2.6 / yaml 6.0.3 |
 | 底座选择理由 | 战队标准发行版是 22.04；ROS 2 Humble 官方只支持 22.04 且自带 Python 3.10 |
-| 代码生效方式 | compose 把仓库 bind mount 到 `/opt/up70_vision`，改宿主机代码容器里立即生效；**注意镜像内容是 build 时的快照**，跑新代码要么重新 build、要么用 bind mount |
+| 代码生效方式 | compose 把仓库 bind mount 到 `/opt/vision`，改宿主机代码容器里立即生效；**注意镜像内容是 build 时的快照**，跑新代码要么重新 build、要么用 bind mount |
 | 本机开发环境 | Ubuntu 22.04.5 LTS（与镜像底座一致）；宿主 apt 版 cv2 4.5.4 / numpy 1.21.5 / PyYAML 5.4.1 |
 | Docker | `/usr/bin/docker`，Compose v5.5.1，免 sudo |
 | 相机 | 海康 **MV-CU013-A0UC**：1280×1024、BayerGB8、USB3 Vision、全局快门、C 口（镜头约 6mm）；序列号 DA4976553 |

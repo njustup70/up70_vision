@@ -11,16 +11,16 @@ import textwrap
 from pathlib import Path
 
 try:
-    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+    from vision.config.loader import (apply_overrides, load_config, load_intrinsics,
                                            load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
-    from up70_vision.config.schema import AppConfig, ConfigError, from_dict
+    from vision.config.schema import AppConfig, ConfigError, from_dict
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.config.loader import (apply_overrides, load_config, load_intrinsics,
                                            load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
-    from up70_vision.config.schema import AppConfig, ConfigError, from_dict
+    from vision.config.schema import AppConfig, ConfigError, from_dict
 
 import numpy as np
 import yaml
@@ -258,7 +258,7 @@ def test_calibration_path_is_relative_to_config():
 
 def test_load_intrinsics_roundtrip_and_missing_file():
     """标定 YAML 能原样读回；文件缺失时报错里给出标定命令。"""
-    from up70_vision.calibration import CameraIntrinsics
+    from vision.calibration import CameraIntrinsics
 
     matrix = np.array([[796.9, 0.0, 641.2], [0.0, 797.3, 508.7], [0.0, 0.0, 1.0]])
     dist = np.array([[-0.296, 0.121, 0.0008, -0.0012, 0.0]])
@@ -279,7 +279,7 @@ def test_load_intrinsics_roundtrip_and_missing_file():
         try:
             load_intrinsics(os.path.join(td, "nope.yaml"))
         except ConfigError as exc:
-            assert "up70_vision calibrate" in str(exc), f"报错应给出标定命令，实际：{exc}"
+            assert "vision calibrate" in str(exc), f"报错应给出标定命令，实际：{exc}"
         else:
             raise AssertionError("内参文件不存在时应当抛 ConfigError")
 

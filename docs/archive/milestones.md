@@ -7,7 +7,7 @@
 
 ### M0 仓库初始化
 
-- 分层骨架 `src/up70_vision/`：`config` / `core` / `core.detectors` / `io` / `tools` / `utils` / `viz` 共 8 个包。依赖方向单向（`utils`/`config` → `core` → `io` → `viz` → `cli` → `scripts`），每个 `__init__.py` 写明了该层放什么、不放什么、未来第一件事做什么
+- 分层骨架 `vision/`：`config` / `core` / `core.detectors` / `io` / `tools` / `utils` / `viz` 共 8 个包。依赖方向单向（`utils`/`config` → `core` → `io` → `viz` → `cli` → `scripts`），每个 `__init__.py` 写明了该层放什么、不放什么、未来第一件事做什么
 - 工程元文件：`pyproject.toml`（PEP 621 + src layout）、`requirements.txt`、`.gitignore`、`.gitattributes`、`.editorconfig`、`.github/PULL_REQUEST_TEMPLATE.md`
 - 配置层目标参数面：`configs/default.yaml`、`configs/color_thresholds.yaml`
 
@@ -17,7 +17,7 @@
 - `.devcontainer/docker-compose.yml`（CPU）与 `docker-compose-gpu.yml`（GPU 透传，用 `extends` 复用 CPU 定义，避免两份配置漂移）
 - `.devcontainer/devcontainer.json`：VS Code Reopen in Container 一键进环境
 - `.dockerignore`：排除 `.git`、缓存、运行产物、维护者个人笔记
-- `scripts/demo.py`：OpenCV 冒烟测试（造图 → BGR2HSV → inRange → findContours → 叠加 → 写图）。**故意不 import `up70_vision`**，避免将来形成第二份「检测 → 判色」实现
+- `scripts/demo.py`：OpenCV 冒烟测试（造图 → BGR2HSV → inRange → findContours → 叠加 → 写图）。**故意不 import `vision`**，避免将来形成第二份「检测 → 判色」实现
 - `scripts/check_env.py`：环境自检（Python 版本、opencv 发行包计数、依赖版本区间、图像读写往返、torch 可选提示），零 `src` 依赖
 
 ### M2 核心算法实现（本次提交）
@@ -26,7 +26,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `utils/logging.py` | 日志配置（全包挂在 `up70_vision` 父 logger 下，进程调一次）；等级非法时报错并列出可用值 |
+| `utils/logging.py` | 日志配置（全包挂在 `vision` 父 logger 下，进程调一次）；等级非法时报错并列出可用值 |
 | `utils/image_io.py` | 图像读写：把 `cv2.imread` 返回 None、`cv2.imwrite` 返回 False 这两个"静默失败"接口管起来并抛明确异常 |
 | `core/types.py` | `Frame` / `Detection` / **`ArucoMarker`** 三种数据结构、`iou`、`clip_bbox`、`bbox_from_xywh`、`is_marker`；bbox 一律绝对像素 + **半开上界**。`Detection` 是判色族（中心 = bbox 中心），`ArucoMarker` 是 ArUco（中心 = 四角算术平均），两者不混用 |
 | `core/color.py` | HSV 判色：`parse_thresholds`（校验）、`mask_for_segments`（多段并集，红色跨 0 环绕）、`valid_pixel_mask`、`color_ratios`、`judge_color` |
@@ -76,7 +76,7 @@
 
 | 环节 | 落点 | 说明 |
 |---|---|---|
-| 相机源 | `src/up70_vision/io/camera.py` | 实现 `FrameSource`；走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）。**MvImport 的 import 放在 `__init__` 里**，所以没装 MVS 的机器照样能 import 本包，只在真接相机时报一句带处理办法的人话 |
+| 相机源 | `vision/io/camera.py` | 实现 `FrameSource`；走 MVS `MV_CC_GetImageForBGR`（SDK 直接给 BGR，绕开 Bayer 命名坑）。**MvImport 的 import 放在 `__init__` 里**，所以没装 MVS 的机器照样能 import 本包，只在真接相机时报一句带处理办法的人话 |
 | SDK 进镜像 | `.devcontainer/pkgs/` + `Dockerfile` | MVS 是 deb 包、写不进 `pyproject.toml`，由 Dockerfile 单独一层安装；同时装 `libusb-1.0-0`（MVS 的库**运行时 dlopen** 它，基础镜像没有）。没放 deb 也能 build 成功，只是跳过相机 |
 | 设备透传 | `.devcontainer/docker-compose.yml` | `devices: ["/dev/bus/usb:/dev/bus/usb"]`。传的是 USB 总线，**不是 `/dev/video0`** |
 | 文档纠错 | `README.md`、`io/__init__.py` | 原文写的"摄像头（UVC）／用户要在 `video` 组／传 `--device=/dev/video0`"与事实不符，已改成 USB3 Vision + 宿主机 udev 规则 + MVS |

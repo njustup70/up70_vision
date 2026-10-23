@@ -28,8 +28,8 @@
 权重不进版本库，所以要本地生成一次。需要 `ultralytics`（本机在 `~/.venvs/yolo`）：
 
 ```bash
-cd up70_vision-main
-~/.venvs/yolo/bin/python -m up70_vision export-yolo --weights yolov8n.pt
+cd vision-main
+~/.venvs/yolo/bin/python -m vision export-yolo --weights yolov8n.pt
 ```
 
 产出两个文件（都已被 `.gitignore` 忽略）：
@@ -43,15 +43,15 @@ assets/models/yolov8n.names.json   类名表   容器里没有 onnx 包也能读
 
 ```bash
 # 用任意有 cv2 的解释器（容器里就是 python；宿主机用 ~/.venvs/vision/bin/python）
-python -m up70_vision run --set detector.name=yolo
+python -m vision run --set detector.name=yolo
 
 # 想跑一张具体的图：把它们放进一个目录当"回放"喂进去
-python -m up70_vision run --set detector.name=yolo \
+python -m vision run --set detector.name=yolo \
   --set input.source=replay --set input.replay.path=/path/to/images
 ```
 
-> ⚠️ `python -m up70_vision live` 是 **ArUco 专用**入口（要画四边形和位姿轴）。
-> 用 YOLO 请走 `python -m up70_vision run`；走错了程序会直接告诉你该用哪条命令，不会抛 traceback。
+> ⚠️ `python -m vision live` 是 **ArUco 专用**入口（要画四边形和位姿轴）。
+> 用 YOLO 请走 `python -m vision run`；走错了程序会直接告诉你该用哪条命令，不会抛 traceback。
 
 ### 第 3 步：看结果
 
@@ -78,7 +78,7 @@ output/demo/summary.json        汇总统计
 命令行也能临时改（注意 `classes` 这类列表建议直接改 yaml）：
 
 ```bash
-python -m up70_vision run --set detector.name=yolo --set detector.yolo.conf=0.5
+python -m vision run --set detector.name=yolo --set detector.yolo.conf=0.5
 ```
 
 ## 五、四个高频疑问
@@ -136,10 +136,10 @@ YOLOv8 的代码与权重都是 **AGPL-3.0**。队内自用没问题；但如果
 
 | 东西 | 位置 |
 |---|---|
-| 检测器实现 | `src/up70_vision/detectors/yolo.py` |
-| 工厂与注册 | `src/up70_vision/detectors/base.py`（`DETECTOR_NAMES`） |
-| 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`src/up70_vision/config/schema.py` |
-| 导出脚本 | `python -m up70_vision export-yolo`（实现 `src/up70_vision/tools/yolo/export.py`） |
+| 检测器实现 | `vision/detectors/yolo.py` |
+| 工厂与注册 | `vision/detectors/base.py`（`DETECTOR_NAMES`） |
+| 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`vision/config/schema.py` |
+| 导出脚本 | `python -m vision export-yolo`（实现 `vision/tools/yolo/export.py`） |
 | 权重与说明 | `assets/models/`（权重被 gitignore，只有 README 入库） |
 | 测试 | `tests/test_yolo.py`（20 项，不需要权重也能跑） |
 

@@ -21,20 +21,20 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.detectors.base import DETECTOR_NAMES, build_detector
-    from up70_vision.detectors.yolo import (YoloDetector, decode_predictions,
+    from vision.config.schema import ConfigError, from_dict
+    from vision.detectors.base import DETECTOR_NAMES, build_detector
+    from vision.detectors.yolo import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
-    from up70_vision.types import Detection
-    from up70_vision.viz.draw import detection_label
+    from vision.types import Detection
+    from vision.viz.draw import detection_label
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.detectors.base import DETECTOR_NAMES, build_detector
-    from up70_vision.detectors.yolo import (YoloDetector, decode_predictions,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.config.schema import ConfigError, from_dict
+    from vision.detectors.base import DETECTOR_NAMES, build_detector
+    from vision.detectors.yolo import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
-    from up70_vision.types import Detection
-    from up70_vision.viz.draw import detection_label
+    from vision.types import Detection
+    from vision.viz.draw import detection_label
 
 
 # ---------------------------------------------------------------- 假网络

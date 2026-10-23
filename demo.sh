@@ -48,13 +48,13 @@ else
 fi
 
 step "环境自检（末行应是「结果：全部通过」）" \
-    "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision doctor
+    "${COMPOSE[@]}" run --rm "$SERVICE" python -m vision doctor
 
 step "OpenCV 冒烟（末行应是「OpenCV 冒烟测试 -> PASS」）" \
-    "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision demo
+    "${COMPOSE[@]}" run --rm "$SERVICE" python -m vision demo
 
 step "跑一批合成图（产出 output/demo/）" \
-    "${COMPOSE[@]}" run --rm "$SERVICE" python -m up70_vision run --set input.source=synthetic
+    "${COMPOSE[@]}" run --rm "$SERVICE" python -m vision run --set input.source=synthetic
 
 # ---- 产物核对：四样缺一样都算没跑成 ----
 missing=""

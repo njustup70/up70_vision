@@ -16,7 +16,7 @@ jobs:
       - run: pip install -e . pytest
       - run: pytest tests/ -q
 
-      # 入口登记检查：新功能一律做成 `python -m up70_vision <子命令>`，
+      # 入口登记检查：新功能一律做成 `python -m vision <子命令>`，
       # 不许再往 scripts/ 里加新文件——否则"一个功能长两个入口"的老毛病会原样复现
       # （见仓库瘦身清单六之二的防复发机制）。
       - name: scripts/ 目录不允许存在
@@ -30,7 +30,7 @@ jobs:
           if pathlib.Path("scripts").exists():
               entries = sorted(p.name for p in pathlib.Path("scripts").iterdir())
               print(f"::error::scripts/ 目录不应存在（发现 {entries}）；"
-                    "新功能请加成 `python -m up70_vision <子命令>` 并在 __main__.py 的 COMMANDS 里登记")
+                    "新功能请加成 `python -m vision <子命令>` 并在 __main__.py 的 COMMANDS 里登记")
               sys.exit(1)
           print("OK：scripts/ 不存在，入口唯一")
           PY

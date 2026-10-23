@@ -13,11 +13,11 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
+    from vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
                                         clip_bbox, is_marker, iou)
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
                                         clip_bbox, is_marker, iou)
 
 import numpy as np

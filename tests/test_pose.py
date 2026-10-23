@@ -29,20 +29,20 @@ import unittest
 from pathlib import Path
 
 try:
-    from up70_vision.calibration import CameraIntrinsics, undistort_points
-    from up70_vision.detectors.aruco import ArucoDetector
-    from up70_vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    from vision.calibration import CameraIntrinsics, undistort_points
+    from vision.detectors.aruco import ArucoDetector
+    from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from up70_vision.types import ArucoMarker, MarkerPose
-    from up70_vision.tools.pose.gen_scenes import PoseSpec, render_scene
+    from vision.types import ArucoMarker, MarkerPose
+    from vision.tools.pose.gen_scenes import PoseSpec, render_scene
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.calibration import CameraIntrinsics, undistort_points
-    from up70_vision.detectors.aruco import ArucoDetector
-    from up70_vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.calibration import CameraIntrinsics, undistort_points
+    from vision.detectors.aruco import ArucoDetector
+    from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
-    from up70_vision.types import ArucoMarker, MarkerPose
-    from up70_vision.tools.pose.gen_scenes import PoseSpec, render_scene
+    from vision.types import ArucoMarker, MarkerPose
+    from vision.tools.pose.gen_scenes import PoseSpec, render_scene
 
 import cv2
 import numpy as np
@@ -244,7 +244,7 @@ def test_bad_marker_size_and_empty_input_are_handled():
             continue
         raise AssertionError(f"边长 {bad!r} 应当被拒绝")
 
-    from up70_vision.pose import estimate_poses
+    from vision.pose import estimate_poses
     matrix = np.array([[800.0, 0, 640.0], [0, 800.0, 512.0], [0, 0, 1.0]])
     assert estimate_poses([], MARKER_MM, matrix, None) == []
 

@@ -18,18 +18,18 @@ UP70 战队视觉组仓库：把 2D 视觉链路跑通——**从图像输入到
 docker compose -f .devcontainer/docker-compose.yml build
 
 # 2) 环境自检：末行应是「结果：全部通过」
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision doctor
+docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision doctor
 
 # 3) OpenCV 冒烟：应看到「OpenCV 冒烟测试 -> PASS」
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision demo
+docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision demo
 ```
 
 **一条命令版**：`./demo.sh` 把上面三步再加一步「跑一批合成图」串起来，
 结束后 `output/demo/` 里有 4 种产物；哪一步挂了它直接报出来。
-跑完可以 `python -m up70_vision clean` 清掉 `output/` 与 `__pycache__/`。
+跑完可以 `python -m vision clean` 清掉 `output/` 与 `__pycache__/`。
 
 源码是 bind mount，改宿主机代码立即生效；只有改 `pyproject.toml` 才需要重新 build。
-正文里的命令都只写 `python -m up70_vision ...`，在容器外执行时加前缀
+正文里的命令都只写 `python -m vision ...`，在容器外执行时加前缀
 `docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision`。
 
 ---
@@ -63,7 +63,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -
 xhost +local:root
 docker compose -f .devcontainer/docker-compose.yml run --rm \
   -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix up70-vision \
-  python -m up70_vision live --set detector.name=aruco --set input.source=camera \
+  python -m vision live --set detector.name=aruco --set input.source=camera \
   --set input.camera.exposure_us=40000 --set input.camera.gain_db=15
 ```
 
@@ -79,7 +79,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm \
 xhost +local:root
 docker compose -f .devcontainer/docker-compose.yml run --rm \
   -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix up70-vision \
-  python -m up70_vision live --set detector.name=aruco --set input.source=camera \
+  python -m vision live --set detector.name=aruco --set input.source=camera \
   --set pose.enabled=true --set pose.marker_size_mm=82.5 \
   --set input.camera.exposure_us=40000 --set input.camera.gain_db=15
 ```
@@ -101,7 +101,7 @@ t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(642.3, 532.5) d=317mm t
 ### 4. 没有显示器：换成 `--headless --save-every 30 --limit 300`
 
 命令同上，去掉 X11 相关参数即可；叠加图落在 `output/aruco/frame_*.png`。
-批处理（读完再汇总）用 `python -m up70_vision run --set input.source=camera --limit 10` → `output/demo/`。
+批处理（读完再汇总）用 `python -m vision run --set input.source=camera --limit 10` → `output/demo/`。
 
 ---
 
@@ -109,10 +109,10 @@ t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(642.3, 532.5) d=317mm t
 
 ```bash
 # 打印棋盘：出 PNG + PDF，打印时选「实际大小」
-python -m up70_vision gen-chessboard --cols 9 --rows 6 --square-mm 15
+python -m vision gen-chessboard --cols 9 --rows 6 --square-mm 15
 
 # 现场采 15 张图并解算，结果写 configs/camera_calibration.yaml
-python -m up70_vision calibrate --capture 15 --board 9x6 --square-mm 23
+python -m vision calibrate --capture 15 --board 9x6 --square-mm 23
 ```
 
 **两个尺寸别混**（都"不报错只让数字错"）：
@@ -156,7 +156,7 @@ python -m up70_vision calibrate --capture 15 --board 9x6 --square-mm 23
 - **位姿只做单码相对位姿**：多码融合、场地坐标系下的绝对位姿都没做。
 - **正视时倾角不可信**：`tilt` 在 0° 附近弱可观（可散到 10°+），15° 以上才准。
 - **相机需要 MVS SDK**：镜像不带 deb，需手动投放后重建；MVS 客户端与本仓库互斥。
-- **ROS 2 未接入**：入口按「薄壳 + 单一实现」留好位置，接入时复用 `up70_vision.cli`。
+- **ROS 2 未接入**：入口按「薄壳 + 单一实现」留好位置，接入时复用 `vision.cli`。
 - **判色阈值依赖光照**：换场地要重调 `color_thresholds.yaml`，`hsv-tuner` 为此准备。
 
 ---
@@ -164,8 +164,8 @@ python -m up70_vision calibrate --capture 15 --board 9x6 --square-mm 23
 ## 附录 A · 目录导览
 
 ```text
-up70_vision/
-├── src/up70_vision/            # 平铺：算法模块都在包根（2026-10-22 去掉 core/ 与 utils/）
+vision/
+├── vision/            # 平铺：算法模块都在包根（2026-10-22 去掉 core/ 与 utils/）
 │   ├── types.py                Detection / ArucoMarker / MarkerPose 数据结构
 │   ├── color.py                HSV 判色：多段阈值、红色跨色相环绕、命中率
 │   ├── pipeline.py             逐帧「检测 -> 判色 -> 匹配计分」
@@ -180,7 +180,7 @@ up70_vision/
 │   ├── tools/                  工具按功能分组：env / aruco / blob / yolo / calibration / pose / doc
 │   ├── cli/                    命令行编排：parsers / run / live
 │   ├── api.py                  库调用门面：detect(image_bgr, "aruco")
-│   └── __main__.py             单一命令入口：python -m up70_vision <子命令>
+│   └── __main__.py             单一命令入口：python -m vision <子命令>
 ├── configs/             default.yaml、color_thresholds.yaml、内参快照
 ├── assets/              aruco/（9 张真值图）、calib/（棋盘 PNG+PDF）、models/、readme/
 ├── tests/               回归测试 103 项，可 python tests/test_xxx.py 独立跑
@@ -205,7 +205,7 @@ image_io/logging ┘                                                            
 
 ## 附录 B · 命令全表
 
-一个入口：14 个功能子命令 + `clean`。不带参数敲 `python -m up70_vision` 就是这个表：
+一个入口：14 个功能子命令 + `clean`。不带参数敲 `python -m vision` 就是这个表：
 
 | 子命令 | 干什么 |
 |---|---|
@@ -231,9 +231,9 @@ image_io/logging ┘                                                            
 
 | 项 | 命令 | 期望 |
 |---|---|---|
-| 环境 / 冒烟 | `python -m up70_vision doctor`、`python -m up70_vision demo` | 末行「结果：全部通过」/ `PASS` |
-| ArUco 图组 | `python -m up70_vision check-aruco` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
-| 真机链路 | `python -m up70_vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
+| 环境 / 冒烟 | `python -m vision doctor`、`python -m vision demo` | 末行「结果：全部通过」/ `PASS` |
+| ArUco 图组 | `python -m vision check-aruco` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
+| 真机链路 | `python -m vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
 | 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **103 项全过** |
 
 约定：
@@ -243,9 +243,9 @@ image_io/logging ┘                                                            
 - 断言必须带具体数字（如 `9/9`、`≤ 0.23 px`），不写 `assert x > 0`。
 - 改 `src/` 前先跑 `doctor`；碰 ArUco 跑 `check-aruco`，碰位姿跑一次真机实时。
 - 合成图上的精度基线（82.5 mm 码：距离 0.02%–0.42%、倾角 15°–75° 误差 0.05–0.42°）用
-  `python -m up70_vision gen-scenes --suite` 造图后由 `pose-check`（逐图）或
+  `python -m vision gen-scenes --suite` 造图后由 `pose-check`（逐图）或
   `pose-check --sweep`（出 CSV/MD/8 张曲线）复现，口径与失败分析见 `docs/位姿估计.md`。
-- 在别的代码里用一次检测：`from up70_vision.api import detect; detect(img, "aruco")`
+- 在别的代码里用一次检测：`from vision.api import detect; detect(img, "aruco")`
   ——不必自己走配置加载与工厂。
 
 ---
@@ -256,11 +256,11 @@ image_io/logging ┘                                                            
 
 | 目录 | 是什么 | 怎么办 |
 |---|---|---|
-| `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m up70_vision clean` 清掉 |
+| `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m vision clean` 清掉 |
 | `__pycache__/`、`*.pyc` | Python 字节码缓存 | 同上，一并清掉 |
 | `data/` | 数据集、回放素材、标定原图（几十 MB 到几 GB） | 按 `data/README.md` 各自本地准备 |
-| `docs/*.html` | 教程的构建产物 | 要就 `python -m up70_vision gen-html` 自己生成 |
-| `assets/models/*.onnx`、`*.pt` | 模型权重 | `python -m up70_vision export-yolo` 自己导出 |
+| `docs/*.html` | 教程的构建产物 | 要就 `python -m vision gen-html` 自己生成 |
+| `assets/models/*.onnx`、`*.pt` | 模型权重 | `python -m vision export-yolo` 自己导出 |
 | `configs/camera_calibration*.yaml` | 每台相机一份的内参 | 向做过标定的队友要，或自己标 |
 
 `git ls-files` 里只有一百来个文件——**"仓库臃肿"的实感全部来自上面这些本地生成物**，

@@ -9,11 +9,11 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.color import (judge_color, mask_for_segments, parse_thresholds,
+    from vision.color import (judge_color, mask_for_segments, parse_thresholds,
                                         color_ratios, valid_pixel_mask)
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.color import (judge_color, mask_for_segments, parse_thresholds,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.color import (judge_color, mask_for_segments, parse_thresholds,
                                         color_ratios, valid_pixel_mask)
 
 import numpy as np
