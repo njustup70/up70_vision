@@ -31,11 +31,11 @@ import os
 import cv2
 import numpy as np
 
-from ...config.loader import load_intrinsics
-from ...calibration import scale_camera_matrix
-from ...detectors.aruco import ArucoDetector
-from ...pose import estimate_pose
-from ...viz.draw import put_text
+from vision.config.loader import load_intrinsics
+from vision.calibration import scale_camera_matrix
+from vision.detectors.aruco import ArucoDetector
+from vision.pose import estimate_pose
+from vision.viz.draw import put_text
 from .gen_scenes import (DEFAULT_MARKER_MM, build_suite, render_scene,
                                synthetic_intrinsics)
 from .check import TILT_JUDGE_MIN_DEG

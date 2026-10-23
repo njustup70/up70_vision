@@ -1,3 +1,11 @@
+
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """ArUco 识别自检：拿 assets/aruco/ 的图组对真值，一张一张报数字。
@@ -25,10 +33,10 @@ import sys
 
 import numpy as np
 
-from ...detectors.aruco import ArucoDetector, check_opencv_aruco
-from ...image_io import read_image_bgr
-from ...logging import get_logger, setup_logging
-from .gen_scenes import DEFAULT_OUT_DIR, iter_scene_images, load_truth
+from vision.detectors.aruco import ArucoDetector, check_opencv_aruco
+from vision.image_io import read_image_bgr
+from vision.logging import get_logger, setup_logging
+from gen_aruco import DEFAULT_OUT_DIR, iter_scene_images, load_truth
 
 log = get_logger("tools.aruco.check")
 

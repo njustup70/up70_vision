@@ -9,9 +9,9 @@
 
 怎么跑
     # 在装了 ultralytics 的环境里（本机是 ~/.venvs/yolo；该 venv 里也要 pip install -e 本仓库）
-    ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolov8n.pt
+    ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolov8n.pt
     # 自定义：换模型、换输入尺寸
-    ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolo11s.pt --imgsz 480 --out assets/models
+    ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolo11s.pt --imgsz 480 --out assets/models
 
 导出后怎么用
     # 注意：判色族/YOLO 走**批处理入口**；live 是 ArUco 专用（要画四边形和位姿轴）
@@ -21,15 +21,23 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
 import argparse
 import json
 import os
 import sys
 from pathlib import Path
 
-# 仓库根：vision/tools/yolo/export.py 往上三层（yolo -> tools -> vision -> 根）。
+# 仓库根：lab/export_yolo.py 往上两层（lab -> 根）。
 # 用 __file__ 而不是 cwd：默认输出目录固定在仓库的 assets/models/，从哪调用都一样。
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / "assets" / "models"
 
 
@@ -55,7 +63,7 @@ def main(argv=None) -> int:
         from ultralytics import YOLO
     except ModuleNotFoundError:
         print("❌ 导出需要 ultralytics（和 torch）。请用装了它的解释器跑，例如：")
-        print("     ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolov8n.pt")
+        print("     ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolov8n.pt")
         return 2
 
     out_dir = Path(os.path.expanduser(args.out))

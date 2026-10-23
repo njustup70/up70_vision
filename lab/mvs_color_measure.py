@@ -260,7 +260,7 @@ def main(argv=None):
     """实时判色窗口（需要 MVS SDK 与相机，缺一不可）。
 
     :param argv: 参数列表；None 表示取 `sys.argv[1:]`。
-        收形参是为了让 `python -m vision mvs-color --index 1` 能用：
+        收形参是为了让 `python lab/mvs_color_measure.py --index 1` 能用：
         统一入口会把"mvs-color"之外的参数原样传进来，而直接读 `sys.argv`
         会把这几个字当成非法参数。
     :return: 0 正常；1 相机打不开或一帧都没取到

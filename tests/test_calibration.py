@@ -17,14 +17,14 @@ try:
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
+    from lab.gen_chessboard import inject_png_dpi, render_board, write_pdf
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.calibration import (DIST_ORDER, MIN_VIEWS, RMS_USABLE,
                                               BoardSpec, CameraIntrinsics, board_object_points,
                                               calibrate, find_board_corners, undistort_image,
                                               undistort_points)
-    from vision.tools.calibration.gen_board import inject_png_dpi, render_board, write_pdf
+    from lab.gen_chessboard import inject_png_dpi, render_board, write_pdf
 
 import numpy as np
 

@@ -16,6 +16,14 @@
 退出码：全部通过为 0，有任一失败为 1。
 """
 
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
 import importlib
 import importlib.metadata as md
 import sys

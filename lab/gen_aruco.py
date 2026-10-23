@@ -1,3 +1,11 @@
+
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """ArUco 测试图组生成器：造出「多码图 / 旋转图 / 无码图」，并随图写一份真值 JSON。
@@ -33,9 +41,9 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from ...detectors.aruco import check_opencv_aruco, predefined_dictionary
-from ...image_io import ensure_dir, write_image_with_truth
-from ...logging import get_logger, setup_logging
+from vision.detectors.aruco import check_opencv_aruco, predefined_dictionary
+from vision.image_io import ensure_dir, write_image_with_truth
+from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.aruco.gen_scenes")
 

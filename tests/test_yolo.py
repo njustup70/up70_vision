@@ -183,7 +183,7 @@ def test_missing_weights_raises_readable_error():
         det.detect(np.zeros((64, 64, 3), dtype=np.uint8))
     except FileNotFoundError as exc:
         text = str(exc)
-        assert "definitely_missing.onnx" in text and "export-yolo" in text, text
+        assert "definitely_missing.onnx" in text and "export_yolo" in text, text
     else:
         raise AssertionError("权重缺失时应当抛 FileNotFoundError")
 

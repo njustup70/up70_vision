@@ -109,10 +109,10 @@ t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(642.3, 532.5) d=317mm t
 
 ```bash
 # 打印棋盘：出 PNG + PDF，打印时选「实际大小」
-python -m vision gen-chessboard --cols 9 --rows 6 --square-mm 15
+python lab/gen_chessboard.py --cols 9 --rows 6 --square-mm 15
 
 # 现场采 15 张图并解算，结果写 configs/camera_calibration.yaml
-python -m vision calibrate --capture 15 --board 9x6 --square-mm 23
+python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 ```
 
 **两个尺寸别混**（都"不报错只让数字错"）：
@@ -180,7 +180,8 @@ vision/
 │   ├── tools/                  工具按功能分组：env / aruco / blob / yolo / calibration / pose / doc
 │   ├── cli/                    命令行编排：parsers / run / live
 │   ├── api.py                  库调用门面：detect(image_bgr, "aruco")
-│   └── __main__.py             单一命令入口：python -m vision <子命令>
+│   └── __main__.py             单一命令入口：python -m vision <子命令>（6 条）
+├── lab/               一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束）
 ├── configs/             default.yaml、color_thresholds.yaml、内参快照
 ├── assets/              aruco/（9 张真值图）、calib/（棋盘 PNG+PDF）、models/、readme/
 ├── tests/               回归测试 103 项，可 python tests/test_xxx.py 独立跑
@@ -205,34 +206,40 @@ image_io/logging ┘                                                            
 
 ## 附录 B · 命令全表
 
-一个入口：14 个功能子命令 + `clean`。不带参数敲 `python -m vision` 就是这个表：
+**主入口只有 6 条**（`docs/迁移计划书` D3）：`python -m vision` 不带参数就是这个表。
+一年用不到三次的功能全部移到 `lab/`，直接 `python lab/xxx.py` 跑。
 
-| 子命令 | 干什么 |
+| 主入口 | 干什么 |
 |---|---|
 | `run` | 判色/检测批处理：读完所有帧再汇总 |
 | `live` | 实时 ArUco：逐帧检测 + 窗口/落盘 |
-| `doctor` | 环境自检（Python / opencv / 图像读写往返） |
-| `demo` | OpenCV 冒烟：造图 → 阈值 → 找轮廓 → 落盘，末行 `PASS` |
-| `check-aruco` | 按真值核对图组：ID / 四角 / 中心 |
-| `pose-check` | 位姿精度核对：`--dir` 逐图 / `--sweep` 批量扫描 |
-| `calibrate` | 相机标定：采棋盘图 → 内参 + 畸变 |
-| `gen-chessboard` | 生成棋盘 PNG + PDF |
-| `gen-aruco` | 生成 ArUco 测试图组 + 真值 JSON |
-| `gen-scenes` | 生成带真值的位姿测试图 |
-| `export-yolo` | 把 YOLO `.pt` 导出成 ONNX + 类名表 |
-| `hsv-tuner` | 拖滑条调 HSV 阈值，回车写回阈值表 |
-| `mvs-color` | 海康 MVS 相机实时判色窗口 |
-| `gen-html` | 教程 md → 单文件 html（需要 pandoc，产物不进库） |
+| `doctor` | 环境自检（实现 `lab/check_env.py`） |
+| `demo` | OpenCV 冒烟，末行 `PASS`（实现 `lab/demo.py`） |
+| `hsv-tuner` | 拖滑条调 HSV 阈值（实现 `lab/hsv_tuner.py`） |
 | `clean` | 清 `output/` 内容（留 `.gitkeep`）与所有 `__pycache__/` |
 
-旧的 `scripts/*.py` 薄壳已删除（2026-10-22）；CI 会拦住 `scripts/` 目录再次出现。
+`lab/` 下的工具（不进主入口）：
+
+| 工具 | 干什么 |
+|---|---|
+| `lab/check_aruco.py` | 按真值核对 ArUco 图组：ID / 四角 / 中心 |
+| `lab/pose_check/`（`python -m lab.pose_check`） | `--dir` 逐图核对 / `--sweep` 批量扫描 |
+| `lab/calibrate_camera.py` | 相机标定：采棋盘图 → 内参 + 畸变 |
+| `lab/gen_chessboard.py` | 生成棋盘 PNG + PDF |
+| `lab/gen_aruco.py` | 生成 ArUco 测试图组 + 真值 JSON |
+| `lab/pose_check/gen_scenes.py` | 生成带真值的位姿测试图 |
+| `lab/export_yolo.py` | 把 YOLO `.pt` 导出成 ONNX + 类名表 |
+| `lab/mvs_color_measure.py` | 海康 MVS 相机实时判色窗口 |
+| `lab/gen_html.py` | 教程 md → 单文件 html（需要 pandoc） |
+
+旧的 `scripts/*.py` 薄壳已删除；CI 会拦住 `scripts/` 目录再次出现。
 
 **测试与自检**（容器内）：
 
 | 项 | 命令 | 期望 |
 |---|---|---|
 | 环境 / 冒烟 | `python -m vision doctor`、`python -m vision demo` | 末行「结果：全部通过」/ `PASS` |
-| ArUco 图组 | `python -m vision check-aruco` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
+| ArUco 图组 | `python lab/check_aruco.py` | `通过 9/9`，中心 0.00 px，四角 ≤ 0.23 px |
 | 真机链路 | `python -m vision run --set input.source=camera --limit 10` | 取到 10 帧、`output/demo/` 落盘、退出码 0 |
 | 回归测试 | `for t in tests/test_*.py; do python "$t"; done`（或 `pytest tests/ -q`） | **103 项全过** |
 
@@ -241,10 +248,10 @@ image_io/logging ┘                                                            
 - 镜像里没有 pytest，`tests/` 每个文件都能用 `python` 直接跑（内置独立运行器）；CI 里用 `pytest`。
 - `test_config` 里那条绝对路径断言已按平台规整（`os.path.normpath`），Windows 与容器都是 103/103。
 - 断言必须带具体数字（如 `9/9`、`≤ 0.23 px`），不写 `assert x > 0`。
-- 改 `src/` 前先跑 `doctor`；碰 ArUco 跑 `check-aruco`，碰位姿跑一次真机实时。
+- 改代码前先跑 `python -m vision doctor`；碰 ArUco 跑 `python lab/check_aruco.py`，碰位姿跑一次真机实时。
 - 合成图上的精度基线（82.5 mm 码：距离 0.02%–0.42%、倾角 15°–75° 误差 0.05–0.42°）用
-  `python -m vision gen-scenes --suite` 造图后由 `pose-check`（逐图）或
-  `pose-check --sweep`（出 CSV/MD/8 张曲线）复现，口径与失败分析见 `docs/位姿估计.md`。
+  `python lab/pose_check/gen_scenes.py --suite` 造图后由
+  `python -m lab.pose_check --dir <目录>`（逐图）或 `--sweep`（出 CSV/MD/8 张曲线）复现，口径与失败分析见 `docs/位姿估计.md`。
 - 在别的代码里用一次检测：`from vision.api import detect; detect(img, "aruco")`
   ——不必自己走配置加载与工厂。
 
@@ -259,8 +266,8 @@ image_io/logging ┘                                                            
 | `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m vision clean` 清掉 |
 | `__pycache__/`、`*.pyc` | Python 字节码缓存 | 同上，一并清掉 |
 | `data/` | 数据集、回放素材、标定原图（几十 MB 到几 GB） | 按 `data/README.md` 各自本地准备 |
-| `docs/*.html` | 教程的构建产物 | 要就 `python -m vision gen-html` 自己生成 |
-| `assets/models/*.onnx`、`*.pt` | 模型权重 | `python -m vision export-yolo` 自己导出 |
+| `docs/*.html` | 教程的构建产物 | 要就 `python lab/gen_html.py` 自己生成 |
+| `assets/models/*.onnx`、`*.pt` | 模型权重 | `python lab/export_yolo.py` 自己导出 |
 | `configs/camera_calibration*.yaml` | 每台相机一份的内参 | 向做过标定的队友要，或自己标 |
 
 `git ls-files` 里只有一百来个文件——**"仓库臃肿"的实感全部来自上面这些本地生成物**，

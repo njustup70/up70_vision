@@ -14,12 +14,12 @@
 
 依赖谁 / 被谁用
     依赖 `calibration`（算法）、`io.base`（抓帧）、`config`（取相机参数）、`image_io` / `logging`（读写图与日志）。
-    入口：`python -m vision calibrate`。
+    入口：`python lab/calibrate_camera.py`。
 
 两种用法
-    ① 已有图：`python -m vision calibrate --images data/calib`
+    ① 已有图：`python lab/calibrate_camera.py --images data/calib`
        （图可以从手机拍、也可以用 `--capture` 先采）
-    ② 现场采图：`python -m vision calibrate --capture 15`
+    ② 现场采图：`python lab/calibrate_camera.py --capture 15`
        （走 `--set input.source=camera` 的相机；每收一张打印一次进度）
 
 退出码
@@ -42,12 +42,12 @@ import sys
 
 import numpy as np
 
-from ...config.loader import load_config, load_thresholds, resolve_thresholds_path
-from ...calibration import (MIN_VIEWS, RMS_USABLE, BoardSpec, CameraIntrinsics,
+from vision.config.loader import load_config, load_thresholds, resolve_thresholds_path
+from vision.calibration import (MIN_VIEWS, RMS_USABLE, BoardSpec, CameraIntrinsics,
                                 calibrate, find_board_corners, undistort_image)
-from ...io.base import build_source
-from ...image_io import ensure_dir, read_image_bgr, write_image
-from ...logging import get_logger, setup_logging
+from vision.io.base import build_source
+from vision.image_io import ensure_dir, read_image_bgr, write_image
+from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.calibration.calibrate")
 
@@ -369,7 +369,7 @@ def write_calibration(path: str, intrinsics: CameraIntrinsics) -> str:
     directory = os.path.dirname(os.path.abspath(path))
     ensure_dir(directory)
     header = (
-        "# 相机内参与畸变系数（由 python -m vision calibrate 生成，别手改）\n"
+        "# 相机内参与畸变系数（由 python lab/calibrate_camera.py 生成，别手改）\n"
         "#\n"
         "# 读这份文件的地方：阶段二的位姿估计（solvePnP）与去畸变。\n"
         "#   camera_matrix : 3x3 内参矩阵 [[fx,0,cx],[0,fy,cy],[0,0,1]]\n"
@@ -445,8 +445,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="calibrate_camera",
         description="相机标定：算内参矩阵与畸变系数（棋盘板）",
-        epilog="例：python -m vision calibrate --capture 15  "
-               "或  python -m vision calibrate --images data/calib")
+        epilog="例：python lab/calibrate_camera.py --capture 15  "
+               "或  python lab/calibrate_camera.py --images data/calib")
     ap.add_argument("--images", default=None,
                     help="从图目录标定（与 --capture 二选一）")
     ap.add_argument("--capture", type=int, default=0, metavar="N",
@@ -583,7 +583,7 @@ def main(argv=None) -> int:
     try:
         path = write_calibration(args.out, intrinsics)
         print(f"  已写入     : {path}")
-        print(f"  下一步     : python -m vision calibrate --from {path}   # 复核")
+        print(f"  下一步     : python lab/calibrate_camera.py --from {path}   # 复核")
     except OSError as exc:
         print(f"❌ 写盘失败：{exc}", file=sys.stderr)
         return 1

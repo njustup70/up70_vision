@@ -34,7 +34,7 @@ try:
     from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
     from vision.types import ArucoMarker, MarkerPose
-    from vision.tools.pose.gen_scenes import PoseSpec, render_scene
+    from lab.pose_check.gen_scenes import PoseSpec, render_scene
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.calibration import CameraIntrinsics, undistort_points
@@ -42,7 +42,7 @@ except ModuleNotFoundError:
     from vision.pose import (DEFAULT_METHOD, marker_object_points, pose_metrics,
                                        solve_pose)
     from vision.types import ArucoMarker, MarkerPose
-    from vision.tools.pose.gen_scenes import PoseSpec, render_scene
+    from lab.pose_check.gen_scenes import PoseSpec, render_scene
 
 import cv2
 import numpy as np

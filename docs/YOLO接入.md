@@ -29,7 +29,7 @@
 
 ```bash
 cd vision-main
-~/.venvs/yolo/bin/python -m vision export-yolo --weights yolov8n.pt
+~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolov8n.pt
 ```
 
 产出两个文件（都已被 `.gitignore` 忽略）：
@@ -139,7 +139,7 @@ YOLOv8 的代码与权重都是 **AGPL-3.0**。队内自用没问题；但如果
 | 检测器实现 | `vision/detectors/yolo.py` |
 | 工厂与注册 | `vision/detectors/base.py`（`DETECTOR_NAMES`） |
 | 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`vision/config/schema.py` |
-| 导出脚本 | `python -m vision export-yolo`（实现 `vision/tools/yolo/export.py`） |
+| 导出脚本 | `python lab/export_yolo.py`（实现 `vision/tools/yolo/export.py`） |
 | 权重与说明 | `assets/models/`（权重被 gitignore，只有 README 入库） |
 | 测试 | `tests/test_yolo.py`（20 项，不需要权重也能跑） |
 

@@ -9,7 +9,7 @@
     只放"把一块板画出来"。找角点、解内参都在 `calibration.py` 与 `calibrate_camera.py`。
 
 依赖谁 / 被谁用
-    依赖 `calibration`（板子参数）与 `image_io`（写图）。入口：`python -m vision gen-chessboard`。
+    依赖 `calibration`（板子参数）与 `image_io`（写图）。入口：`python lab/gen_chessboard.py`。
 
 对外约定
     · **`--cols/--rows` 是内角点个数**，不是格子数（10x7 格 -> 9x6 内角点）。这也是标定工具要填的数。
@@ -29,13 +29,21 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
 import argparse
 import os
 import sys
 
-from ...calibration import BoardSpec
-from ...image_io import ensure_dir, write_image
-from ...logging import get_logger, setup_logging
+from vision.calibration import BoardSpec
+from vision.image_io import ensure_dir, write_image
+from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.calibration.gen_board")
 
@@ -185,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="gen_chessboard",
         description="生成可打印的棋盘标定板（内角点个数不要填成格子数）",
-        epilog="例：python -m vision gen-chessboard --cols 9 --rows 6 --square-mm 15")
+        epilog="例：python lab/gen_chessboard.py --cols 9 --rows 6 --square-mm 15")
     ap.add_argument("--cols", type=int, default=9, help="横向**内角点**个数（默认 9）")
     ap.add_argument("--rows", type=int, default=6, help="纵向**内角点**个数（默认 6）")
     ap.add_argument("--square-mm", type=float, default=15.0,

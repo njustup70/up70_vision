@@ -279,7 +279,7 @@ def test_load_intrinsics_roundtrip_and_missing_file():
         try:
             load_intrinsics(os.path.join(td, "nope.yaml"))
         except ConfigError as exc:
-            assert "vision calibrate" in str(exc), f"报错应给出标定命令，实际：{exc}"
+            assert "calibrate_camera" in str(exc), f"报错应给出标定命令，实际：{exc}"
         else:
             raise AssertionError("内参文件不存在时应当抛 ConfigError")
 

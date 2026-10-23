@@ -6,8 +6,8 @@
     改一处忘了改另一处就成了两个版本。现在仓库只留 md，要 html 自己生成。
 
 怎么跑（仓库根目录）
-    python -m vision gen-html                           # 转 docs/ 下所有教程 md
-    python -m vision gen-html docs/教程-从像素到毫米.md
+    python lab/gen_html.py                           # 转 docs/ 下所有教程 md
+    python lab/gen_html.py docs/教程-从像素到毫米.md
 
 放什么 / 不放什么
     只做"调用 pandoc 把 md 转成 html"这一件事；不生成目录、不套站点模板、
@@ -22,6 +22,14 @@
     与 md 同名的 `.html`，落在同一个目录。`.gitignore` 已排除 `docs/*.html`，
     生成后不会误提交；要对外发布就单独拷出去。
 """
+
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 import argparse
 import glob

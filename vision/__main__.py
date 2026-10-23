@@ -78,37 +78,24 @@ def ensure_utf8_stdout() -> bool:
     return True
 
 
-#: 子命令登记表：名字 -> (模块名, 函数名, 一行说明)。
-#: 顺序即 `--help` 里的显示顺序，按"最常用 -> 最少用"排；`_dispatch()` 只认这张表。
+#: 主入口只保留 6 条子命令（`docs/迁移计划书` D3）：run / live / doctor / demo / hsv-tuner / clean。
+#: 其余功能全部移进 `lab/`，直接 `python lab/xxx.py` 跑——一年用不到三次的功能不配进主入口。
+#:
+#: 名字 -> (模块名, 函数名, 一行说明)。顺序即 `--help` 里的显示顺序。
 COMMANDS = {
     "run": ("vision.cli", "run",
             "判色/检测批处理：读完所有帧再汇总"),
     "live": ("vision.cli", "run_aruco_live",
              "实时 ArUco：逐帧检测 + 窗口/落盘"),
-    "doctor": ("vision.tools.env.check_env", "main",
-               "环境自检：Python / opencv / 图像读写往返"),
-    "demo": ("vision.tools.env.demo", "main",
-             "OpenCV 冒烟：造图 -> 阈值 -> 找轮廓 -> 落盘"),
-    "check-aruco": ("vision.tools.aruco.check", "main",
-                    "按真值核对图组：ID / 四角 / 中心"),
-    "pose-check": ("vision.tools.pose", "main",
-                   "位姿精度核对：--dir 逐图 / --sweep 批量扫描"),
-    "calibrate": ("vision.tools.calibration.calibrate", "main",
-                  "相机标定：采棋盘图 -> 内参 + 畸变"),
-    "gen-chessboard": ("vision.tools.calibration.gen_board", "main",
-                       "生成棋盘 PNG + PDF，打印时选「实际大小」"),
-    "gen-aruco": ("vision.tools.aruco.gen_scenes", "main",
-                  "生成 ArUco 测试图组 + 真值 JSON"),
-    "gen-scenes": ("vision.tools.pose.gen_scenes", "main",
-                   "生成带真值的位姿测试图"),
-    "export-yolo": ("vision.tools.yolo.export", "main",
-                    "把 YOLO .pt 导出成 ONNX + 类名表"),
-    "hsv-tuner": ("vision.tools.blob.hsv_tuner", "main",
-                  "拖滑条调 HSV 阈值，回车写回 color_thresholds.yaml"),
-    "mvs-color": ("vision.tools.blob.color_measure", "main",
-                  "海康 MVS 相机实时判色窗口"),
-    "gen-html": ("vision.tools.doc.gen_html", "main",
-                 "教程 md -> 单文件 html（需要 pandoc；构建产物不进库）"),
+}
+
+#: 留在主入口、但实现放在 `lab/` 的三个子命令：值是相对仓库根的脚本路径。
+#: **用 runpy 按脚本执行，而不是 import**——`vision/` 不允许 import `lab/`（D1），
+#: 否则"一次性工具"会反向被运行时代码依赖，`lab/` 就再也删不掉了。
+LAB_SCRIPTS = {
+    "doctor": ("lab/check_env.py", "环境自检：Python / opencv / 图像读写往返"),
+    "demo": ("lab/demo.py", "OpenCV 冒烟：造图 -> 阈值 -> 找轮廓 -> 落盘"),
+    "hsv-tuner": ("lab/hsv_tuner.py", "拖滑条调 HSV 阈值，回车写回 color_thresholds.yaml"),
 }
 
 #: 不吃命令行的子命令：目标是自包含脚本（没有 argparse），多给参数说明用错了。
@@ -174,6 +161,40 @@ def _clean(root: str = ".") -> int:
     return 0
 
 
+def _run_lab_script(rel_path: str, argv) -> int:
+    """把 argv 交给 `lab/` 下的一个独立脚本执行（runpy，不是 import）。
+
+    :param rel_path: 相对仓库根的脚本路径，如 `lab/check_env.py`
+    :param argv: 剩下的参数，原样变成脚本的 `sys.argv[1:]`
+    :return: 脚本的退出码（`sys.exit(N)` 取 N；抛异常按 1）
+
+    为什么用 runpy 而不是 import
+        `vision/` 不允许依赖 `lab/`（见迁移计划书 D1）。按脚本执行既能复用同一个文件，
+        又不会在源码里留下 `import lab.xxx`——`tests/test_architecture.py` 会检查这一点。
+    """
+    import runpy
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / rel_path
+    if not script.is_file():
+        print(f"❌ 找不到 {rel_path}（仓库结构被改坏了？）", file=sys.stderr)
+        return 2
+    old_argv = sys.argv
+    sys.path.insert(0, str(root))
+    sys.argv = [str(script), *argv]
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+        return 0
+    except SystemExit as exc:
+        code = exc.code
+        if code is None:
+            return 0
+        return int(code) if isinstance(code, int) else 1
+    finally:
+        sys.argv = old_argv
+
+
 def _dispatch(name: str, argv) -> int:
     """把 argv 转交给子命令背后的原实现。
 
@@ -185,6 +206,10 @@ def _dispatch(name: str, argv) -> int:
         `--help` 与 `clean` 不需要 cv2、numpy。顶部 import 会让"看个指示牌"
         也付出 0.5 秒的加载代价，并且在没有装依赖的机器上连帮助都看不到。
     """
+    if name in LAB_SCRIPTS:
+        rel_path, _desc = LAB_SCRIPTS[name]
+        return _run_lab_script(rel_path, argv)
+
     module_name, attr, _desc = COMMANDS[name]
     module = importlib.import_module(module_name)
     func = getattr(module, attr)
@@ -203,7 +228,7 @@ def _dispatch(name: str, argv) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """顶层参数解析器：一张子命令指示牌，每个子命令把剩余参数原样放行。
 
-    :return: 填好 14 个功能子命令 + `clean` 的 `ArgumentParser`
+    :return: 填好 6 个子命令 + `clean` 的 `ArgumentParser`
 
     关键写法
         · 功能子命令的子解析器**一个参数都不注册**，且 `add_help=False`；
@@ -214,15 +239,18 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="python -m vision",
-        description="UP70 视觉：一个入口，14 个功能子命令 + clean（不带参数时打印这张表）",
+        description="UP70 视觉：一个入口，6 个子命令（run/live/doctor/demo/hsv-tuner/clean）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="例：python -m vision run --set input.source=synthetic --limit 3\n"
-               "    python -m vision pose-check --dir output/pose_scenes\n"
+               "    python -m vision demo          （其余工具在 lab/：python -m lab.pose_check --dir DIR）\n"
                "    python -m vision clean")
     subparsers = parser.add_subparsers(dest="command", metavar="<子命令>")
 
     for name, (_module, _attr, desc) in COMMANDS.items():
         # 空壳子解析器：只负责在 --help 里露个名字和一行说明，参数交给目标自己
+        subparsers.add_parser(name, help=desc, description=desc, add_help=False)
+    for name, (_path, desc) in LAB_SCRIPTS.items():
+        # doctor / demo / hsv-tuner：实现放在 lab/，用 runpy 按脚本跑（见 _run_lab_script）
         subparsers.add_parser(name, help=desc, description=desc, add_help=False)
 
     clean = subparsers.add_parser("clean", help=CLEAN_HELP, description=CLEAN_HELP)

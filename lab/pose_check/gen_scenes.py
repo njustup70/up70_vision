@@ -42,8 +42,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from ...calibration import scale_intrinsics
-from ...pose import marker_object_points, pose_metrics
+from vision.calibration import scale_intrinsics
+from vision.pose import marker_object_points, pose_metrics
 
 #: 默认画布。与相机标定文档里的那台相机同分辨率（1280×1024）。
 DEFAULT_CANVAS = (1280, 1024)
@@ -321,7 +321,7 @@ def write_scene(out_dir: str, spec: PoseSpec, image_bgr: np.ndarray, truth: dict
 
     :return: `(png 路径, json 路径)`
     """
-    from ...image_io import write_image_with_truth
+    from vision.image_io import write_image_with_truth
     os.makedirs(out_dir, exist_ok=True)
     png_path = os.path.join(out_dir, f"{spec.name}.png")
     return write_image_with_truth(image_bgr, png_path, truth)
@@ -405,7 +405,7 @@ def _load_intrinsics(calib_path: str):
     """
     if not calib_path:
         return None
-    from ...config.loader import load_intrinsics
+    from vision.config.loader import load_intrinsics
     return load_intrinsics(calib_path)
 
 
@@ -444,3 +444,7 @@ def main(argv=None) -> int:
         written += 1
     print(f"✅ 已写 {written} 个场景到 {args.out}（每张图配一个同名 .json 真值）")
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

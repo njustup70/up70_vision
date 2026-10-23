@@ -299,7 +299,7 @@ def print_batch_summary(cfg, summary, written) -> bool:
         # 要按真值逐张核 ID / 四角 / 中心，那是 tools/aruco/check.py 的活。
         print(f"  自检(aruco) : 本次共 {summary['detections']} 个码、id 集合 {summary['ids']}"
               f"（本输入源无真值，不做对错判定）")
-        print("              按真值逐张核 ID/四角/中心：python -m vision check-aruco")
+        print("              按真值逐张核 ID/四角/中心：python lab/check_aruco.py")
     if cfg.output.enabled:
         print(f"  落盘        : {written}")
     print(f"\n{'✅ 运行成功' if ok else '❌ 自检未通过'}")

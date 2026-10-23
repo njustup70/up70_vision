@@ -22,6 +22,14 @@
 import sys
 from pathlib import Path
 
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+import sys
+from pathlib import Path
+
 try:
     import cv2
     import numpy as np
@@ -31,9 +39,9 @@ except ImportError as exc:  # Ubuntu 上最常见：缺 libGL.so.1
     print("         sudo apt-get install -y libgl1 libglib2.0-0t64")
     raise SystemExit(1) from exc
 
-# 仓库根由本文件位置反推：vision/tools/env/demo.py 往上三层（env -> tools -> vision -> 根）。
+# 仓库根由本文件位置反推：lab/demo.py 往上两层（lab -> 根）。
 # 用 __file__ 而不是 cwd：在容器里从任意目录调用都能把图写到仓库的 output/demo/。
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 _SMOKE_PNG = _REPO_ROOT / "output" / "demo" / "opencv_smoke.png"
 
 

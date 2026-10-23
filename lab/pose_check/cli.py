@@ -19,16 +19,24 @@
     2 = 参数或环境错误（没有图片、内参读不出来、两套内参都对不上）。
 """
 
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+
 import argparse
 import glob
 import os
 
 import numpy as np
 
-from ...config.loader import load_intrinsics
-from ...calibration import scale_intrinsics
-from ...detectors.aruco import ArucoDetector
-from ...pose import DEFAULT_METHOD
+from vision.config.loader import load_intrinsics
+from vision.calibration import scale_intrinsics
+from vision.detectors.aruco import ArucoDetector
+from vision.pose import DEFAULT_METHOD
 from .gen_scenes import DEFAULT_MARKER_MM
 from .check import (DEFAULT_MAX_DIST_ERR, DEFAULT_MAX_RMS_PX, DEFAULT_MAX_TILT_ERR_DEG,
                     IMAGE_SUFFIXES, K_MISMATCH_RATIO, check_one, load_truth)

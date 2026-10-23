@@ -1,3 +1,11 @@
+
+import sys
+from pathlib import Path
+
+# `lab/` 不是包：直接 `python lab/xxx.py` 跑，脚本目录会进 sys.path，
+# 但仓库根不会。这一行把仓库根补进去，才能 `import vision`（lab 可以依赖 vision，反过来不行）。
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """HSV 阈值调节器：拖滑条看掩膜，回车把阈值写回 configs/color_thresholds.yaml。
@@ -34,12 +42,12 @@ import cv2
 import numpy as np
 import yaml
 
-from ...config.loader import (find_default_config, read_yaml, resolve_path,
+from vision.config.loader import (find_default_config, read_yaml, resolve_path,
                              split_thresholds_doc)
-from ...color import mask_for_segments, parse_thresholds, valid_pixel_mask
-from ...io.base import build_source
-from ...image_io import read_image_bgr
-from ...logging import get_logger, setup_logging
+from vision.color import mask_for_segments, parse_thresholds, valid_pixel_mask
+from vision.io.base import build_source
+from vision.image_io import read_image_bgr
+from vision.logging import get_logger, setup_logging
 
 log = get_logger("tools.blob.hsv_tuner")
 

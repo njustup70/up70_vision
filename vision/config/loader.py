@@ -242,7 +242,7 @@ def load_intrinsics(path: str):
 
     用大白话说
         位姿估计要知道"这颗镜头把像素换算成角度"的那几个数（fx/fy/cx/cy 与畸变系数）。
-        那些数由 `python -m vision calibrate` 标定完写成一个 YAML，这里只是把它读回来。
+        那些数由 `python lab/calibrate_camera.py` 标定完写成一个 YAML，这里只是把它读回来。
 
     :param path: 标定文件路径
     :return: `calibration.CameraIntrinsics`
@@ -257,7 +257,7 @@ def load_intrinsics(path: str):
         raise ConfigError(
             f"内参文件不存在：{path}\n"
             "  位姿估计需要这台相机的内参（每台一份，不进版本库）。生成方式：\n"
-            "    python -m vision calibrate --images data/calib \\\n"
+            "    python lab/calibrate_camera.py --images data/calib \\\n"
             "        --square-mm <实量格子毫米> --out configs/camera_calibration.yaml\n"
             "  或向做过标定的队友要一份放到该路径。")
     data = read_yaml(path)
