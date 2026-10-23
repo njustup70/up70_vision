@@ -102,3 +102,47 @@ def test_main_entry_lists_exactly_six_subcommands():
 
     names = set(COMMANDS) | set(LAB_SCRIPTS) | {"clean"}
     assert names == {"run", "live", "doctor", "demo", "hsv-tuner", "clean"}, names
+
+
+def test_yolo_batch_runs_and_writes():
+    """YOLO 批处理冒烟：验权重路径 / 解码 / 落盘这条链能通。
+
+    识别精度不在这里验（那要 COCO 图与真值）；这里只要入口跑通、产物落齐。
+    权重不进版本库（`knowledge/models/*.onnx`），没有就跳过——CI 与新人机器上通常没有。
+    """
+    weights = ROOT / "knowledge" / "models" / "yolov8n.onnx"
+    if not weights.is_file():
+        import pytest
+        pytest.skip("没有 YOLO 权重：先 python lab/export_yolo.py --weights yolov8n.pt")
+
+    out = _fresh_dir("yolo")
+    scenes = _fresh_dir("yolo_scenes")
+    shutil.copy2(ROOT / "tests" / "assets" / "aruco" / "scenes" / "multi_row_3.png", scenes)
+    code = run(["--out", str(out), "--limit", "1",
+                "--set", "detector.name=yolo",
+                "--set", "input.source=replay",
+                "--set", f"input.replay.path={scenes}"])
+    assert code == 0, f"退出码 {code}"
+    for name in ("frame_0000.png", "results.json", "detections.csv", "summary.json"):
+        assert (out / name).is_file(), f"缺少产物 {name}"
+
+
+def test_yolo_weights_path_points_into_knowledge_models():
+    """默认权重路径必须指向 knowledge/models（S4 搬家后曾漏改，一跑就 FileNotFoundError）。
+
+    直接读 YAML 的 `detector.yolo` 段：`AppConfig.detector.params` 只装**当前选中**检测器的
+    参数（默认 blob），拿不到 yolo 默认值。
+    """
+    import yaml
+
+    data = yaml.safe_load((ROOT / "configs" / "default.yaml").read_text(encoding="utf-8"))
+    weights = str(data["detector"]["yolo"]["weights"])
+    assert "knowledge/models" in weights, weights
+
+
+def test_live_rejects_non_aruco_detector():
+    """实时入口只跑 ArUco：别的检测器要以退出码 2 + 人话提示拒绝，不能抛 traceback。"""
+    code = run_aruco_live(["--headless", "--limit", "1",
+                           "--set", "detector.name=blob",
+                           "--set", "input.source=synthetic"])
+    assert code == 2, f"应当拒绝，实际退出码 {code}"
