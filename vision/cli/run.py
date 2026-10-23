@@ -29,8 +29,7 @@ from ..yolo.pipeline import ColorConfig, process_frames, summarize
 from ..types import is_marker
 from ..sources import build_source
 from ..logging import setup_logging
-from .output import draw_hud
-from ..yolo.draw import draw_detections
+from .output import draw_all, draw_hud
 from .output import OutputWriter
 from .parsers import build_parser
 
@@ -135,7 +134,7 @@ def run(argv=None) -> int:
 
     def on_result(frame, result):
         """每帧回调：画框 + HUD，落盘，然后打一行终端摘要。"""
-        canvas = draw_detections(frame.image_bgr, result.detections)
+        canvas = draw_all(frame.image_bgr, result.detections)
         hud = [
             f"{frame.source} #{frame.index}",
             f"det={len(result.detections)} uncertain={result.uncertain}",
@@ -290,7 +289,7 @@ def print_batch_summary(cfg, summary, written) -> bool:
     # 合成图自检只对 blob 有意义：那 18 个色块本来就是给 blob 找的。
     # 换成 stub_aruco（伪造码）时不该拿色块数去要求它。
     if cfg.input.source == "synthetic" and cfg.detector.name == "blob":
-        expected = cfg.input.synthetic.num_frames * cfg.input.synthetic.blocks_per_frame
+        expected = summary["frames"] * cfg.input.synthetic.blocks_per_frame
         got = summary["detections"]
         print(f"  自检(合成图): 期望 {expected} 个色块，实得 {got} 个 -> "
               f"{'✅ 通过' if got == expected else '❌ 不一致'}")
@@ -310,10 +309,22 @@ def print_batch_summary(cfg, summary, written) -> bool:
     elif cfg.input.source == "synthetic" and cfg.detector.name != "blob":
         print(f"  自检(合成图): 跳过节数检查（检测器是 {cfg.detector.name}，色块数不适用）")
     if cfg.detector.name == "stub_aruco":
-        want_ids = list(cfg.detector.params.get("ids", [0, 1, 2]))
-        expected = summary["frames"] * len(want_ids)
+        want_ids = [int(i) for i in cfg.detector.params.get("ids", [0, 1, 2])]
+        params = cfg.detector.params
+        mode = str(params.get("mode", "normal")).strip().lower()
+        empty_after = int(params.get("empty_after", 0) or 0)
+        # 期望值必须跟着"这一轮实际会出几个码"走，否则 --limit 与无码模式都会误报：
+        #   mode=none          → 恒无码，期望 0
+        #   empty_after=N > 0  → 前 N 帧出码，之后无码
+        if mode == "none":
+            expected = 0
+        elif empty_after > 0:
+            expected = min(summary["frames"], empty_after) * len(want_ids)
+        else:
+            expected = summary["frames"] * len(want_ids)
         got = summary["detections"]
-        ids_ok = set(summary["ids"]) == set(int(i) for i in want_ids) or not want_ids
+        want_set = set(want_ids) if expected else set()
+        ids_ok = set(summary["ids"]) == want_set
         print(f"  自检(stub)  : 期望 {expected} 个码、id 集合 {sorted(int(i) for i in want_ids)}，"
               f"实得 {got} 个、id 集合 {summary['ids']} -> "
               f"{'✅ 通过' if (got == expected and ids_ok) else '❌ 不一致'}")
