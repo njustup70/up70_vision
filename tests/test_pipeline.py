@@ -8,20 +8,24 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
+    from vision.cli.run import build_detector
+    from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import ArucoMarker, Detection, is_marker
-    from up70_vision.io.synthetic import SyntheticSource
+    from vision.yolo.color_check import parse_thresholds
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection
+    from vision.sources.synthetic import SyntheticSource
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.pipeline import (ColorConfig, match_to_truth, process_frame,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.cli.run import build_detector
+    from vision.yolo.pipeline import (ColorConfig, match_to_truth, process_frame,
                                            process_frames, summarize)
-    from up70_vision.core.color import parse_thresholds
-    from up70_vision.core.types import ArucoMarker, Detection, is_marker
-    from up70_vision.io.synthetic import SyntheticSource
+    from vision.yolo.color_check import parse_thresholds
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection
+    from vision.sources.synthetic import SyntheticSource
 
 import numpy as np
 
@@ -133,7 +137,7 @@ def test_color_config_validation():
 
 # ---------------------------------------------------------------- ArUco（stub）
 def test_stub_aruco_returns_contract_markers():
-    """stub 必须按 docs/interface.md 第 2.2 节返回 ArucoMarker，且四条约定都成立。"""
+    """stub 必须按 vision/docs/interface.md 第 2.2 节返回 ArucoMarker，且四条约定都成立。"""
     detector = build_detector("stub_aruco", {"ids": [0, 1, 2], "side_px": 90, "moving": True})
     assert detector.name == "stub_aruco"
     frame = list(_source())[0]

@@ -9,7 +9,7 @@
 #   sudo systemctl restart docker
 #
 # 用法与 CPU 版相同，只是换 -f 指向本文件：
-#   docker compose -f .devcontainer/docker-compose-gpu.yml run --rm up70-vision python scripts/demo.py
+#   docker compose -f .devcontainer/docker-compose-gpu.yml run --rm up70-vision python -m vision demo
 
 services:
   up70-vision:

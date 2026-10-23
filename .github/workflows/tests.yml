@@ -1,0 +1,36 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      # 坑：opencv-python 在无头 Linux 上 import 会报 libGL.so.1 找不到，
+      # 这两行不能省，否则第一次 CI 必红，且报错信息跟测试毫无关系。
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+      - run: pip install -e . pytest
+      - run: pytest tests/ -q
+
+      # 入口登记检查：新功能一律做成 `python -m vision <子命令>`，
+      # 不许再往 scripts/ 里加新文件——否则"一个功能长两个入口"的老毛病会原样复现
+      # （见仓库瘦身清单六之二的防复发机制）。
+      - name: scripts/ 目录不允许存在
+        run: |
+          python - <<'PY'
+          import pathlib
+          import sys
+
+          # scripts/ 已于 2026-10-22 整体删除（旧薄壳收编为子命令）；
+          # 目录本身都不允许再出现，否则"一个功能长两个入口"的老毛病会原样复发
+          if pathlib.Path("scripts").exists():
+              entries = sorted(p.name for p in pathlib.Path("scripts").iterdir())
+              print(f"::error::scripts/ 目录不应存在（发现 {entries}）；"
+                    "新功能请加成 `python -m vision <子命令>` 并在 __main__.py 的 COMMANDS 里登记")
+              sys.exit(1)
+          print("OK：scripts/ 不存在，入口唯一")
+          PY

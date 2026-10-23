@@ -1,0 +1,42 @@
+{
+  "scene": "marker_02",
+  "image": "markers/marker_02.png",
+  "dictionary": "DICT_4X4_50",
+  "width": 360,
+  "height": 360,
+  "generator": "lab/gen_aruco",
+  "params": {
+    "side_px": 200,
+    "margin_px": 80,
+    "angle_deg": 0.0
+  },
+  "markers": [
+    {
+      "id": 2,
+      "center": [
+        180.0,
+        180.0
+      ],
+      "corners": [
+        [
+          80.0,
+          80.0
+        ],
+        [
+          280.0,
+          80.0
+        ],
+        [
+          280.0,
+          280.0
+        ],
+        [
+          80.0,
+          280.0
+        ]
+      ],
+      "side_px": 200,
+      "angle_deg": 0.0
+    }
+  ]
+}

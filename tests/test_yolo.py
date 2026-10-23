@@ -21,20 +21,20 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.core.detectors.base import DETECTOR_NAMES, build_detector
-    from up70_vision.core.detectors.yolo import (YoloDetector, decode_predictions,
+    from vision.config.schema import ConfigError, from_dict
+    from vision.cli.run import build_detector
+    from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
-    from up70_vision.core.types import Detection
-    from up70_vision.viz.draw import detection_label
+    from vision.types import Detection
+    from vision.yolo.draw import detection_label
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.core.detectors.base import DETECTOR_NAMES, build_detector
-    from up70_vision.core.detectors.yolo import (YoloDetector, decode_predictions,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.config.schema import ConfigError, from_dict
+    from vision.cli.run import build_detector
+    from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
-    from up70_vision.core.types import Detection
-    from up70_vision.viz.draw import detection_label
+    from vision.types import Detection
+    from vision.yolo.draw import detection_label
 
 
 # ---------------------------------------------------------------- 假网络
@@ -178,7 +178,7 @@ def test_detect_returns_empty_list_for_empty_prediction():
 
 
 def test_missing_weights_raises_readable_error():
-    det = YoloDetector(weights="assets/models/definitely_missing.onnx")
+    det = YoloDetector(weights="knowledge/models/definitely_missing.onnx")
     try:
         det.detect(np.zeros((64, 64, 3), dtype=np.uint8))
     except FileNotFoundError as exc:
@@ -225,7 +225,6 @@ def test_label_stays_unknown_when_nothing_is_known():
 
 # ---------------------------------------------------------------- 注册与配置
 def test_factory_registers_yolo():
-    assert "yolo" in DETECTOR_NAMES, DETECTOR_NAMES
     det = build_detector("yolo", {"weights": "dummy.onnx"})
     assert isinstance(det, YoloDetector)
     assert det.name == "yolo"
@@ -249,7 +248,7 @@ def test_config_rejects_out_of_range_values():
 
 def test_config_accepts_valid_yolo_section():
     cfg = from_dict({"detector": {"name": "yolo",
-                                  "yolo": {"weights": "assets/models/yolov8n.onnx",
+                                  "yolo": {"weights": "knowledge/models/yolov8n.onnx",
                                            "conf": 0.3, "iou": 0.5, "imgsz": 320,
                                            "classes": [0, 2]}}})
     assert cfg.detector.name == "yolo"

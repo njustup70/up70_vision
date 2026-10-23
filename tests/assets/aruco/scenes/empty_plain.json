@@ -1,0 +1,12 @@
+{
+  "scene": "empty_plain",
+  "image": "scenes/empty_plain.png",
+  "dictionary": "DICT_4X4_50",
+  "width": 640,
+  "height": 480,
+  "generator": "lab/gen_aruco",
+  "params": {
+    "seed": 2027
+  },
+  "markers": []
+}

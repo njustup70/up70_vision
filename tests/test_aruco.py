@@ -8,7 +8,7 @@
         · 四角误差 ≤ 0.25 px（实测最大 0.23 px），并且四角顺序（TL→TR→BR→BL）
           用"上边的倾角"单独验一遍——顺序拧了不会报错，只会让 solvePnP 全错
         · 无码图返回**空列表**（不是 None、不抛异常）
-    真值来自 assets/aruco/*.json，由 tools/gen_aruco.py 生成（重跑逐字节一致）。
+    真值来自 tests/assets/aruco/*.json，由 tools/aruco/gen_scenes.py 生成（重跑逐字节一致）。
 
 环境要求
     需要 OpenCV >= 4.7 的新版 aruco API。容器（cv2 4.14）里全跑；
@@ -24,25 +24,25 @@ import unittest
 from pathlib import Path
 
 try:
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.core.detectors.aruco import ArucoDetector
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.types import ArucoMarker
-    from up70_vision.tools.gen_aruco import (load_truth, scene_rotated)
-    from up70_vision.utils.image_io import read_image_bgr
+    from vision.config.schema import ConfigError, from_dict
+    from vision.aruco.detector import ArucoDetector
+    from vision.cli.run import build_detector
+    from vision.aruco.types import ArucoMarker
+    from lab.gen_aruco import (load_truth, scene_rotated)
+    from vision.sources import read_image_bgr
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.schema import ConfigError, from_dict
-    from up70_vision.core.detectors.aruco import ArucoDetector
-    from up70_vision.core.detectors.base import build_detector
-    from up70_vision.core.types import ArucoMarker
-    from up70_vision.tools.gen_aruco import (load_truth, scene_rotated)
-    from up70_vision.utils.image_io import read_image_bgr
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.config.schema import ConfigError, from_dict
+    from vision.aruco.detector import ArucoDetector
+    from vision.cli.run import build_detector
+    from vision.aruco.types import ArucoMarker
+    from lab.gen_aruco import (load_truth, scene_rotated)
+    from vision.sources import read_image_bgr
 
 import cv2
 import numpy as np
 
-ASSETS = Path(__file__).resolve().parents[1] / "assets" / "aruco"
+ASSETS = Path(__file__).resolve().parent / "assets" / "aruco"
 
 # 实测的最大四角误差：多码 0.14 px、旋转 0.23 px。容差留一点余量写 0.25 px，
 # 既能挡住"顺序拧了"（那会跳到几百 px），也不会因为插值差几百分之一就红。
@@ -59,7 +59,7 @@ def _require_aruco() -> None:
             "up70-vision python tests/test_aruco.py")
     if not ASSETS.is_dir():
         raise unittest.SkipTest(
-            f"测试图组不存在：{ASSETS}。先生成：python -m up70_vision.tools.gen_aruco")
+            f"测试图组不存在：{ASSETS}。先生成：python lab/gen_aruco.py")
 
 
 def _load(name: str):
@@ -288,7 +288,7 @@ def test_unknown_dictionary_and_bad_params_raise():
 
 def test_max_detections_keeps_the_largest():
     _require_aruco()
-    from up70_vision.tools.gen_aruco import (make_marker_image, place_marker,
+    from lab.gen_aruco import (make_marker_image, place_marker,
                                              predefined_dictionary)
     dictionary, _name = predefined_dictionary("DICT_4X4_50")
     canvas = np.full((420, 640, 3), 255, dtype=np.uint8)
@@ -304,7 +304,7 @@ def test_max_detections_keeps_the_largest():
 def test_generator_truth_matches_detector_on_fresh_params():
     """不走已提交的图，现场造一张（10°/25°/80°、id 0/7/42）再对真值。"""
     _require_aruco()
-    from up70_vision.tools.gen_aruco import predefined_dictionary
+    from lab.gen_aruco import predefined_dictionary
     dictionary, _name = predefined_dictionary("DICT_4X4_50")
     scene = scene_rotated(dictionary, ids=(0, 7, 42), angles=(10.0, 25.0, 80.0),
                           side_px=120, cols=3, gap_px=70, canvas_size=(820, 480))

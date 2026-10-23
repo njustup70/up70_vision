@@ -5,7 +5,7 @@
 #
 # 为什么用 PEP 621 而不是纯 requirements.txt：
 #   1. 能声明 requires-python，pip 会在版本不符时直接拒绝安装，而不是装到一半报错
-#   2. pip install -e . 之后，任何目录下都能 import up70_vision，不需要折腾 PYTHONPATH
+#   2. pip install -e . 之后，任何目录下都能 import vision，不需要折腾 PYTHONPATH
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -32,7 +32,8 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-# src 布局：包的源码放在 src/ 下，而不是仓库根。
-# 这样 pip install -e . 装的是"可编辑安装"，import 的一定是安装后的包，
-# 不会因为脚本自己的相对路径而误 import 到某个同名目录。
-where = ["src"]
+# 包 `vision/` 放在仓库根（不再用 src 布局）：`pip install -e .` 装的是仓库根这份，
+# import 的一定是装好的包；`lab/` 不在 include 里，它靠 import vision 复用算法，
+# 自己不作为包分发。
+where = ["."]
+include = ["vision*"]

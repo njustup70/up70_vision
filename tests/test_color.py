@@ -1,4 +1,4 @@
-"""core.color 的测试：阈值校验、红色跨色相环绕、有效像素分母、命中率门槛。
+"""color 的测试：阈值校验、红色跨色相环绕、有效像素分母、命中率门槛。
 
 关键的两条（README「团队约定」第 2、3 条）在这里用具体数字钉住：
     · H 是 0-179，红色要写两段并在 0/179 处环绕
@@ -9,11 +9,11 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.core.color import (judge_color, mask_for_segments, parse_thresholds,
+    from vision.yolo.color_check import (judge_color, mask_for_segments, parse_thresholds,
                                         color_ratios, valid_pixel_mask)
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.color import (judge_color, mask_for_segments, parse_thresholds,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.yolo.color_check import (judge_color, mask_for_segments, parse_thresholds,
                                         color_ratios, valid_pixel_mask)
 
 import numpy as np

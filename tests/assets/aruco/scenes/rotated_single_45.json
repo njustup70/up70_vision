@@ -1,0 +1,47 @@
+{
+  "scene": "rotated_single_45",
+  "image": "scenes/rotated_single_45.png",
+  "dictionary": "DICT_4X4_50",
+  "width": 820,
+  "height": 480,
+  "generator": "lab/gen_aruco",
+  "params": {
+    "ids": [
+      0
+    ],
+    "angles": [
+      45.0
+    ],
+    "side_px": 130,
+    "gap_px": 0
+  },
+  "markers": [
+    {
+      "id": 0,
+      "center": [
+        410.0,
+        240.0
+      ],
+      "corners": [
+        [
+          318.076,
+          240.0
+        ],
+        [
+          410.0,
+          148.076
+        ],
+        [
+          501.924,
+          240.0
+        ],
+        [
+          410.0,
+          331.924
+        ]
+      ],
+      "side_px": 130,
+      "angle_deg": 45.0
+    }
+  ]
+}

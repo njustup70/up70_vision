@@ -11,16 +11,16 @@ import textwrap
 from pathlib import Path
 
 try:
-    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+    from vision.config.loader import (apply_overrides, load_config, load_intrinsics,
                                            load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
-    from up70_vision.config.schema import AppConfig, ConfigError, from_dict
+    from vision.config.schema import AppConfig, ConfigError, from_dict
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.config.loader import (apply_overrides, load_config, load_intrinsics,
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.config.loader import (apply_overrides, load_config, load_intrinsics,
                                            load_thresholds, resolve_calibration_path,
                                            resolve_thresholds_path, resolve_path)
-    from up70_vision.config.schema import AppConfig, ConfigError, from_dict
+    from vision.config.schema import AppConfig, ConfigError, from_dict
 
 import numpy as np
 import yaml
@@ -165,12 +165,15 @@ def test_resolve_path_and_thresholds_relative_to_config():
         assert sorted(thresholds) == ["green", "red"]
         assert len(thresholds["red"]) == 2
 
-        assert resolve_path("/abs", "x.yaml") == "/abs/x.yaml"
-        assert resolve_path("/base", "sub/x.yaml") == "/base/sub/x.yaml"
+        # 期望值走 normpath：resolve_path 内部对相对路径做 normpath，
+        # Windows 下会把 "/abs/x.yaml" 规整成 "\abs\x.yaml"。写死正斜杠的字符串
+        # 会让这条测试只在 Linux 过（2026-10-22 复核时发现）
+        assert resolve_path("/abs", "x.yaml") == os.path.normpath("/abs/x.yaml")
+        assert resolve_path("/base", "sub/x.yaml") == os.path.normpath("/base/sub/x.yaml")
 
 
 def test_stub_aruco_detector_config():
-    """detector.name=stub_aruco 的默认值与显式参数（契约另见 docs/interface.md 3.2）。"""
+    """detector.name=stub_aruco 的默认值与显式参数（契约另见 vision/docs/interface.md 3.2）。"""
     default = from_dict({"detector": {"name": "stub_aruco"}})
     assert default.detector.name == "stub_aruco"
     assert default.detector.params == {"ids": [0, 1, 2], "side_px": 90, "moving": True}, \
@@ -255,7 +258,7 @@ def test_calibration_path_is_relative_to_config():
 
 def test_load_intrinsics_roundtrip_and_missing_file():
     """标定 YAML 能原样读回；文件缺失时报错里给出标定命令。"""
-    from up70_vision.core.calibration import CameraIntrinsics
+    from vision.aruco.calibration import CameraIntrinsics
 
     matrix = np.array([[796.9, 0.0, 641.2], [0.0, 797.3, 508.7], [0.0, 0.0, 1.0]])
     dist = np.array([[-0.296, 0.121, 0.0008, -0.0012, 0.0]])

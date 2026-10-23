@@ -1,0 +1,13 @@
+{
+  "scene": "empty_blocks",
+  "image": "scenes/empty_blocks.png",
+  "dictionary": "DICT_4X4_50",
+  "width": 640,
+  "height": 480,
+  "generator": "lab/gen_aruco",
+  "params": {
+    "count": 5,
+    "seed": 2027
+  },
+  "markers": []
+}

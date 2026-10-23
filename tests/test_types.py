@@ -1,4 +1,4 @@
-"""core.types 的测试：IoU、半开上界、裁剪、序列化。
+"""types 的测试：IoU、半开上界、裁剪、序列化。
 
 断言全部带具体数字——判色/几何算错了不会抛异常，只会"看起来不太准"，
 没有具体数字的断言发现不了（README「团队约定」）。
@@ -13,12 +13,14 @@ import sys
 from pathlib import Path
 
 try:
-    from up70_vision.core.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
-                                        clip_bbox, is_marker, iou)
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection, Frame, bbox_from_xywh, clip_bbox, iou
 except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from up70_vision.core.types import (ArucoMarker, Detection, Frame, bbox_from_xywh,
-                                        clip_bbox, is_marker, iou)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from vision.types import is_marker
+    from vision.aruco.types import ArucoMarker
+    from vision.types import Detection, Frame, bbox_from_xywh, clip_bbox, iou
 
 import numpy as np
 

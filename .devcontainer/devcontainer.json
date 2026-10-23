@@ -4,12 +4,12 @@
     "dockerfile": "${localWorkspaceFolder}/.devcontainer/Dockerfile",
     "context": "${localWorkspaceFolder}"
   },
-  "workspaceFolder": "/opt/up70_vision",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/opt/up70_vision,type=bind",
+  "workspaceFolder": "/opt/vision",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/opt/vision,type=bind",
   "customizations": {
     "vscode": {
       "extensions": ["ms-python.python"]
     }
   },
-  "postCreateCommand": "python scripts/check_env.py"
+  "postCreateCommand": "python -m vision doctor"
 }
