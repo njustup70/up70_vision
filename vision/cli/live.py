@@ -35,9 +35,8 @@ from ..aruco.pose import estimate_pose
 from ..sources import build_source
 from .output import write_image
 from ..logging import setup_logging
-from .output import draw_hud
+from .output import draw_all, draw_hud
 from ..aruco.draw import draw_pose_axes
-from ..yolo.draw import draw_detections
 from .parsers import build_live_parser
 
 # ================================================================ 实时循环（任务二）

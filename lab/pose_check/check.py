@@ -17,7 +17,7 @@
 
 对外约定
     `check_one()` 返回 dict，键见函数文档；`ok=False` 时 `reason` 必非空。
-    真值 JSON 由 `gen_pose_scenes.py` 生成；只有 `assets/aruco/*.json`（由 `gen_aruco` 生成）
+    真值 JSON 由 `gen_pose_scenes.py` 生成；只有 `tests/assets/aruco/*.json`（由 `gen_aruco` 生成）
     时也能跑：那种真值没有位姿字段，所以只核对"检出 + 重投影 RMS"。
 
 已知的坑
@@ -33,7 +33,7 @@ import os
 from vision.aruco.pose import DEFAULT_METHOD, estimate_pose
 from vision.sources import read_image_bgr
 
-#: 判定"通过"的默认门槛。依据见 docs/位姿估计.md 的实测表：
+#: 判定"通过"的默认门槛。依据见 knowledge/docs/位姿估计.md 的实测表：
 #: 450–600 mm、40 mm 码时距离误差 < 1%、倾角误差 < 2°，留一倍余量。
 DEFAULT_MAX_DIST_ERR = 0.04
 DEFAULT_MAX_TILT_ERR_DEG = 3.0

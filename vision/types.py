@@ -3,7 +3,7 @@
 这一层是整个包的地基，必须能被单独验证——没有相机、没有文件、不开窗口，
 给它 numpy 数组就能算出结果。
 
-两个"检出物"结构（别混用，契约见 docs/interface.md 第 2 节）
+两个"检出物"结构（别混用，契约见 vision/docs/interface.md 第 2 节）
     · `Detection`    判色族的产出：轴对齐 `bbox_xyxy`，中心 = bbox 中心，带颜色字段
     · `ArucoMarker`  ArUco 码：四角点 `corners_px`，中心 = 四角算术平均，没有颜色
 

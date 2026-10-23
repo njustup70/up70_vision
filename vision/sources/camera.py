@@ -6,7 +6,7 @@
     · Aravis 0.8.20 与自建 0.8.33 实测都取不到帧（相机 U3V 的 SIRM_PAYLOAD_SIZE
       恒为 1 MB、不随请求更新），官方 arv-camera-test-0.8 同样失败。
     · 官方 MVS SDK 正常：实测 28.1 fps @ 20 ms 曝光、7.3 fps @ 80 ms。
-    完整证据见 docs/progress.md 第五节坑 17、18。
+    完整证据见 knowledge/docs/progress.md 第五节坑 17、18。
 
 依赖与降级
     MvImport 是 MVS 自带的 ctypes 封装，**import 期就要读环境变量** MVCAM_COMMON_RUNENV
@@ -73,7 +73,7 @@ class MvsCameraSource(FrameSource):
             self._open()
         except Exception:
             # 半初始化失败也要释放：相机是**独占**资源，句柄没关掉下次必打不开
-            # （复核意见二.1 / docs/interface.md 欠账二）
+            # （复核意见二.1 / vision/docs/interface.md 欠账二）
             self.close()
             raise
 

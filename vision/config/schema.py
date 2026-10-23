@@ -120,7 +120,7 @@ DETECTOR_DEFAULT_PARAMS = {
     "stub_aruco": {"ids": [0, 1, 2], "side_px": 90, "moving": True},
     "aruco": {"dictionary": "DICT_4X4_50", "corner_refine": "subpix",
               "min_perimeter_rate": 0.03, "max_detections": 0},
-    "yolo": {"weights": "assets/models/yolov8n.onnx", "conf": 0.25, "iou": 0.45,
+    "yolo": {"weights": "knowledge/models/yolov8n.onnx", "conf": 0.25, "iou": 0.45,
              "imgsz": 640, "max_detections": 32, "classes": [], "class_names": [],
              "device": "cpu"},
 }
@@ -156,7 +156,7 @@ class DetectorConfig:
         └────────────┴──────────────┴─────────┴──────────────────────────────┘
 
         yolo（ONNX 推理，实现见 `yolo/detector.py`）
-            weights         str    ONNX 权重路径，默认 assets/models/yolov8n.onnx
+            weights         str    ONNX 权重路径，默认 knowledge/models/yolov8n.onnx
             conf            float  (0, 1)，默认 0.25
             iou             float  (0, 1]，默认 0.45
             imgsz           int    32 的正整数倍，默认 640

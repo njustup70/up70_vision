@@ -8,7 +8,7 @@
         · 四角误差 ≤ 0.25 px（实测最大 0.23 px），并且四角顺序（TL→TR→BR→BL）
           用"上边的倾角"单独验一遍——顺序拧了不会报错，只会让 solvePnP 全错
         · 无码图返回**空列表**（不是 None、不抛异常）
-    真值来自 assets/aruco/*.json，由 tools/aruco/gen_scenes.py 生成（重跑逐字节一致）。
+    真值来自 tests/assets/aruco/*.json，由 tools/aruco/gen_scenes.py 生成（重跑逐字节一致）。
 
 环境要求
     需要 OpenCV >= 4.7 的新版 aruco API。容器（cv2 4.14）里全跑；
@@ -42,7 +42,7 @@ except ModuleNotFoundError:
 import cv2
 import numpy as np
 
-ASSETS = Path(__file__).resolve().parents[1] / "assets" / "aruco"
+ASSETS = Path(__file__).resolve().parent / "assets" / "aruco"
 
 # 实测的最大四角误差：多码 0.14 px、旋转 0.23 px。容差留一点余量写 0.25 px，
 # 既能挡住"顺序拧了"（那会跳到几百 px），也不会因为插值差几百分之一就红。

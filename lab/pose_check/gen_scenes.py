@@ -48,7 +48,7 @@ from vision.aruco.pose import marker_object_points, pose_metrics
 #: 默认画布。与相机标定文档里的那台相机同分辨率（1280×1024）。
 DEFAULT_CANVAS = (1280, 1024)
 
-#: 默认焦距（像素）。取自 `docs/相机标定.md` 里那台相机的量级（fx≈800）。
+#: 默认焦距（像素）。取自 `knowledge/docs/相机标定.md` 里那台相机的量级（fx≈800）。
 #: 换相机就换它，或用 `--calib` 直接读标定文件。
 DEFAULT_FX = 800.0
 

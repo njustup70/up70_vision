@@ -62,7 +62,7 @@ class FrameResult:
         """没判出颜色的框数——这些要报"不确定"，不能当已知颜色用。
 
         只数判色族的 `Detection`：ArUco 码是黑白图形、没有颜色语义，
-        跳过判色也不算"不确定"（契约 docs/interface.md 第 2.2 / 3.2 节）。
+        跳过判色也不算"不确定"（契约 vision/docs/interface.md 第 2.2 / 3.2 节）。
         """
         return sum(1 for d in self.detections if isinstance(d, Detection) and d.color is None)
 
@@ -133,7 +133,7 @@ def process_frame(frame: Frame,
     """检测 -> 判色 -> 与 ground truth 匹配计分。
 
     判色只对判色族的 `Detection` 做：ArUco 码是黑白图形、没有颜色语义，
-    跳过它（契约 docs/interface.md 第 2.2 / 3.2 节）。因此接 ArUco 检测器时
+    跳过它（契约 vision/docs/interface.md 第 2.2 / 3.2 节）。因此接 ArUco 检测器时
     不需要阈值表也能跑，`color_counts()` 会是空的。
     """
     cfg = color_cfg or ColorConfig()

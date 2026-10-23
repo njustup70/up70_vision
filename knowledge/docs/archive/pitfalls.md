@@ -1,6 +1,6 @@
 # 踩过的坑（存档）
 
-> 本文件是 `docs/progress.md` 第五节在 2026-10-22 的归档（仓库瘦身 P1-3）。
+> 本文件是 `knowledge/docs/progress.md` 第五节在 2026-10-22 的归档（仓库瘦身 P1-3）。
 > **坑的编号没变**：代码注释、配置注释与提交信息里写的「progress.md 坑 N」，指的就是本篇的坑 N。
 > 新增的坑请直接加到本篇末尾，按「现象 / 原因 / 处理」三栏写（协作规范第 5 条）。
 
@@ -110,4 +110,4 @@
 | 三.7 `configs/README.md` 的 `hsv_tuner` 示例参数不对 | ✅ 改为真实的 `--colors red` / `--source synthetic` |
 | 三.8 `configs/default.yaml` 注释说"改了不会有任何效果" | ✅ 已改 |
 | 四（相机相关没能验证的部分） | ⏳ 仍需在**接了相机 + 装了 MVS + 透传 `/dev/bus/usb`** 的环境里实跑；本机没有相机，只能读代码 |
-| 契约（`docs/interface.md` 新版） | ✅ 已按搭档那版落地：新增 `ArucoMarker` 与 `stub_aruco`，判色族 `Detection` 保留；三条欠账照登记（其中欠账二已修，欠账一按契约"要改先问人"**没动**） |
+| 契约（`vision/docs/interface.md` 新版） | ✅ 已按搭档那版落地：新增 `ArucoMarker` 与 `stub_aruco`，判色族 `Detection` 保留；三条欠账照登记（其中欠账二已修，欠账一按契约"要改先问人"**没动**） |

@@ -36,9 +36,9 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -
 
 ## 从哪读起
 
-- **要懂原理**（判色 / 位姿 / 标定 / YOLO / 契约）→ [`docs/README.md`](docs/README.md)（索引，标明哪篇该先读、哪篇是存档）
-- **要接 ROS 2** → [`docs/interface.md`](docs/interface.md)（`Frame` / `Detection` / `ArucoMarker` / `MarkerPose` 的唯一契约来源）
-- **要写代码** → [`docs/视觉组协作规范.md`](docs/视觉组协作规范.md)（6 条）与 [`docs/代码注释规范.md`](docs/代码注释规范.md)
+- **要懂原理**（判色 / 位姿 / 标定 / YOLO / 契约）→ [`knowledge/docs/README.md`](knowledge/docs/README.md)（索引，标明哪篇该先读、哪篇是存档）
+- **要接 ROS 2** → [`vision/docs/interface.md`](vision/docs/interface.md)（`Frame` / `Detection` / `ArucoMarker` / `MarkerPose` 的唯一契约来源）
+- **要写代码** → [`knowledge/docs/视觉组协作规范.md`](knowledge/docs/视觉组协作规范.md)（6 条）与 [`knowledge/docs/代码注释规范.md`](knowledge/docs/代码注释规范.md)
 
 ---
 
@@ -91,7 +91,7 @@ t=0.03s | frames=1 | fps=48.2 | markers=1 | id=0 center=(642.3, 532.5) d=317mm t
 真机实拍（82.5 mm 码，40 ms / 15 dB）：绿框是四角，三根轴贴在码面上，HUD 第四行是这一帧的
 `d / tilt / yaw`。
 
-![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](assets/readme/live_pose_demo.jpg)
+![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](knowledge/images/live_pose_demo.jpg)
 
 - `d` 斜距（毫米）、`tilt` 码面与光轴夹角（0 = 正对）、`yaw` 面内转角
 - 红/绿/蓝三根轴是码的 x/y/z；正视时蓝轴缩成一个点，这是对的
@@ -124,7 +124,7 @@ python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 
 仓库强制带了一份内参快照（2026-10-19 标定，33 视图，RMS 0.473 px，1280×1024，fx≈1321.67），
 新 clone 直接能跑位姿；重标定会覆盖同一路径，提交前确认是不是全队约定的那台相机。
-细节见 `docs/相机标定.md`。
+细节见 `knowledge/docs/相机标定.md`。
 
 ---
 
@@ -179,9 +179,9 @@ vision/                      # 运行时代码：要 import、要测、要评审
 
 lab/                        一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束）
 configs/                    场地参数（lab 与 vision 都读）
-assets/                     aruco（图 + 真值）、calib（棋盘 PNG+PDF）、models、readme
-tests/                      回归测试 103 项，可 python tests/test_xxx.py 独立跑
-docs/                       契约 / 规范 / 教程 / 进度 / archive
+knowledge/                  知识资产：docs（文档）、calibration（棋盘）、models（权重）、images（截图）
+tests/                      回归测试 107 项 + 测试夹具（assets/aruco）
+knowledge/docs/                       契约 / 规范 / 教程 / 进度 / archive
 .devcontainer/              Dockerfile、CPU/GPU compose、pkgs
 data/  output/              数据集与运行产物（不进版本库）
 ```
@@ -201,7 +201,7 @@ image_io/logging ┘                                                            
 
 ## 附录 B · 命令全表
 
-**主入口只有 6 条**（`docs/迁移计划书` D3）：`python -m vision` 不带参数就是这个表。
+**主入口只有 6 条**（`knowledge/docs/迁移计划书` D3）：`python -m vision` 不带参数就是这个表。
 一年用不到三次的功能全部移到 `lab/`，直接 `python lab/xxx.py` 跑。
 
 | 主入口 | 干什么 |
@@ -246,7 +246,7 @@ image_io/logging ┘                                                            
 - 改代码前先跑 `python -m vision doctor`；碰 ArUco 跑 `python lab/check_aruco.py`，碰位姿跑一次真机实时。
 - 合成图上的精度基线（82.5 mm 码：距离 0.02%–0.42%、倾角 15°–75° 误差 0.05–0.42°）用
   `python lab/pose_check/gen_scenes.py --suite` 造图后由
-  `python -m lab.pose_check --dir <目录>`（逐图）或 `--sweep`（出 CSV/MD/8 张曲线）复现，口径与失败分析见 `docs/位姿估计.md`。
+  `python -m lab.pose_check --dir <目录>`（逐图）或 `--sweep`（出 CSV/MD/8 张曲线）复现，口径与失败分析见 `knowledge/docs/位姿估计.md`。
 - 在别的代码里用一次检测：`from vision.api import detect; detect(img, "aruco")`
   ——不必自己走配置加载与工厂。
 
@@ -261,8 +261,8 @@ image_io/logging ┘                                                            
 | `output/` | 运行产物：叠加图、`results.json`、`detections.csv`、位姿扫描曲线 | `python -m vision clean` 清掉 |
 | `__pycache__/`、`*.pyc` | Python 字节码缓存 | 同上，一并清掉 |
 | `data/` | 数据集、回放素材、标定原图（几十 MB 到几 GB） | 按 `data/README.md` 各自本地准备 |
-| `docs/*.html` | 教程的构建产物 | 要就 `python lab/gen_html.py` 自己生成 |
-| `assets/models/*.onnx`、`*.pt` | 模型权重 | `python lab/export_yolo.py` 自己导出 |
+| `knowledge/docs/*.html` | 教程的构建产物 | 要就 `python lab/gen_html.py` 自己生成 |
+| `knowledge/models/*.onnx`、`*.pt` | 模型权重 | `python lab/export_yolo.py` 自己导出 |
 | `configs/camera_calibration*.yaml` | 每台相机一份的内参 | 向做过标定的队友要，或自己标 |
 
 `git ls-files` 里只有一百来个文件——**"仓库臃肿"的实感全部来自上面这些本地生成物**，

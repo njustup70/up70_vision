@@ -1,11 +1,11 @@
-# assets/aruco —— ArUco 测试图组（图 + 真值）
+# tests/assets/aruco —— ArUco 测试图组（图 + 真值）
 
 这批图是**检测核心的自检素材**：验收标准是"同一张图片中的多个 ArUco 码全部正确识别
 （ID、四角、中心）"，所以每张图都配一份同名 `.json`，写清这张图里**应该**检出哪些码、
 它们的中心和四角在哪个像素上。测试与自检脚本拿它当标准答案，不用人工标点。
 
 ```
-assets/aruco/
+tests/assets/aruco/
 ├── markers/          单码图：一个 ID 一张，码居中、四周留白 80 px
 │   ├── marker_00.png     + marker_00.json
 │   ├── marker_01.png     + marker_01.json
@@ -33,7 +33,7 @@ python -m vision check-aruco --only rotated --max-err-px 1.5
 
 # 走完整管线（检测 + 判色 + 落盘），把图组当回放素材喂进去
 python -m vision run --set detector.name=aruco \
-  --set input.source=replay --set input.replay.path=assets/aruco/scenes
+  --set input.source=replay --set input.replay.path=tests/assets/aruco/scenes
 
 # 单元测试（容器里跑，宿主 apt 版 cv2 4.5.4 没有新版 aruco API，会自动跳过）
 python tests/test_aruco.py

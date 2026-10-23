@@ -15,7 +15,11 @@ import os
 import cv2
 import numpy as np
 
-from ..types import Detection, Frame
+from ..aruco.draw import draw_markers
+from ..types import Detection, Frame, is_marker
+from ..yolo.draw import draw_detections
+
+log = logging.getLogger(__name__)
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
@@ -69,6 +73,16 @@ def write_image_with_truth(image_bgr: np.ndarray, image_path: str, truth: dict) 
         json.dump(truth, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     return image_path, json_path
+
+def draw_all(frame_bgr: np.ndarray, detections) -> np.ndarray:
+    """按检出物类型分流到对应功能的绘制：码走 ArUco，检测框走 YOLO。
+
+    分流放在 cli 里（D13）：两个功能包互不 import，谁也别画别人的东西。
+    """
+    if detections and is_marker(detections[0]):
+        return draw_markers(frame_bgr, detections)
+    return draw_detections(frame_bgr, detections)
+
 
 def draw_hud(canvas: np.ndarray, lines, origin=(10, 22), scale: float = 0.6,
              color=(0, 255, 255), line_gap: int = 22) -> None:

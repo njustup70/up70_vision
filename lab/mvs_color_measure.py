@@ -9,7 +9,7 @@
     · 与 tools/blob/hsv_tuner.py 的分工：hsv_tuner 的目标是**把阈值写回配置文件**；
       本工具的目标是**在真实场景里看判色/定位效果**（只读，不改配置）。
     · 取帧走厂商 MVS SDK：这颗相机是 USB3 Vision（不是 UVC），OpenCV 的 UVC 路径
-      与 Aravis 都用不了，详见 docs/progress.md 第五节。
+      与 Aravis 都用不了，详见 knowledge/docs/progress.md 第五节。
 
 依赖
     MVS SDK（/opt/MVS；镜像里已装，见 .devcontainer/pkgs/README.md）+ opencv-python + numpy。

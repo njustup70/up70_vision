@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ArUco 识别自检：拿 assets/aruco/ 的图组对真值，一张一张报数字。
+"""ArUco 识别自检：拿 tests/assets/aruco/ 的图组对真值，一张一张报数字。
 
 它回答的问题只有一个
     任务单验收清单第一条：**"同一张图片中的多个 ArUco 码全部正确识别（ID、四角、中心）"**。
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     是 TL→TR→BR→BL，顺序一拧，误差立刻从 <1px 跳到几百 px，不用另写一条断言。
 
 用法（在仓库根目录）
-    python -m vision.tools.aruco.check                      # 默认查 assets/aruco
+    python -m vision.tools.aruco.check                      # 默认查 tests/assets/aruco
     python -m vision.tools.aruco.check --only multi_grid_6  # 只查一张
     python -m vision.tools.aruco.check --max-err-px 1.5     # 调容差（默认 1.5）
 

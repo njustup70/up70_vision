@@ -173,7 +173,7 @@ def test_resolve_path_and_thresholds_relative_to_config():
 
 
 def test_stub_aruco_detector_config():
-    """detector.name=stub_aruco 的默认值与显式参数（契约另见 docs/interface.md 3.2）。"""
+    """detector.name=stub_aruco 的默认值与显式参数（契约另见 vision/docs/interface.md 3.2）。"""
     default = from_dict({"detector": {"name": "stub_aruco"}})
     assert default.detector.name == "stub_aruco"
     assert default.detector.params == {"ids": [0, 1, 2], "side_px": 90, "moving": True}, \

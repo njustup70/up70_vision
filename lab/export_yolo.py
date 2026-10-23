@@ -3,20 +3,20 @@
 为什么需要它
     仓库里跑推理只依赖 OpenCV（`yolo/detector.py` 用 `cv2.dnn`），而导出
     ONNX 需要 `ultralytics` + `torch`。所以导出**只在开发机上做一次**，产物是：
-        assets/models/yolov8n.onnx          12.9 MB 的模型
-        assets/models/yolov8n.names.json    类名表（零依赖可读，容器里不需要 onnx 包）
+        knowledge/models/yolov8n.onnx          12.9 MB 的模型
+        knowledge/models/yolov8n.names.json    类名表（零依赖可读，容器里不需要 onnx 包）
     两者都不进版本库（`.gitignore` 已忽略 *.onnx / *.pt）。
 
 怎么跑
     # 在装了 ultralytics 的环境里（本机是 ~/.venvs/yolo；该 venv 里也要 pip install -e 本仓库）
     ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolov8n.pt
     # 自定义：换模型、换输入尺寸
-    ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolo11s.pt --imgsz 480 --out assets/models
+    ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolo11s.pt --imgsz 480 --out knowledge/models
 
 导出后怎么用
     # 注意：判色族/YOLO 走**批处理入口**；live 是 ArUco 专用（要画四边形和位姿轴）
     python -m vision run --set detector.name=yolo \
-        --set input.source=replay --set input.replay.path=assets/aruco/scenes
+        --set input.source=replay --set input.replay.path=tests/assets/aruco/scenes
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ import sys
 from pathlib import Path
 
 # 仓库根：lab/export_yolo.py 往上两层（lab -> 根）。
-# 用 __file__ 而不是 cwd：默认输出目录固定在仓库的 assets/models/，从哪调用都一样。
+# 用 __file__ 而不是 cwd：默认输出目录固定在仓库的 knowledge/models/，从哪调用都一样。
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = ROOT / "assets" / "models"
+DEFAULT_OUT = ROOT / "knowledge" / "models"
 
 
 def parse_args(argv=None) -> argparse.Namespace:

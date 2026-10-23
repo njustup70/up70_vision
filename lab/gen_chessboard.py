@@ -200,8 +200,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="格子边长毫米（默认 15；打印后要用尺子量，把量到的值填给标定工具）")
     ap.add_argument("--dpi", type=int, default=DEFAULT_DPI, help=f"打印 DPI（默认 {DEFAULT_DPI}）")
     ap.add_argument("--margin", type=int, default=1, help="四周白边宽度（以格子为单位，默认 1）")
-    ap.add_argument("--out", default="assets/calib/chessboard_9x6_15mm.png",
-                    help="输出路径（默认 assets/calib/chessboard_9x6_15mm.png）")
+    ap.add_argument("--out", default="knowledge/calibration/chessboard_9x6_15mm.png",
+                    help="输出路径（默认 knowledge/calibration/chessboard_9x6_15mm.png）")
     ap.add_argument("--no-pdf", action="store_true",
                     help="只写 PNG，不生成 PDF（默认会同时写一份 1:1 的 PDF）")
     ap.add_argument("--paper", choices=["a4", "auto"], default="a4",

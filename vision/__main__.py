@@ -78,7 +78,7 @@ def ensure_utf8_stdout() -> bool:
     return True
 
 
-#: 主入口只保留 6 条子命令（`docs/迁移计划书` D3）：run / live / doctor / demo / hsv-tuner / clean。
+#: 主入口只保留 6 条子命令（`knowledge/docs/迁移计划书` D3）：run / live / doctor / demo / hsv-tuner / clean。
 #: 其余功能全部移进 `lab/`，直接 `python lab/xxx.py` 跑——一年用不到三次的功能不配进主入口。
 #:
 #: 名字 -> (模块名, 函数名, 一行说明)。顺序即 `--help` 里的显示顺序。

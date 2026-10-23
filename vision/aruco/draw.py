@@ -1,4 +1,7 @@
-"""ArUco 专用绘制：位姿坐标轴。线宽偏细，与 yolo 的检测框区分（D13）。"""
+"""ArUco 专用绘制：码的四边形、id 标签与位姿坐标轴（D13）。
+
+图上文字一律 ASCII：Hershey 字体没有汉字字形，中文会画成问号且不报错。
+"""
 
 from __future__ import annotations
 
@@ -7,18 +10,46 @@ import numpy as np
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
+#: ArUco 码固定绿框：码没有颜色语义，不借用判色调色板
+MARKER_DRAW_BGR = (0, 255, 0)
+
 
 def put_text(image_bgr, text: str, org, scale: float = 0.5,
              color=(255, 255, 255), thickness: int = 1, outline: bool = False) -> None:
-    """在图上写一行 ASCII 文字（可带黑描边）。写中文会变成 `???`——Hershey 没有汉字字形。
+    """在图上写一行 ASCII 文字（可带黑描边）。中文会变成 ???（Hershey 无汉字字形）。
 
     这个几行小工具在 `aruco/draw.py`、`yolo/draw.py`、`cli/output.py` 各留一份：
-    D13 明确规定画图风格可以分叉，重复这点代码换取功能包之间零依赖是划算的。
+    D13 允许画图风格分叉，重复这点代码换取功能包之间零依赖。
     """
     if outline:
         cv2.putText(image_bgr, text, org, FONT, scale, (0, 0, 0),
                     thickness + 2, cv2.LINE_AA)
     cv2.putText(image_bgr, text, org, FONT, scale, color, thickness, cv2.LINE_AA)
+
+
+def draw_markers(frame_bgr: np.ndarray,
+                 markers,
+                 thickness: int = 2,
+                 show_center: bool = True,
+                 show_label: bool = True) -> np.ndarray:
+    """画每个码的四边形、中心与 `id=N` 标签，返回新图（不改原图）。
+
+    用四边形而不是矩形：码旋转后 bbox 会包住一圈背景，四边形才贴得住。
+    """
+    canvas = frame_bgr.copy()
+    for marker in markers:
+        pts = np.asarray(marker.corners_px, dtype=np.int32).reshape(-1, 1, 2)
+        flat = pts.reshape(-1, 2)
+        cv2.polylines(canvas, [pts], isClosed=True, color=MARKER_DRAW_BGR, thickness=thickness)
+        center = marker.center_px
+        if show_center:
+            cv2.drawMarker(canvas, (int(center[0]), int(center[1])), (0, 0, 255),
+                           cv2.MARKER_CROSS, 14, 2)
+        if show_label:
+            label = f"id={int(marker.marker_id)}"
+            org = (int(flat[:, 0].min()) + 4, max(14, int(flat[:, 1].min()) - 6))
+            put_text(canvas, label, org, 0.5, (255, 255, 255), 1, outline=True)
+    return canvas
 
 
 def draw_pose_axes(frame_bgr: np.ndarray,

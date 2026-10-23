@@ -1,4 +1,4 @@
-"""真 ArUco 检测器：按 docs/interface.md 第 2.2 / 3.2 节的契约返回 `list[ArucoMarker]`。
+"""真 ArUco 检测器：按 vision/docs/interface.md 第 2.2 / 3.2 节的契约返回 `list[ArucoMarker]`。
 
 任务单对应关系
     任务单「搭档 Owner：检测核心」的产出之一就是本文件：
@@ -63,7 +63,7 @@ def check_opencv_aruco(need_generate: bool = False) -> None:
             f"{'.'.join(str(v) for v in MIN_OPENCV_VERSION)}）。"
             "处理办法：用 opencv-python>=4.7（本仓库钉 >=4.10，容器镜像里是 4.14）；"
             "**不要**装 opencv-contrib-python —— 它与 opencv-python 共用 cv2 顶层模块，"
-            "两个一起装会互相覆盖（见 docs/progress.md 坑 2）")
+            "两个一起装会互相覆盖（见 knowledge/docs/progress.md 坑 2）")
 
 
 def predefined_dictionary(name: str):

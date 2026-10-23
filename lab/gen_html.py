@@ -1,13 +1,13 @@
 """把教程 md 转成单文件 html（构建产物，不进版本库）。
 
 用大白话说
-    `docs/` 里两份教程平时读 `.md` 就够了；要发给不做开发的人看，才需要 html。
+    `knowledge/docs/` 里两份教程平时读 `.md` 就够了；要发给不做开发的人看，才需要 html。
     html 是**构建产物**：以前它跟着 md 一起进了工作区，两份内容重复约 74 KB，
     改一处忘了改另一处就成了两个版本。现在仓库只留 md，要 html 自己生成。
 
 怎么跑（仓库根目录）
-    python lab/gen_html.py                           # 转 docs/ 下所有教程 md
-    python lab/gen_html.py docs/教程-从像素到毫米.md
+    python lab/gen_html.py                           # 转 knowledge/docs/ 下所有教程 md
+    python lab/gen_html.py knowledge/docs/教程-从像素到毫米.md
 
 放什么 / 不放什么
     只做"调用 pandoc 把 md 转成 html"这一件事；不生成目录、不套站点模板、
@@ -19,7 +19,7 @@
     （与"不引 pydantic / 不引 click"同一个取舍）。
 
 输出
-    与 md 同名的 `.html`，落在同一个目录。`.gitignore` 已排除 `docs/*.html`，
+    与 md 同名的 `.html`，落在同一个目录。`.gitignore` 已排除 `knowledge/docs/*.html`，
     生成后不会误提交；要对外发布就单独拷出去。
 """
 
@@ -38,8 +38,8 @@ import shutil
 import subprocess
 import sys
 
-#: 默认要转的教程（md）；找不到时按这个模式再扫一遍 docs/
-DEFAULT_PATTERN = os.path.join("docs", "教程-*.md")
+#: 默认要转的教程（md）；找不到时按这个模式再扫一遍 knowledge/docs/
+DEFAULT_PATTERN = os.path.join("knowledge", "docs", "教程-*.md")
 
 
 def _pandoc_missing() -> int:
@@ -47,7 +47,7 @@ def _pandoc_missing() -> int:
     print("❌ 找不到 pandoc。它是 html 生成器，需要单独装：", file=sys.stderr)
     print("     Debian/Ubuntu: sudo apt-get install pandoc", file=sys.stderr)
     print("     其它平台: https://pandoc.org/installing.html", file=sys.stderr)
-    print("   只想读文档不用装：docs/ 里的 .md 直接用编辑器看即可。", file=sys.stderr)
+    print("   只想读文档不用装：knowledge/docs/ 里的 .md 直接用编辑器看即可。", file=sys.stderr)
     return 2
 
 

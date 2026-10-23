@@ -22,11 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     几何，误差只来自插值（实测 ≤ 1 px，见 tests/test_aruco.py 的容差）。
 
 放哪
-    生成物默认写 assets/aruco/：markers/（单码图）+ scenes/（多码、旋转、无码）。
+    生成物默认写 tests/assets/aruco/：markers/（单码图）+ scenes/（多码、旋转、无码）。
     都是小体积 PNG（单张十几 KB），随仓库分发，规则见 assets/README.md。
 
 用法
-    python -m vision.tools.aruco.gen_scenes                     # 生成整套到 assets/aruco
+    python -m vision.tools.aruco.gen_scenes                     # 生成整套到 tests/assets/aruco
     python -m vision.tools.aruco.gen_scenes --list-scenes        # 看有哪些场景
     python -m vision.tools.aruco.gen_scenes --scene multi rotated
     python -m vision.tools.aruco.gen_scenes --ids 0 1 2 3 --side-px 120
@@ -49,7 +49,7 @@ log = get_logger("tools.aruco.gen_scenes")
 
 # 任务单指定的字典：4x4、50 个 ID。换字典会让已有真值全部作废，所以写死成默认值。
 DEFAULT_DICTIONARY = "DICT_4X4_50"
-DEFAULT_OUT_DIR = "assets/aruco"
+DEFAULT_OUT_DIR = "tests/assets/aruco"
 
 # 一张图里一个码的边长（像素）。小于 ~30 px 时检测率会明显下降——这不是理论值，
 # 是本工具造图时"能不能稳定检出"的下限参考，调参别低于它。

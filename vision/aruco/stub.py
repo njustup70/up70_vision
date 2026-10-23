@@ -7,10 +7,10 @@
 
 为什么需要它
     "输入源 + 可视化 + 编排"不该等真 ArUco 实现写完才开始。stub 按
-    docs/interface.md 第 2.2 / 3.2 节的契约返回假的 `ArucoMarker`，
+    vision/docs/interface.md 第 2.2 / 3.2 节的契约返回假的 `ArucoMarker`，
     这样相机、画框、入口、落盘都能先跑通；真实现（`aruco.py`）就位后直接换掉。
 
-契约（原文见 docs/interface.md 第 2.2 与 3.2 节）
+契约（原文见 vision/docs/interface.md 第 2.2 与 3.2 节）
     · 返回 `list[ArucoMarker]`，**无码时 `[]`**（不是 None）
     · 按 `marker_id` **升序**
     · `center_px` = 四角**算术平均**（不是 bbox 中心）

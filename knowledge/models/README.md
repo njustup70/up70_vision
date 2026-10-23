@@ -8,8 +8,8 @@
 `detectors/yolo.py` 只认 **ONNX**（用 `cv2.dnn` 推理，容器里不需要 torch）：
 
 ```
-assets/models/yolov8n.onnx        12.9 MB   模型本体
-assets/models/yolov8n.names.json  类名表    导出时自动生成（容器里没有 onnx 包也能读）
+knowledge/models/yolov8n.onnx        12.9 MB   模型本体
+knowledge/models/yolov8n.names.json  类名表    导出时自动生成（容器里没有 onnx 包也能读）
 ```
 
 ## 怎么得到（在装了 ultralytics 的机器上，跑一次就够）
@@ -50,4 +50,4 @@ Apache-2.0 / MIT 的模型（YOLOX、NanoDet 等，接口一样挂在这个目�
 ## 预训练权重认什么
 
 COCO 的 80 类（人、车、瓶子、杯子…）。**不认识我们的色块**——实测在 `data/calib`
-的棋盘图上是 0 个框，属正常。要它认物块，得标注数据 + 微调（见 `docs/progress.md` 的 M5）。
+的棋盘图上是 0 个框，属正常。要它认物块，得标注数据 + 微调（见 `knowledge/docs/progress.md` 的 M5）。

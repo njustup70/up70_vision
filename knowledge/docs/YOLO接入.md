@@ -35,8 +35,8 @@ cd vision-main
 产出两个文件（都已被 `.gitignore` 忽略）：
 
 ```
-assets/models/yolov8n.onnx         12.9 MB   模型
-assets/models/yolov8n.names.json   类名表   容器里没有 onnx 包也能读出 "person" 这种名字
+knowledge/models/yolov8n.onnx         12.9 MB   模型
+knowledge/models/yolov8n.names.json   类名表   容器里没有 onnx 包也能读出 "person" 这种名字
 ```
 
 ### 第 2 步：跑
@@ -66,7 +66,7 @@ output/demo/summary.json        汇总统计
 
 | 键 | 人话 | 默认 |
 |---|---|---|
-| `weights` | ONNX 权重路径（相对仓库根） | `assets/models/yolov8n.onnx` |
+| `weights` | ONNX 权重路径（相对仓库根） | `knowledge/models/yolov8n.onnx` |
 | `conf` | 置信度门槛。调低 → 框变多、误检也变多 | 0.25 |
 | `iou` | 去重门槛。两个框重合度超过它就只留分数高的 | 0.45 |
 | `imgsz` | 模型输入边长，必须和导出时一致 | 640 |
@@ -123,7 +123,7 @@ python -m vision run --set detector.name=yolo --set detector.yolo.conf=0.5
 
 ```
 采图 → 标框（CVAT/labelImg）→ 划分 train/val → 微调 yolo11n（GPU）
-     → 导出 ONNX → 替换 assets/models/ 里的权重 → 代码一行不改
+     → 导出 ONNX → 替换 knowledge/models/ 里的权重 → 代码一行不改
 ```
 
 ## 七、许可提醒（重要）
@@ -140,7 +140,7 @@ YOLOv8 的代码与权重都是 **AGPL-3.0**。队内自用没问题；但如果
 | 工厂与注册 | `vision/aruco/ 与 yolo/base.py`（`DETECTOR_NAMES`） |
 | 配置与校验 | `configs/default.yaml` 的 `detector.yolo`、`vision/config/schema.py` |
 | 导出脚本 | `python lab/export_yolo.py`（实现 `vision/tools/yolo/export.py`） |
-| 权重与说明 | `assets/models/`（权重被 gitignore，只有 README 入库） |
+| 权重与说明 | `knowledge/models/`（权重被 gitignore，只有 README 入库） |
 | 测试 | `tests/test_yolo.py`（20 项，不需要权重也能跑） |
 
 ## 九、实测记录（这台机器，仅供参考）

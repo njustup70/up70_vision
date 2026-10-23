@@ -20,6 +20,6 @@
 ## 动契约了吗
 
 <!--
-动了：写明 docs/interface.md 里动的是哪一条、哪些模块要跟着改、有没有要队友同步做的事
-没动：写"未动 docs/interface.md"
+动了：写明 vision/docs/interface.md 里动的是哪一条、哪些模块要跟着改、有没有要队友同步做的事
+没动：写"未动 vision/docs/interface.md"
 -->

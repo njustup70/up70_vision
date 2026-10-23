@@ -10,7 +10,7 @@
     所以本模块 **只依赖 cv2 与 numpy**，根级模块的分层约定（不 import io/viz/config、
     不读文件、不开窗口）依然成立；权重路径由配置层传进来，这里只在构造/首次推理时检查。
 
-和契约的关系（docs/interface.md 3.1）
+和契约的关系（vision/docs/interface.md 3.1）
     接口没变：`detect(image_bgr) -> list[Detection]`，无目标返回 `[]`。
     唯一的扩展是 `class_name`：判色族（`blob`）填 `"unknown"`，这里填**模型自己的类名**
     （如 `"person"`、`"cup"`），`class_id` 填模型里的类别索引。
@@ -37,7 +37,7 @@ from ..types import Detection
 PAD_VALUE = 114
 
 #: 默认权重路径（相对仓库根；由配置层的 `detector.yolo.weights` 覆盖）
-DEFAULT_WEIGHTS = "assets/models/yolov8n.onnx"
+DEFAULT_WEIGHTS = "knowledge/models/yolov8n.onnx"
 
 
 def letterbox(image_bgr: np.ndarray, size: int,

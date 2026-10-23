@@ -1,7 +1,7 @@
 # 里程碑实测记录（存档）
 
-> 本文件是 `docs/progress.md` 第三节「已完成」在 2026-10-22 的归档（仓库瘦身 P1-3）。
-> 里程碑的**当前状态**看 `docs/progress.md` 第二节的表格；这里保留逐条实测数字与当时的命令，供复查「这个数是哪来的」。
+> 本文件是 `knowledge/docs/progress.md` 第三节「已完成」在 2026-10-22 的归档（仓库瘦身 P1-3）。
+> 里程碑的**当前状态**看 `knowledge/docs/progress.md` 第二节的表格；这里保留逐条实测数字与当时的命令，供复查「这个数是哪来的」。
 
 ---
 
@@ -121,9 +121,9 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
 
 | 飞书原文 | 落点 | 状态 |
 |---|---|---|
-| 任务一.2 用 OpenCV 生成多个不同 ID 的码图 | `tools/gen_aruco.py`（`cv2.aruco.generateImageMarker`）-> `assets/aruco/` | ✅ 3 个单码 + 多码 2 张 + 旋转 2 张 + 无码 2 张 |
+| 任务一.2 用 OpenCV 生成多个不同 ID 的码图 | `tools/gen_aruco.py`（`cv2.aruco.generateImageMarker`）-> `tests/assets/aruco/` | ✅ 3 个单码 + 多码 2 张 + 旋转 2 张 + 无码 2 张 |
 | 任务一.3 读取含码图片并识别 | `tools/aruco_check.py`、`tests/test_aruco.py`；命令行 `--set detector.name=aruco --set input.source=replay --set input.replay.path=<图片或目录>`（单张图片路径也能用） | ✅ |
-| 任务一.4 取 ID / 四角像素坐标 / 中心点 | `core/detectors/aruco.py` 的 `detect() -> list[ArucoMarker]`，契约见 `docs/interface.md` 2.2 / 3.2 | ✅ |
+| 任务一.4 取 ID / 四角像素坐标 / 中心点 | `core/detectors/aruco.py` 的 `detect() -> list[ArucoMarker]`，契约见 `vision/docs/interface.md` 2.2 / 3.2 | ✅ |
 | 任务一.5 画边框 + 标注 ID 和中心点 | `viz/draw.py`（Aruco 走 `corners_px` 画四边形，旋转的码也贴合；标签 `id=N`；中心红十字） | ✅ |
 
 **自检命令与数字**（协作规范第 4 条要求"具体数字"）：

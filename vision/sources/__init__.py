@@ -10,7 +10,7 @@
 依赖谁
     只依赖 types（Frame）。**不 import config** —— 配置由 `cli/run.py` 拆成普通参数
     传给 build_source（见本文件的 build_source）。这一行以前写的是"依赖 types 与 config"，
-    与 base.py 和 docs/interface.md 第 5 节矛盾，按契约欠账三改正。
+    与 base.py 和 vision/docs/interface.md 第 5 节矛盾，按契约欠账三改正。
 
 当前状态
     本文件（FrameSource 接口 + build_source 工厂 + read_image_bgr）、synthetic.py（合成图，带 ground truth）、

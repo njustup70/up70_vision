@@ -178,7 +178,7 @@ def test_detect_returns_empty_list_for_empty_prediction():
 
 
 def test_missing_weights_raises_readable_error():
-    det = YoloDetector(weights="assets/models/definitely_missing.onnx")
+    det = YoloDetector(weights="knowledge/models/definitely_missing.onnx")
     try:
         det.detect(np.zeros((64, 64, 3), dtype=np.uint8))
     except FileNotFoundError as exc:
@@ -248,7 +248,7 @@ def test_config_rejects_out_of_range_values():
 
 def test_config_accepts_valid_yolo_section():
     cfg = from_dict({"detector": {"name": "yolo",
-                                  "yolo": {"weights": "assets/models/yolov8n.onnx",
+                                  "yolo": {"weights": "knowledge/models/yolov8n.onnx",
                                            "conf": 0.3, "iou": 0.5, "imgsz": 320,
                                            "classes": [0, 2]}}})
     assert cfg.detector.name == "yolo"
