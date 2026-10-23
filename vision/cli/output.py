@@ -92,6 +92,13 @@ def draw_hud(canvas: np.ndarray, lines, origin=(10, 22), scale: float = 0.6,
         put_text(canvas, text, (x, y + i * line_gap), scale, color, 2, outline=True)
 
 
+# 后两列是给 ArUco 加的（追加在末尾，老读者按列名取不受影响）：
+#   kind      = "detection"（判色族）或 "marker"（ArUco 码）
+#   marker_id = 码 ID；判色族的行留空
+CSV_HEADER = ["frame", "source", "color", "ratio", "valid_pixels", "score",
+              "x1", "y1", "x2", "y2", "cx", "cy", "kind", "marker_id"]
+
+
 class OutputWriter:
     def __init__(self,
                  out_dir: str,
