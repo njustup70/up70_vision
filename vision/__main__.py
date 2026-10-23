@@ -63,7 +63,7 @@ def ensure_utf8_stdout() -> bool:
     位置说明
         原先是 `utils/console.py`（2026-10-22 扁平化时内联到这里）：它唯一的调用方是
         `main()`，为一个 10 行的函数保留整个 `utils/` 子包不值。副作用是没有走
-        `python -m vision` 而是直接 `python -m vision.tools.xxx` 时，
+        `python -m vision` 而是直接 `python lab/xxx.py` 时，
         Windows 终端不会自动切 UTF-8——统一入口是文档里唯一推荐的跑法。
     """
     stream = sys.stdout

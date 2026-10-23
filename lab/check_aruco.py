@@ -20,9 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     是 TL→TR→BR→BL，顺序一拧，误差立刻从 <1px 跳到几百 px，不用另写一条断言。
 
 用法（在仓库根目录）
-    python -m vision.tools.aruco.check                      # 默认查 tests/assets/aruco
-    python -m vision.tools.aruco.check --only multi_grid_6  # 只查一张
-    python -m vision.tools.aruco.check --max-err-px 1.5     # 调容差（默认 1.5）
+    python lab/check_aruco.py                      # 默认查 tests/assets/aruco
+    python lab/check_aruco.py --only multi_grid_6  # 只查一张
+    python lab/check_aruco.py --max-err-px 1.5     # 调容差（默认 1.5）
 
 退出码：0 = 全部通过；1 = 有图对不上；2 = 环境/参数不对（如没生成图组、cv2 太老）
 """
@@ -142,7 +142,7 @@ def main(argv=None) -> int:
 
     if not os.path.isdir(args.dir):
         print(f"❌ 图组目录不存在：{args.dir}")
-        print("   先生成：python -m vision.tools.aruco.gen_scenes")
+        print("   先生成：python lab/gen_aruco.py")
         return 2
 
     images = iter_scene_images(args.dir)

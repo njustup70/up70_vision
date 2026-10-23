@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     阈值就得重调。让人肉眼盯着掩膜拖滑条，比"改数值 → 跑一遍 → 看输出图"快一个数量级。
 
 用法
-    python -m vision.tools.blob.hsv_tuner --image data/one_red_block.jpg
-    python -m vision.tools.blob.hsv_tuner --source synthetic
-    python -m vision.tools.blob.hsv_tuner --source replay --path data/clips/site.mp4
+    python lab/hsv_tuner.py --image data/one_red_block.jpg
+    python lab/hsv_tuner.py --source synthetic
+    python lab/hsv_tuner.py --source replay --path data/clips/site.mp4
 
 窗口键位（先点一下窗口再按）
     1..9      切换正在调的颜色（顺序取自阈值表的键序）

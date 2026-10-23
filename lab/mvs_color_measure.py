@@ -16,9 +16,9 @@
     没装 MVS 会直接报错并提示怎么装。
 
 用法（仓库根目录；容器内或已装 MVS 的宿主机）
-    python -m vision.tools.blob.color_measure                   # 实时窗口
-    python -m vision.tools.blob.color_measure --exposure 80000 --gain 10
-    python -m vision.tools.blob.color_measure --no-window --frames 5 --out t.png
+    python lab/mvs_color_measure.py                   # 实时窗口
+    python lab/mvs_color_measure.py --exposure 80000 --gain 10
+    python lab/mvs_color_measure.py --no-window --frames 5 --out t.png
     python vision/tools/blob/color_measure.py               # 直接跑也行（脚本自带 MVS 路径兜底）
 
 窗口键位（先用鼠标点一下窗口再按）：

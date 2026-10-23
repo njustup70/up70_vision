@@ -26,10 +26,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     都是小体积 PNG（单张十几 KB），随仓库分发，规则见 assets/README.md。
 
 用法
-    python -m vision.tools.aruco.gen_scenes                     # 生成整套到 tests/assets/aruco
-    python -m vision.tools.aruco.gen_scenes --list-scenes        # 看有哪些场景
-    python -m vision.tools.aruco.gen_scenes --scene multi rotated
-    python -m vision.tools.aruco.gen_scenes --ids 0 1 2 3 --side-px 120
+    python lab/gen_aruco.py                     # 生成整套到 tests/assets/aruco
+    python lab/gen_aruco.py --list-scenes        # 看有哪些场景
+    python lab/gen_aruco.py --scene multi rotated
+    python lab/gen_aruco.py --ids 0 1 2 3 --side-px 120
 """
 
 import argparse
@@ -169,7 +169,7 @@ class Scene:
             "dictionary": dictionary_name,
             "width": int(width),
             "height": int(height),
-            "generator": "vision.tools.aruco.gen_scenes",
+            "generator": "lab/gen_aruco",
             "params": dict(self.params),
             "markers": [p.to_dict() for p in self.markers],
         }
@@ -350,7 +350,7 @@ def load_truth(image_path: str) -> dict:
     path = truth_path_for(image_path)
     if not os.path.isfile(path):
         raise FileNotFoundError(
-            f"找不到真值文件 {path}；图组请用 python -m vision.tools.aruco.gen_scenes 重新生成")
+            f"找不到真值文件 {path}；图组请用 python lab/gen_aruco.py 重新生成")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -408,7 +408,7 @@ def main(argv=None) -> int:
     print(f"\n✅ 生成 {len(pngs)} 张图 + {len(written) - len(pngs)} 份真值 JSON -> {args.out}")
     for path in pngs:
         print(f"   {os.path.relpath(path, args.out)}")
-    print("\n  看图：ls {0}/scenes  比对：python -m vision.tools.aruco.check --dir {0}"
+    print("\n  看图：ls {0}/scenes  比对：python lab/check_aruco.py --dir {0}"
           .format(args.out))
     return 0
 
