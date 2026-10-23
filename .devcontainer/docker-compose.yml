@@ -3,7 +3,7 @@
 # 用法（在仓库根目录执行）：
 #   docker compose -f .devcontainer/docker-compose.yml build                  # 建镜像，只需一次
 #   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision   # 跑环境自检
-#   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python scripts/demo.py
+#   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m up70_vision demo
 #
 # 源码以 bind mount 挂进容器：改宿主机上的代码在容器里立即生效，不用重建镜像。
 # 只有改了 pyproject.toml（增删依赖）才需要重新 build。

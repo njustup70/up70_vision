@@ -11,5 +11,5 @@
       "extensions": ["ms-python.python"]
     }
   },
-  "postCreateCommand": "python scripts/check_env.py"
+  "postCreateCommand": "python -m up70_vision doctor"
 }

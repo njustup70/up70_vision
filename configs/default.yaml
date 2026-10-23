@@ -98,7 +98,7 @@ detector:
   # yolo：ONNX 权重 + cv2.dnn 推理（detectors/yolo.py）。
   #   为什么走 ONNX：容器里只要 cv2，不用装 1.4 GB 的 torch（实测 26.4 ms/帧，够 25 fps）。
   #   权重不进版本库（.gitignore 已忽略 *.onnx），先导出一次：
-  #       python scripts/export_yolo.py --weights yolov8n.pt
+  #       python -m up70_vision export-yolo --weights yolov8n.pt
   #   用法：--set detector.name=yolo
   #   提醒：YOLOv8 是 AGPL-3.0；对外发布前要跟队长确认许可。
   yolo:
@@ -122,7 +122,7 @@ log:
   # DEBUG 会把每帧的候选框数与各颜色命中率都打出来，调阈值时开着很有用
   level: INFO
 
-# 相机内参：位姿估计（solvePnP）的必需输入，由 scripts/calibrate_camera.py 生成。
+# 相机内参：位姿估计（solvePnP）的必需输入，由 `python -m up70_vision calibrate` 生成。
 # 每台相机一份，**不进版本库**（.gitignore 已排除），所以要向做过标定的队友要，
 # 或自己拍一组棋盘图重新标定。
 calibration:

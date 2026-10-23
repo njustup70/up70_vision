@@ -28,11 +28,11 @@ python -m up70_vision.tools.aruco.gen_scenes --list-scenes        # 看有哪些
 python -m up70_vision.tools.aruco.gen_scenes --ids 0 1 2 3 --side-px 120
 
 # 拿图组对真值自检：ID、四角、中心逐张报数字
-python -m up70_vision.tools.aruco.check
-python -m up70_vision.tools.aruco.check --only rotated --max-err-px 1.5
+python -m up70_vision check-aruco
+python -m up70_vision check-aruco --only rotated --max-err-px 1.5
 
 # 走完整管线（检测 + 判色 + 落盘），把图组当回放素材喂进去
-python scripts/run.py --set detector.name=aruco \
+python -m up70_vision run --set detector.name=aruco \
   --set input.source=replay --set input.replay.path=assets/aruco/scenes
 
 # 单元测试（容器里跑，宿主 apt 版 cv2 4.5.4 没有新版 aruco API，会自动跳过）

@@ -3,7 +3,7 @@
 # 换相机或重标定会覆盖本文件：提交前先确认这份是不是全队约定的那台相机；
 # 只想临时用别人的标定，请用 `--intrinsics <别的 yaml>`，不要覆盖这里。
 #
-# 相机内参与畸变系数（由 scripts/calibrate_camera.py 生成，别手改）
+# 相机内参与畸变系数（由 `python -m up70_vision calibrate` 生成，别手改）
 #
 # 读这份文件的地方：阶段二的位姿估计（solvePnP）与去畸变。
 #   camera_matrix : 3x3 内参矩阵 [[fx,0,cx],[0,fy,cy],[0,0,1]]

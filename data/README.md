@@ -48,10 +48,11 @@ clips/
 
 有素材之前，用合成图开发算法（`python -m up70_vision run --set input.source=synthetic`）——合成图的颜色、位置、噪声完全可控，比真实数据更适合定位算法 bug。
 
-有素材之后，用回放验证（**待 `io/replay.py` 与回放入口重建后生效**）：
+有素材之后，用回放验证（回放源已实现，读图片目录或视频文件）：
 
 ```bash
-python scripts/run_replay.py --path data/clips
+python -m up70_vision run --set input.source=replay \
+  --set input.replay.path=data/clips
 ```
 
 回放的价值是**可重复**：同一段视频跑两遍结果必须逐帧一致，才谈得上对比两次调参的效果。直接接摄像头做不到这一点。
