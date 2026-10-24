@@ -317,6 +317,53 @@ def self_check(clean_depth: np.ndarray, k: dict, cam_pos: np.ndarray,
     }
 
 
+def apply_holes(depth: np.ndarray, count: int, radius_px: int,
+                rng: np.random.Generator) -> np.ndarray:
+    """随机挖几个圆形空洞，模拟反光/吸光导致的大面积丢深度。
+
+    洞的位置在一次生成里定死，不在 fake_camera_node 里逐帧重挖：
+    真实场景的反光点是固定的，洞如果每帧跳来跳去，时间滤波那类逻辑会得到
+    一个真实世界不存在的输入。
+
+    这也是合成数据唯一能主动造出来的失效模式——真实反光的具体形态还是得靠
+    S2 的实测，这里只保证「算法遇到成片空洞时不会崩」。
+    """
+    if count <= 0 or radius_px <= 0 or depth.size == 0:
+        return depth
+    out = depth.copy()
+    height, width = out.shape
+    radius = int(min(radius_px, max(min(height, width) // 4, 1)))
+    yy, xx = np.mgrid[-radius:radius + 1, -radius:radius + 1]
+    disk = (yy ** 2 + xx ** 2) <= radius ** 2
+
+    for _ in range(count):
+        center_y = int(rng.integers(radius, max(height - radius, radius + 1)))
+        center_x = int(rng.integers(radius, max(width - radius, radius + 1)))
+        patch = out[center_y - radius:center_y + radius + 1,
+                    center_x - radius:center_x + radius + 1]
+        patch[disk] = 0
+    return out
+
+
+def object_truth(index: int, box: Box, rotation: np.ndarray,
+                 cam_pos: np.ndarray) -> dict:
+    """把一个物块的几何信息转成真值字典（世界系与相机系各存一份）。
+
+    两份都存是刻意的：世界系方便人核对摆放，相机系是 B 阶段检测结果的对照基准
+    （检测输出就在相机系）。只存一份的话，每次比对都要在脑子里转一次坐标。
+    """
+    return {
+        "id": index,
+        "type": "box",
+        "center_mm": [box.cx, box.cy, box.height / 2],
+        "size_mm": [box.sx, box.sy, box.height],
+        "top_center_mm": box.top_center().tolist(),
+        "top_normal_world": [0.0, 0.0, 1.0],
+        "top_center_cam_mm": (rotation.T @ (box.top_center() - cam_pos)).tolist(),
+        "top_normal_cam": (rotation.T @ np.array([0.0, 0.0, 1.0])).tolist(),
+    }
+
+
 def save_preview(depth: np.ndarray, path: Path) -> bool:
     """存 8bit 预览图：近亮远暗，方便一眼确认渲染是否合理。"""
     import cv2
@@ -347,6 +394,10 @@ def main() -> int:
                         metavar=("SX", "SY", "H"), help="物块长宽高（毫米）")
     parser.add_argument("--block-xy", nargs=2, type=float, default=None,
                         metavar=("X", "Y"), help="物块中心平面位置，默认放光轴交点")
+    parser.add_argument("--extra-block", nargs=5, type=float, action="append",
+                        metavar=("X", "Y", "SX", "SY", "H"),
+                        help="额外物块，可重复：中心 XY 与长宽高（全毫米）。"
+                             "多目标场景用它，自检仍只针对主物块")
     parser.add_argument("--width", type=int, default=848)
     parser.add_argument("--img-height", type=int, default=480)
     parser.add_argument("--fx", type=float, default=409.5)
@@ -358,6 +409,10 @@ def main() -> int:
     parser.add_argument("--max-range", type=float, default=3000.0, help="远端量程（毫米）")
     parser.add_argument("--edge-drop-px", type=int, default=1,
                         help="深度跳变处向外扩几圈置为无效，默认 1")
+    parser.add_argument("--hole-count", type=int, default=0,
+                        help="随机挖几个圆形空洞（模拟反光丢深度），默认 0")
+    parser.add_argument("--hole-radius-px", type=int, default=20,
+                        help="空洞半径（像素），默认 20")
     args = parser.parse_args()
 
     if args.width < 8 or args.img_height < 8:
@@ -378,16 +433,28 @@ def main() -> int:
         block_xy = tuple(args.block_xy)
     box = Box(cx=block_xy[0], cy=block_xy[1],
               sx=args.block[0], sy=args.block[1], height=args.block[2])
+    boxes = [box]
+    for extra in (args.extra_block or []):
+        boxes.append(Box(cx=extra[0], cy=extra[1], sx=extra[2], sy=extra[3],
+                         height=extra[4]))
 
     rng = np.random.default_rng(args.seed)
 
     clean_depth, t_table = raycast(args.width, args.img_height, k, cam_pos,
-                                   rotation, [box])
+                                   rotation, boxes)
+    # 自检只针对主物块：多目标场景下每个物块都各有一份真值，
+    # 但几何校验用主物块一次就够了，多算一遍不会带来新信息。
     check = self_check(clean_depth, k, cam_pos, rotation, box, args.tilt)
 
     noisy = apply_noise(clean_depth, rng)
     final, invalid_stats = apply_invalid(noisy, args.min_range, args.max_range,
                                         args.edge_drop_px)
+    if args.hole_count > 0:
+        final = apply_holes(final, args.hole_count, args.hole_radius_px, rng)
+        # 空洞是最后挖的，前面那份统计没算上它们，这里补一次
+        invalid_stats["invalid_holes"] = int((final == 0).sum()) \
+            - int(invalid_stats["pixels_total"] - invalid_stats["valid_pixels"])
+        invalid_stats["valid_pixels"] = int((final > 0).sum())
 
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -422,17 +489,8 @@ def main() -> int:
             "depth_type": "z_depth",
         },
         "table": {"z_mm": 0.0},
-        "objects": [{
-            "id": 0,
-            "type": "box",
-            "center_mm": [box.cx, box.cy, box.height / 2],
-            "size_mm": [box.sx, box.sy, box.height],
-            "top_center_mm": box.top_center().tolist(),
-            "top_normal_world": [0.0, 0.0, 1.0],
-            # 真值转相机系：B 阶段要拿它和检测结果直接比
-            "top_center_cam_mm": (rotation.T @ (box.top_center() - cam_pos)).tolist(),
-            "top_normal_cam": (rotation.T @ np.array([0.0, 0.0, 1.0])).tolist(),
-        }],
+        "objects": [object_truth(index, item, rotation, cam_pos)
+                    for index, item in enumerate(boxes)],
         "noise": {
             "model": "sigma_mm = coef * z_mm ** exp",
             "coef": NOISE_COEF, "exp": NOISE_EXP,
@@ -454,7 +512,8 @@ def main() -> int:
     print("=" * 62)
     print(f"合成深度图 -> {out_dir}")
     print(f"  相机      : 高 {args.cam_height:.0f}mm, 倾角 {args.tilt:.0f}°, yaw {args.yaw:.0f}°")
-    print(f"  物块      : {args.block[0]:.0f}x{args.block[1]:.0f}x{args.block[2]:.0f}mm "
+    print(f"  物块      : {len(boxes)} 个，主块 "
+          f"{args.block[0]:.0f}x{args.block[1]:.0f}x{args.block[2]:.0f}mm "
           f"@ ({box.cx:.1f}, {box.cy:.1f})")
     print(f"  有效像素  : {valid_ratio * 100:.1f}% "
           f"(边缘 {invalid_stats['invalid_edge']}, 超距 {invalid_stats['invalid_out_of_range']})")
