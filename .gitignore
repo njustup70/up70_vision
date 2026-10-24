@@ -70,3 +70,6 @@ configs/camera_calibration*.yaml
 #   而 Git 里父目录一旦被忽略，就没法用 ! 把里面的 meta.yaml 捞回来。
 bags/*/*
 !bags/*/meta.yaml
+
+# ultralytics 的训练产物（权重、曲线、val 预测图），几百 MB 起
+runs/
