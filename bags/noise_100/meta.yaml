@@ -1,0 +1,31 @@
+# A4 深度噪声实测 —— 同批次见 noise_050 / noise_200
+bag: noise_100
+recorded_at: 2026-10-24
+purpose: A4 深度噪声实测
+
+camera:
+  model: Orbbec Gemini 336L
+  depth_stream: 848x480 @30fps Y16
+  depth_unit: mm
+  intrinsics: {fx: 409.50, fy: 409.50, cx: 424.33, cy: 241.33}
+
+setup:
+  scene: 相机放地上正对墙面，无物块
+  distance_mm: 1029         # 深度图实测值，未用卷尺核对
+  height_mm: null           # 未记录，相机直接放地上
+  tilt_deg: null            # 非刻意摆设，由深度梯度反推约 3°
+  wall: null                # 墙面材质与颜色未记录
+
+result:
+  noise_std_mm: 0.60
+  expected_4z2_mm: 4.24
+  ratio: 0.14
+  verdict: BETTER
+  center_valid_ratio: 1.00
+  plane_residual_mm: 1.59
+
+notes: |
+  1. A4 只测重复性（噪声），不测绝对准确度，理由见 noise_050/meta.yaml。
+  2. 中心 200px ROI 的平面残差 2.11mm，缩到 100px 后 1.59mm，
+     说明视场里除墙面外还有少量其它物体进入 ROI 边缘。
+  3. 同批次：noise_050 = 663mm / 0.36mm，noise_200 = 1605mm / 1.68mm。

@@ -67,7 +67,7 @@ ENV MVCAM_SDK_PATH=/opt/MVS \
 WORKDIR /opt/up70_vision
 COPY . .
 RUN pip3 install --no-cache-dir --upgrade pip -i "$PIP_INDEX_URL" \
- && pip3 install --no-cache-dir -e . -i "$PIP_INDEX_URL"
+ && pip3 install --no-cache-dir -e ".[lab]" -i "$PIP_INDEX_URL"
 
 # ---- 3. 运行时约定 ----
 # 仓库文档里的命令统一写 python，补一个软链接，免得在容器里要记 python3

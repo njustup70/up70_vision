@@ -31,6 +31,17 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 
+[project.optional-dependencies]
+# lab 工具依赖：只有 lab/ 下的离线分析脚本用得到，vision/ 包本身不 import，
+#   所以不进主 dependencies。Dockerfile 里按 `-e ".[lab]"` 安装，容器内开箱可用。
+lab = [
+    # rosbags：纯 Python 读 rosbag2 的 mcap / sqlite3，不需要装 ROS。
+    #   选它而不是 rosbag2_py，是因为 lab/ 的脚本一旦依赖 ROS 运行时，
+    #   「跑一次统计」就变成「先 source 一遍环境才能跑」，离线复算会很别扭。
+    #   上界 <1 是因为 1.x 尚未发布，0.x 的 API 已经够用且稳定。
+    "rosbags>=0.9,<1",
+]
+
 [tool.setuptools.packages.find]
 # 包 `vision/` 放在仓库根（不再用 src 布局）：`pip install -e .` 装的是仓库根这份，
 # import 的一定是装好的包；`lab/` 不在 include 里，它靠 import vision 复用算法，

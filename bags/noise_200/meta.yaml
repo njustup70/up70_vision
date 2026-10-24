@@ -1,0 +1,34 @@
+# A4 深度噪声实测 —— 同批次见 noise_050 / noise_100
+bag: noise_200
+recorded_at: 2026-10-24
+purpose: A4 深度噪声实测
+
+camera:
+  model: Orbbec Gemini 336L
+  depth_stream: 848x480 @30fps Y16
+  depth_unit: mm
+  intrinsics: {fx: 409.50, fy: 409.50, cx: 424.33, cy: 241.33}
+
+setup:
+  scene: 相机放地上正对墙面，无物块
+  distance_mm: 1605         # 深度图实测值，未用卷尺核对
+  height_mm: null           # 未记录，相机直接放地上
+  tilt_deg: null            # 非刻意摆设，由深度梯度反推约 3°
+  wall: null                # 墙面材质与颜色未记录
+
+result:
+  noise_std_mm: 1.68
+  expected_4z2_mm: 10.30
+  ratio: 0.16
+  verdict: BETTER
+  center_valid_ratio: 1.00
+  plane_residual_mm: 5.20   # --roi 100 的结果
+
+notes: |
+  1. 这一组必须用 --roi 100 分析：中心 200px 在 1.6m 处覆盖约 0.78m，
+     ROI 内混进了非墙物体，平面残差高达 185mm，噪声数值仍对
+     （1.68 → 1.71）但「距离」这个标注会失去单一含义。
+     缩到 100px 后残差降到 5.20mm，有效像素从 98.2% 升到 100%。
+  2. 距离越远，同样像素数覆盖的物理范围越大，ROI 要相应缩小。
+     2m 处 200px 约合 0.96m 见方，很容易框进桌面或杂物。
+  3. 同批次：noise_050 = 663mm / 0.36mm，noise_100 = 1029mm / 0.60mm。
