@@ -43,6 +43,8 @@ from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReli
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
 
+from .geometry import quaternion_from_z_axis
+
 # 与 lab/gen_synthetic_depth.py 保持一致的噪声模型
 NOISE_COEF = 3.98e-6
 NOISE_EXP = 1.74
@@ -60,55 +62,6 @@ def sensor_qos(depth: int = 5) -> QoSProfile:
         history=QoSHistoryPolicy.KEEP_LAST,
         depth=depth,
     )
-
-
-def quaternion_from_z_axis(normal) -> tuple:
-    """构造一个让局部 z 轴对准给定方向的四元数。
-
-    控制组拿到 pose 后通常直接把它的 z 轴当吸附方向，所以必须保证
-    四元数解析出来的 z 轴确实等于法向，而不是随便给个单位四元数。
-
-    用 Shepperd 分支写法而不是「w = sqrt(1+trace)/2」单支：后者在
-    trace 接近 -1 时会除以接近 0 的数，数值不稳。
-    """
-    n = np.asarray(normal, dtype=np.float64)
-    norm = np.linalg.norm(n)
-    if norm < 1e-9:
-        return 0.0, 0.0, 0.0, 1.0
-    n = n / norm
-
-    helper = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
-    x_axis = np.cross(helper, n)
-    x_axis /= np.linalg.norm(x_axis)
-    y_axis = np.cross(n, x_axis)
-    m = np.stack([x_axis, y_axis, n], axis=1)
-
-    trace = m[0, 0] + m[1, 1] + m[2, 2]
-    if trace > 0.0:
-        s = 0.5 / np.sqrt(trace + 1.0)
-        w = 0.25 / s
-        x = (m[2, 1] - m[1, 2]) * s
-        y = (m[0, 2] - m[2, 0]) * s
-        z = (m[1, 0] - m[0, 1]) * s
-    elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
-        s = 2.0 * np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2])
-        w = (m[2, 1] - m[1, 2]) / s
-        x = 0.25 * s
-        y = (m[0, 1] + m[1, 0]) / s
-        z = (m[0, 2] + m[2, 0]) / s
-    elif m[1, 1] > m[2, 2]:
-        s = 2.0 * np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2])
-        w = (m[0, 2] - m[2, 0]) / s
-        x = (m[0, 1] + m[1, 0]) / s
-        y = 0.25 * s
-        z = (m[1, 2] + m[2, 1]) / s
-    else:
-        s = 2.0 * np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1])
-        w = (m[1, 0] - m[0, 1]) / s
-        x = (m[0, 2] + m[2, 0]) / s
-        y = (m[1, 2] + m[2, 1]) / s
-        z = 0.25 * s
-    return float(x), float(y), float(z), float(w)
 
 
 class FakeCameraNode(Node):

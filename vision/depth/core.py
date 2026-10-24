@@ -76,13 +76,21 @@ def backproject(depth_mm: np.ndarray, intrinsics: Intrinsics) -> tuple:
 def voxel_downsample(points: np.ndarray, leaf_mm: float) -> np.ndarray:
     """体素降采样：按 leaf 分格，每格用落点均值代表。
 
-    用 np.unique 的 return_inverse 做分格，再用 bincount 求均值。
-    比逐格 Python 循环快两个量级，也不需要 scipy。
+    分格后先摊平成一维整数编码再排序，不用 `np.unique(axis=0)`——
+    后者会把每一行当成 void 逐字节比较，14 万点要几十毫秒，直接吃掉帧预算。
+    一维编码下走的是普通整数排序，快一个量级。
     """
     if leaf_mm <= 0 or len(points) == 0:
         return points
+
     keys = np.floor(points / leaf_mm).astype(np.int64)
-    _, inverse, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
+    origin = keys.min(axis=0)
+    span = keys.max(axis=0) - origin + 1
+    # 每轴格子数远小于 2000，三维编码在 int64 里不会溢出
+    code = ((keys[:, 0] - origin[0]) * span[1] + (keys[:, 1] - origin[1])) * span[2] \
+        + (keys[:, 2] - origin[2])
+
+    _, inverse, counts = np.unique(code, return_inverse=True, return_counts=True)
     n_vox = len(counts)
     sums = np.zeros((n_vox, 3), dtype=np.float64)
     for axis in range(3):
