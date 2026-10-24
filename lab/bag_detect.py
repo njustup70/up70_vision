@@ -402,6 +402,42 @@ def save_viz(depth: np.ndarray, result: dict, intrinsics: Intrinsics,
     cv2.putText(canvas, "ROI 0.6", (x0 + 4, y0 + 14),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
+    # 把「被判为吸附面」的像素单独标成洋红，并画出该面的法向箭头。
+    # 这是回答「圆点落在顶面还是正面」的唯一直接证据：
+    #   洋红像素连成一片且贴在物体上沿 → 取到的是顶面；
+    #   洋红像素铺满整个侧面轮廓 → 取成了正面（那说明 top_ratio 取错层）。
+    slab_pixels = None
+    if best is not None and label_map is not None:
+        from vision.depth.primitives import backproject
+
+        k_roi = Intrinsics(fx=intrinsics.fx, fy=intrinsics.fy,
+                           cx=intrinsics.cx - x0, cy=intrinsics.cy - y0,
+                           width=roi_w, height=roi_h)
+        pts, pix = backproject(depth[y0:y0 + roi_h, x0:x0 + roi_w], k_roi)
+        in_cluster = label_map[pix[:, 1], pix[:, 0]] == int(best["label"])
+        center = np.asarray(best["top_center_mm"], dtype=np.float64)
+        normal = np.asarray(best["top_normal"], dtype=np.float64)
+        offs = np.abs((pts - center) @ normal)
+        slab = in_cluster & (offs <= params.flat_distance_mm)
+        ys = np.clip(pix[slab, 1] + y0, 0, height - 1)
+        xs = np.clip(pix[slab, 0] + x0, 0, width - 1)
+        canvas[ys, xs] = (255, 0, 255)
+        slab_pixels = int(slab.sum())
+
+        start = project(center, intrinsics)
+        tip = project(center + normal * 60.0, intrinsics)
+        if start is not None and tip is not None:
+            cv2.arrowedLine(canvas, (int(start[0]), int(start[1])),
+                            (int(tip[0]), int(tip[1])), (255, 0, 255), 2,
+                            tipLength=0.3)
+        table_n = np.asarray(result["plane"]["normal"], dtype=np.float64)
+        angle = float(np.degrees(np.arccos(min(1.0, abs(float(normal @ table_n))))))
+        cv2.putText(canvas,
+                    f"magenta = grasp face ({slab_pixels}px)  "
+                    f"angle vs table = {angle:.1f}deg",
+                    (8, height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 255), 1)
+
     for index, cluster in enumerate(result["clusters"]):
         uv = project(np.asarray(cluster["top_center_mm"], dtype=np.float64),
                      intrinsics)
