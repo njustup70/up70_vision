@@ -1,12 +1,51 @@
-# `depth/`：深度相机（暂不开工）
+# `depth/`：深度相机 -> 抓取目标
 
-这个目录是**占位**，里面没有任何 `.py`。
+纯几何抓取检测：给一张深度图和内参，找出桌面上凸起的物块，输出「吸附点 + 法向 + 可吸性分数」。**不依赖 YOLO，也不依赖彩色图。**
 
-按 `docs/迁移计划书` D11：深度相机是计划内的第三个功能，但现在不开工。
+## 文件
 
-- 现在**不要**在这里写代码，也**不要**往根级 `types.py` 里塞 3D 类型
-  （`DepthFrame` / `PointCloud` / `GraspPoint` 一个都别提前定义）；
-- 真开工时按 `aruco/` `yolo/` 的形状建：`depth/types.py` + `depth/core.py`，
-  3D 类型只放 `depth/types.py`，与根级 `types.py` 互不 import。
+| 文件 | 放什么 |
+|---|---|
+| `types.py` | `Intrinsics` / `SuctionParams` / `GraspTarget`。3D 类型只在这里，与根级 `types.py` 互不 import |
+| `core.py` | 算法实现与门面函数 `detect_grasp_targets()` |
+| `__init__.py` | 对外只暴露 `detect_grasp_targets` / `analyze` 和三个类型 |
 
-一句话：**空目录只是记一笔"这里将来有东西"，提前搭结构才是被批评的那种过度工程。**
+## 对外接口
+
+```python
+from vision.depth import Intrinsics, detect_grasp_targets
+
+k = Intrinsics(fx=409.5, fy=409.5, cx=424.33, cy=241.33, width=848, height=480)
+targets = detect_grasp_targets(depth_mm, k)      # depth_mm: uint16，单位毫米
+for t in targets:                                # 按可吸性分数降序
+    print(t.to_dict())
+```
+
+调试用 `analyze()`，它会额外返回平面方程、每个簇的点和限制项，能分清「分割错了」还是「打分了」。
+
+## 不 import ROS
+
+`rclpy` 只能 apt 装、pip 装不了，混进来会让 `pip install -e .` 直接失败。ROS 外壳在 `ros2_ws/src/vision_depth/`，那边只做收消息、调这里、发消息。
+
+`tests/test_architecture.py` 有断言守着这条，不靠人记。
+
+## 参数从哪来
+
+`SuctionParams` 的默认值不是拍的：
+
+- `plane_thresh_mm = 6.0`：A4 实测墙面/桌面本身有 2~5mm 起伏，按 3σ（0.5m 处约 1mm）取会把真实桌面点判成外点
+- `leaf_mm = 4.0`：比实测噪声（0.4~1.7mm）大一个量级，不会把噪声当结构
+- 可吸性五条：计划书 3.3 的初值，仍需实测调整
+
+## 现在的位置
+
+算法先在 `lab/proto_depth.py` 里跑通并调好参数，再提炼到这里（ROS2 接入方案 10.2 的四步落地）。`lab/` 那个脚本保留作为离线调试工具，读 npy/bag 看中间结果；ROS 侧的 `fuse_node` 调的是这里。
+
+## 已知的坑
+
+- **深度是 z 深度，不是欧氏距离。** 反投影是 `x=(u-cx)z/fx` 的直接代入，误当欧氏距离会让点云边缘整体外扩。
+- **ROI 裁剪后主点必须跟着平移**，否则反投影整体错位，表现为「物块位置偏了几厘米」，很难联想到是内参没对齐。
+- **RANSAC 阈值单位是毫米。** 按米填（0.006）会让每个点都算外点，报的是「找不到桌面」。
+- **平面法向方向无约定**，`n` 和 `-n` 都合法。模块内部统一成「朝相机」，算夹角仍取绝对值。
+- **顶面拟合不能拿整簇。** 物块是立体的，整簇拟合出的是斜平面，中心还落在方块内部。只取离桌面最远的 20%。
+- **聚类不是真正的欧式聚类。** 利用深度图是组织化点云这一特性，在深度跳变处切断连通域，结果等价且快两个量级（容器里没有 scipy，手写 KD 树太慢）。

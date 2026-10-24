@@ -1,0 +1,69 @@
+# bag 元信息 —— 与 raw_001 同存，缺了它这个 bag 就是废数据
+# 模板与规则见 ../README.md
+
+bag: raw_001
+recorded_at: 2026-10-23T22:37:10
+duration_s: 34.6
+size_mib: 931
+storage: mcap
+ros_distro: jazzy
+
+# ---- 设备 ----
+camera:
+  model: Orbbec Gemini 336L
+  serial: CP82841000AX
+  firmware: 1.6.00
+  sdk_version: 2.9.3
+  ros_wrapper_version: 2.9.3
+  usb_negotiated: 5000M        # USB 3.2 Gen1；掉到 480M 说明插了 USB2 口或线不合格
+  usb_bus: "004"
+
+# ---- 流配置 ----
+streams:
+  depth:
+    topic: /camera/depth/image_raw
+    width: 848
+    height: 480
+    fps: 30
+    format: Y16                # 16UC1，单位毫米（enable_depth_scale=true）
+    frames_in_bag: 1037
+    measured_fps: 29.97        # 1037 / 34.6s，满帧
+  color:
+    topic: /camera/color/image_raw/compressed
+    width: 1280
+    height: 720
+    fps: 30
+    format: MJPG
+    frames_in_bag: 1038
+
+# ---- 计划书硬性三项 ----
+# 本次为「链路打通」测试录制，相机随手放置、未摆物块，三项均未测。
+# 这决定了本 bag 的用途边界，见下方 notes。
+setup:
+  height_mm: null              # 待补：相机到桌面距离
+  tilt_deg: null               # 待补：光轴与桌面法向夹角
+  object_layout: null          # 待补：物块位置（本次无物块）
+  mount: "临时放置，未固定（无三脚架）"
+
+scene:
+  type: "空场景（桌面/周边环境，无物块）"
+  lighting: "室内正常照明，未记录具体照度"
+  objects: []
+
+# ---- 用途边界（务必读） ----
+notes: |
+  1. 这个 bag 只能用于「链路打通」和「观察深度图噪声/失效模式」，
+     不能用于算法调参——没有物块，也没有真值。
+  2. 安装高度、倾角、物块位置三项缺失，因此 RANSAC 去桌面的参数、
+     降采样 leaf_size、聚类容差都不能拿这份数据定。
+     等 A0 正式安装后重录一套带 meta 的 bag。
+  3. 帧率注意：ros2 topic hz 实测只有 22-23Hz，但 bag 里是 29.97Hz 满帧。
+     差异来自 topic hz 用 Python 反序列化跟不上，是观测者开销，不是相机掉帧。
+     以后测帧率以 bag 帧数为准，别用 topic hz。
+
+# ---- 复现命令 ----
+command: |
+  ros2 launch vision_depth camera_only.launch.py
+  ros2 bag record -o bags/raw_001 \
+    /camera/depth/image_raw /camera/depth/camera_info \
+    /camera/color/image_raw/compressed /camera/color/camera_info
