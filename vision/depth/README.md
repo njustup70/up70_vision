@@ -7,8 +7,27 @@
 | 文件 | 放什么 |
 |---|---|
 | `types.py` | `Intrinsics` / `SuctionParams` / `GraspTarget`。3D 类型只在这里，与根级 `types.py` 互不 import |
-| `core.py` | 算法实现与门面函数 `detect_grasp_targets()` |
+| `primitives.py` | 与吸盘无关的基本运算：反投影、体素降采样、RANSAC 平面、深度图连通域 |
+| `core.py` | 抓取业务：顶面拟合、可吸性打分、编排、门面 `detect_grasp_targets()` |
 | `__init__.py` | 对外只暴露 `detect_grasp_targets` / `analyze` 和三个类型 |
+
+## 文件归属判据
+
+只有一条：**描述这段代码时，需不需要提到「吸盘 / 抓取 / 吸附面」？**
+
+| 不需要 → `primitives.py` | 需要 → `core.py` |
+|---|---|
+| `backproject`：像素 + 深度 → 三维点 | `fit_top_face`：一团点 → **物块顶面的吸附点** |
+| `voxel_downsample`：一堆点 → 更少的点 | `score_suction`：**吸盘能不能吸住** |
+| `fit_plane_ransac`：一堆点 → 平面方程 | `analyze` / `detect_grasp_targets`：→ 抓取目标 |
+| `label_clusters`：深度图 → 每个像素属于第几团 | |
+
+这条判据的意义是防止 `core.py` 继续膨胀。反投影、降采样、平面拟合、连通域这四件事
+将来做深度-彩色对齐、手眼标定、多目标分割时都要再用，它们不该被绑在"抓取"里。
+`fit_top_face` / `score_suction` 虽然也在算几何，但它们的存在理由就是吸盘，所以留在 core。
+
+读文件、解析 bag、真值对比、命令行参数一律在 `lab/`；ROS 消息转换一律在
+`ros2_ws/src/vision_depth/`。
 
 ## 对外接口
 
