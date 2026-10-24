@@ -26,6 +26,7 @@ setup(
         "console_scripts": [
             "fuse_node = vision_depth.fuse_node:main",
             "depth_viewer = vision_depth.depth_viewer:main",
+            "fake_camera_node = vision_depth.fake_camera_node:main",
         ],
     },
 )

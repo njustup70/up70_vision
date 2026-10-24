@@ -396,11 +396,24 @@ def main() -> int:
     depth_path = out_dir / "depth.npy"
     np.save(depth_path, depth_u16)
 
+    # 无噪声的几何深度单独存一份：fake_camera_node 要在它上面逐帧重新加噪。
+    # 只发 depth.npy 的话每帧是同一张图，时间滤波、滑动平均、跟踪这类逻辑
+    # 在合成数据上全部「完美」，一到真机就崩。
+    clean_path = out_dir / "clean_depth.npy"
+    np.save(clean_path, np.where(np.isfinite(clean_depth), clean_depth, 0.0).astype(np.float32))
+
     preview_ok = save_preview(depth_u16.astype(np.float64), out_dir / "preview.png")
 
     meta = {
         "generator": "lab/gen_synthetic_depth.py",
         "seed": args.seed,
+        "files": {
+            "depth": "depth.npy",
+            "clean_depth": "clean_depth.npy",
+            "preview": "preview.png",
+        },
+        "files_note": "depth.npy 含噪声与无效值，是「一帧真实数据」；"
+                      "clean_depth.npy 是无噪声几何值，供 fake_camera_node 逐帧加噪。",
         "camera": {
             "width": args.width, "height": args.img_height,
             "fx": args.fx, "fy": args.fy, "cx": args.cx, "cy": args.cy,
