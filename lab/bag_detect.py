@@ -350,6 +350,79 @@ def save_preview(depth: np.ndarray, centers: list, intrinsics: Intrinsics,
     return bool(cv2.imwrite(str(path), canvas))
 
 
+def save_viz(depth: np.ndarray, result: dict, intrinsics: Intrinsics,
+             params: SuctionParams, path: Path) -> bool:
+    """存一张「看得懂」的可视化：深度伪彩 + ROI 框 + 每个簇的编号/点数/分数。
+
+    与 `--save-png` 的分工：
+        `--save-png` 是灰度和吸附点，判断摆位够不够（一眼看盒子在不在画面里）；
+        这张图回答「到底检出了些什么」——每个簇多大、分数多少、落在画面哪一块。
+    颜色：绿=BEST（分数最高）、黄=其他候选（分数>0）、灰=背景簇（分数=0）。
+    深度映射用近暖远冷，肉眼能直接分出前景和背景。
+    """
+    import cv2
+
+    valid = depth > 0
+    if not valid.any():
+        return False
+    values = depth[valid]
+    lo, hi = np.percentile(values, [5, 95])
+    span = max(float(hi - lo), 1.0)
+    norm = np.clip((depth.astype(np.float32) - lo) / span, 0.0, 1.0)
+    # 近处暖色（红）、远处冷色（蓝）：先反相再上 TURBO
+    canvas = cv2.applyColorMap((255.0 * (1.0 - norm)).astype(np.uint8),
+                               cv2.COLORMAP_TURBO)
+    canvas[~valid] = (0, 0, 0)
+
+    height, width = depth.shape
+    roi_w, roi_h = int(width * params.roi_ratio), int(height * params.roi_ratio)
+    x0, y0 = (width - roi_w) // 2, (height - roi_h) // 2
+
+    best = max(result["clusters"], key=lambda c: c["score"], default=None)
+
+    # 每个簇的像素区域半透明着色。坐标标签只能说明「有这个簇」，
+    # 着色才能回答「它到底是画面里的哪一块」——这是判断误检最直接的办法。
+    label_map = result.get("label_map")
+    if label_map is not None:
+        palette = [(60, 220, 60), (40, 200, 250), (250, 160, 60),
+                   (200, 90, 230), (90, 220, 220), (120, 120, 250),
+                   (60, 120, 200), (200, 200, 90)]
+        full = np.zeros((height, width), dtype=np.int32)
+        full[y0:y0 + roi_h, x0:x0 + roi_w] = label_map
+        overlay = canvas.copy()
+        for index, cluster in enumerate(result["clusters"]):
+            mask = full == int(cluster["label"])
+            if not mask.any():
+                continue
+            color = (0, 255, 0) if cluster is best else palette[index % len(palette)]
+            overlay[mask] = color
+        canvas = cv2.addWeighted(overlay, 0.45, canvas, 0.55, 0)
+
+    cv2.rectangle(canvas, (x0, y0), (x0 + roi_w, y0 + roi_h), (255, 255, 255), 1)
+    cv2.putText(canvas, "ROI 0.6", (x0 + 4, y0 + 14),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+    for index, cluster in enumerate(result["clusters"]):
+        uv = project(np.asarray(cluster["top_center_mm"], dtype=np.float64),
+                     intrinsics)
+        if uv is None:
+            continue
+        u, v = int(round(uv[0])), int(round(uv[1]))
+        if cluster is best:
+            color, tag = (0, 255, 0), "BEST"
+        elif cluster["score"] > 0.0:
+            color, tag = (0, 255, 255), "CAND"
+        else:
+            color, tag = (200, 200, 200), "bg"
+        cv2.circle(canvas, (u, v), 7, color, 2)
+        text = f"{index}|{cluster['points']}p|{cluster['score']:.2f}|{tag}"
+        cv2.putText(canvas, text, (u + 9, max(12, v - 4)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return bool(cv2.imwrite(str(path), canvas))
+
+
 def _display_width(text: str) -> int:
     """按终端显示宽度算字符串长度（中文/全角算 2）。
 
@@ -409,6 +482,9 @@ def main() -> int:
                         help="把合成后的深度图存成 npy，方便反复调参")
     parser.add_argument("--save-png", type=Path, default=None,
                         help="存深度预览图（含检出点），摆位自查用")
+    parser.add_argument("--save-viz", type=Path, default=None,
+                        help="存深度伪彩图（含 ROI 框与每个簇的编号/点数/分数），"
+                             "用来判断「到底检出了些什么」")
     parser.add_argument("--json-out", type=Path, default=None,
                         help="把结论写成 JSON，贴报告或进 CI 用")
     parser.add_argument("--seed", type=int, default=0)
@@ -516,6 +592,10 @@ def main() -> int:
         centers = [c["top_center_mm"] for c in clusters]
         ok = save_preview(depth, centers, intrinsics, args.save_png)
         print(f"\n预览图: {'已存 ' + str(args.save_png) if ok else '写盘失败'}")
+
+    if args.save_viz:
+        ok = save_viz(depth, result, intrinsics, params, args.save_viz)
+        print(f"可视化: {'已存 ' + str(args.save_viz) if ok else '写盘失败'}")
 
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)

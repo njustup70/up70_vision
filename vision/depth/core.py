@@ -236,6 +236,10 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
     remaining[pixels[on_table, 1], pixels[on_table, 0]] = 0
 
     labels = label_clusters(remaining, params.cluster_jump_mm)
+    # 标签图放进返回值：`analyze` 的定位就是「把中间结果交出来方便定位问题」，
+    # 而「哪块像素属于哪个簇」正是最难靠文字描述的东西。只在 ROI 范围内，
+    # 离线调试与可视化用；`detect_grasp_targets` 不碰它。
+    result["label_map"] = labels
 
     targets = []
     for label in range(1, int(labels.max()) + 1):
