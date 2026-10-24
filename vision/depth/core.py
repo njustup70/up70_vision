@@ -93,9 +93,12 @@ def fit_top_face(points: np.ndarray, plane_normal: np.ndarray, plane_d: float,
     if float(normal @ (-centroid)) < 0:
         normal = -normal
 
-    # 把重心投影回拟合平面，保证吸附点确实落在面上
-    offset = float((centroid - top_pts[0]) @ normal)
-    centroid = centroid - offset * normal
+    # 吸附点就是重心本身，**不要再做「投影回平面」**。
+    # SVD 拟合前已经减掉了重心，平面本来就过重心，重心到平面的距离恒为 0。
+    # 原来这里减的是 `(centroid - top_pts[0]) @ normal`，那是**第一个点**相对
+    # 重心的法向偏移，不是重心到平面的距离——等于把吸附点沿法向挪了
+    # 0~17mm，挪多少取决于数组顺序。合成数据上每点残差≈0，所以一直没暴露；
+    # 真实纸盒顶面有 1~3mm 起伏时，吸附点 z 会偏移几毫米（raw_003 实测 +3.9mm）。
     return centroid.astype(np.float64), normal.astype(np.float64), int(len(top_pts))
 
 
