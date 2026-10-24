@@ -138,3 +138,52 @@ def label_clusters(depth_mm: np.ndarray, jump_mm: float) -> np.ndarray:
     work = (valid & ~border).astype(np.uint8)
     _, labels = cv2.connectedComponents(work, connectivity=8)
     return labels
+
+
+def select_slab(points: np.ndarray, center: np.ndarray,
+                normal: np.ndarray, thickness: float) -> np.ndarray:
+    """取落在「过 center、法向 normal」那张平面两侧 ±thickness 内的点。
+
+    用途：从一团包含多个面的点里挑出属于某一个平面的那层。
+    与按距离分位截断（取最高 20%）不同，薄片的判据是物理距离，
+    结果不会随点数变化而漂移——同一块板的点数多一半，选出来的仍是同一层。
+    """
+    unit = np.asarray(normal, dtype=np.float64)
+    norm = float(np.linalg.norm(unit))
+    if norm < 1e-9:
+        raise ValueError("normal 是零向量，无法确定薄片方向")
+    unit = unit / norm
+    offsets = np.abs((points - np.asarray(center, dtype=np.float64)) @ unit)
+    return points[offsets <= thickness]
+
+
+def planar_extent(points: np.ndarray, normal: np.ndarray) -> tuple:
+    """点在某个平面内的二维跨度，返回 (长边, 短边)，单位与输入一致。
+
+    做法是在平面内建一组正交基 (e1, e2)，把点投影上去取两个方向的最大差值。
+    这里的 e1/e2 是任意的（绕法向转多少度都行），但跨度在旋转下不变，
+    所以拿到的两个数就是这块面的「长 × 宽」，与相机怎么摆无关。
+
+    为什么不用包围盒：相机系轴对齐包围盒在斜视时会把深度方向的跨度混进来，
+    量出来必然大于真实长宽，拿它跟尺子比会得出「误差很大」的错觉。
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    if len(pts) < 2:
+        return 0.0, 0.0
+
+    unit = np.asarray(normal, dtype=np.float64)
+    norm = float(np.linalg.norm(unit))
+    if norm < 1e-9:
+        raise ValueError("normal 是零向量，无法在平面内建基")
+    unit = unit / norm
+
+    # 选一个与法向最不平行的坐标轴来叉乘，避免叉出零向量
+    axis = np.eye(3)[int(np.argmin(np.abs(unit)))]
+    e1 = np.cross(unit, axis)
+    e1 = e1 / np.linalg.norm(e1)
+    e2 = np.cross(unit, e1)
+
+    proj = np.stack([pts @ e1, pts @ e2], axis=1)
+    span = proj.max(axis=0) - proj.min(axis=0)
+    long_side, short_side = float(span.max()), float(span.min())
+    return long_side, short_side

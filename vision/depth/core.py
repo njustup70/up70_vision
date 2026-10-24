@@ -43,6 +43,8 @@ from .primitives import (
     backproject,
     fit_plane_ransac,
     label_clusters,
+    planar_extent,
+    select_slab,
     voxel_downsample,
 )
 from .types import GraspTarget, Intrinsics, SuctionParams
@@ -248,6 +250,16 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
         if top_center is None:
             continue
 
+        # 顶面自身平面内的二维跨度（长边, 短边）。放进明细是为了离线核对
+        # 「量出来的尺寸对不对」——它只跟 fx/fy 和深度有关，与相机怎么摆无关。
+        # 不能用 bbox_size_mm 代替：那是相机系轴对齐包围盒，斜视时混进了
+        # 深度方向的跨度，必然大于真实长宽。
+        slab = select_slab(pts, top_center, top_normal, params.flat_distance_mm)
+        if len(slab) >= MIN_PLANE_POINTS:
+            top_size = planar_extent(slab, top_normal)
+        else:
+            top_size = (0.0, 0.0)
+
         # 竖直方向取桌面法向本身：物块顶面就该平行于桌面
         score, detail = score_suction(roi, k_roi, top_center, top_normal,
                                       normal, pts, params)
@@ -259,6 +271,7 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
             "top_center_mm": top_center.round(2).tolist(),
             "top_normal": top_normal.round(4).tolist(),
             "bbox_size_mm": (hi - lo).round(2).tolist(),
+            "top_size_mm": [round(float(v), 1) for v in top_size],
             "score": round(score, 3),
             "score_detail": detail,
         })
