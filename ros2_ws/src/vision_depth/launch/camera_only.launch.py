@@ -43,6 +43,10 @@ def generate_launch_description():
                               description="彩色流；关掉可以省带宽做纯深度调试"),
         DeclareLaunchArgument("enable_frame_sync", default_value="false",
                               description="帧同步：官方默认 true，关彩色时必须一起关，见文件头说明"),
+        DeclareLaunchArgument("enable_left_ir", default_value="false",
+                              description="左红外图流；A3 标深度内参要用它看棋盘格"),
+        DeclareLaunchArgument("enable_laser", default_value="true",
+                              description="激光投影；标定时必须关掉，否则棋盘上全是散斑"),
         DeclareLaunchArgument("depth_width", default_value="0",
                               description="深度宽，0 = 用相机默认档"),
         DeclareLaunchArgument("depth_height", default_value="0",
@@ -70,6 +74,7 @@ def generate_launch_description():
         "camera_name", "depth_width", "depth_height", "depth_fps",
         "color_width", "color_height", "color_fps",
         "enable_color", "enable_frame_sync",
+        "enable_left_ir", "enable_laser",
         "enable_point_cloud", "enable_colored_point_cloud",
         "depth_registration", "enable_depth_scale",
     ]
