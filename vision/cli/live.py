@@ -82,6 +82,21 @@ POSE_WARN_LIMIT = 3
 HUD_POSE_LIMIT = 3
 
 
+def pose_status_line(enabled: bool, n_poses: int, failures: int) -> str | None:
+    """HUD 里"位姿到底算没算"的状态行（没有解时也要有一行，别让人对着画面瞎猜）。
+
+    :param enabled: 配置里是否开了位姿
+    :param n_poses: 这一帧成功解出的位姿数
+    :param failures: 累计解算失败次数
+    :return: 要画的字符串；不需要画时返回 None
+    """
+    if not enabled:
+        return None
+    if n_poses:
+        return None                      # 有解时每个码单独一行，由调用方追加
+    return f"pose: no solution (fail {failures})"
+
+
 def run_aruco_live(argv=None) -> int:
     """实时循环：读帧 -> 检测 -> 绘制 -> 显示/落盘 -> 等键。
 
@@ -333,6 +348,9 @@ def run_aruco_live(argv=None) -> int:
                 for pose in poses[:HUD_POSE_LIMIT]:
                     hud_lines.append(f"id {int(pose.marker_id)} d {pose.distance_mm:.0f}mm "
                                      f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}")
+                status = pose_status_line(cfg.pose.enabled, len(poses), pose_failures)
+                if status:
+                    hud_lines.append(status)
                 draw_hud(canvas, hud_lines)
 
                 # ---- 输出：headless 落盘 / 窗口显示，二选一，不自动降级 ----

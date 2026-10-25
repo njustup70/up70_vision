@@ -146,3 +146,16 @@ def test_live_rejects_non_aruco_detector():
                            "--set", "detector.name=blob",
                            "--set", "input.source=synthetic"])
     assert code == 2, f"应当拒绝，实际退出码 {code}"
+
+
+def test_live_hud_reports_pose_status():
+    """实时窗口 HUD 必须能表达"位姿算没算"（2026-10-25 加）。
+
+    没有解时不能什么都不显示——画面里只有框没有数字，人分不清是"这个码解不出来"
+    还是"位姿没开"。
+    """
+    from vision.cli.live import pose_status_line
+
+    assert pose_status_line(False, 0, 0) is None          # 没开位姿：不画
+    assert pose_status_line(True, 1, 0) is None           # 有解：每码单独一行，不用状态行
+    assert pose_status_line(True, 0, 3) == "pose: no solution (fail 3)"
