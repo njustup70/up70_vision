@@ -96,7 +96,12 @@ def main(argv=None) -> int:
 
     print(f"✅ 模型    : {target_onnx}（{target_onnx.stat().st_size / 1e6:.1f} MB）")
     print(f"✅ 类名表  : {sidecar}（{len(names)} 类）")
-    print(f"   运行时用 : --set detector.name=yolo --set detector.yolo.weights={target_onnx.relative_to(ROOT)}")
+    # 相对仓库根显示；--out 传相对路径时 target_onnx 也是相对的，直接 relative_to 会抛错
+    try:
+        shown = target_onnx.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        shown = target_onnx
+    print(f"   运行时用 : --set detector.name=yolo --set detector.yolo.weights={shown}")
     print("⚠️  权重不进版本库（.gitignore 已忽略 *.onnx）；YOLOv8 权重是 AGPL-3.0，对外发布前确认许可")
     return 0
 
