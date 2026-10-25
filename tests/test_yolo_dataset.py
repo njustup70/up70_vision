@@ -140,3 +140,23 @@ def test_top_blocks_contain_both_colours():
                     f"{img_path.name}: 红 {n_red} 蓝 {n_blue}，塔顶应该是红蓝各一半"
                 checked += 1
         assert checked > 0, "这批数据里没有塔顶，测试没验到东西"
+
+
+def main() -> int:
+    """不依赖 pytest 的独立运行器（镜像里没装 pytest，见视觉组协作规范）。"""
+    tests = [(k, v) for k, v in sorted(globals().items())
+             if k.startswith("test_") and callable(v)]
+    failed = 0
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ✅ {name}")
+        except AssertionError as exc:
+            failed += 1
+            print(f"  ❌ {name}: {exc}")
+    print(f"\n{len(tests) - failed}/{len(tests)} 通过")
+    return 0 if failed == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
