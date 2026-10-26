@@ -297,6 +297,7 @@ def run_aruco_live(argv=None) -> int:
     with_markers = 0      # 至少检出一个码的帧数；用来区分"有码帧 / 无码帧"
     saved = 0             # headless 实际落盘的 PNG 张数（汇总时报告）
     pose_failures = 0     # 位姿解算失败的次数；只进日志与汇总，不影响退出码
+    pose_ambiguous = 0    # 被判成“两解难分”的帧数：这类帧的 yaw 最不可信
     pose_history = deque(maxlen=POSE_MEDIAN_WINDOW)   # HUD 防抖窗口（非歧义帧）
     size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
@@ -368,8 +369,12 @@ def run_aruco_live(argv=None) -> int:
                              f"markers={len(markers)} ids={ids}",
                              f"fps={fps:.1f}"]
                 for pose in poses[:HUD_POSE_LIMIT]:
+                    if pose.ambiguous:
+                        pose_ambiguous += 1
+                    # 歧义帧打 *：两解难分时 yaw 最不可信（tilt/距离仍基本可信）
                     hud_lines.append(f"id {int(pose.marker_id)} d {pose.distance_mm:.0f}mm "
-                                     f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}")
+                                     f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}"
+                                     + (" *amb" if pose.ambiguous else ""))
                 status = pose_status_line(cfg.pose.enabled, len(poses), pose_failures)
                 if status:
                     hud_lines.append(status)
@@ -449,7 +454,8 @@ def run_aruco_live(argv=None) -> int:
         frames=frames, with_markers=with_markers, avg_fps=avg_fps,
         # 失败次数单独报：它是"有多少帧拿不到毫米"的唯一线索，不算失败退出
         pose_note=(None if intrinsics is None
-                   else f"边长 {cfg.pose.marker_size_mm} mm，解算失败 {pose_failures} 次"),
+                   else (f"边长 {cfg.pose.marker_size_mm} mm，解算失败 {pose_failures} 次，"
+                         f"歧义 {pose_ambiguous} 帧（*amb 行的 yaw 不可信）")),
         saved_dir=(LIVE_OUT_SUBDIR if args.headless else None),
         saved_count=saved)
 
