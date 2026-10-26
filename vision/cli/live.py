@@ -80,6 +80,27 @@ POSE_WARN_LIMIT = 3
 # 人话：窗口左上角最多列几个码的位姿数字。
 # 技术：HUD 每行 22 px、从 y=22 起排；码多时全列会把画面糊住，且会盖到画面中央的码。
 HUD_POSE_LIMIT = 3
+#: HUD 防抖窗口：最近多少帧一起取中位数。27 fps 下 9 帧约 0.33 s，肉眼读得出来又跟得上手
+POSE_MEDIAN_WINDOW = 9
+
+
+def median_pose_line(history) -> str | None:
+    """把最近若干帧的 (d, tilt, yaw) 压成一行中位数，用于 HUD 稳定读数。
+
+    为什么需要：实时 HUD 是逐帧刷新的，角点噪声会让 `d` 在小数位上跳、码接近正视时
+    还会在两解之间翻，肉眼根本读不出"到底多少"。取中位数能同时解决两类抖动。
+
+    :param history: [(distance_mm, tilt_deg, yaw_deg), ...]，已剔除 ambiguous 帧
+    :return: 形如 `med d 511 tilt 6.4 (n=9)` 的字符串；样本不足 3 条时返回 None
+    """
+    if len(history) < 3:
+        return None
+    ds = sorted(x[0] for x in history)
+    ts = sorted(x[1] for x in history)
+    ys = sorted(x[2] for x in history)
+    mid = len(history) // 2
+    return (f"med d {ds[mid]:.0f}mm tilt {ts[mid]:.1f} yaw {ys[mid]:.1f} "
+            f"(n={len(history)})")
 
 
 def pose_status_line(enabled: bool, n_poses: int, failures: int) -> str | None:
@@ -276,6 +297,7 @@ def run_aruco_live(argv=None) -> int:
     with_markers = 0      # 至少检出一个码的帧数；用来区分"有码帧 / 无码帧"
     saved = 0             # headless 实际落盘的 PNG 张数（汇总时报告）
     pose_failures = 0     # 位姿解算失败的次数；只进日志与汇总，不影响退出码
+    pose_history = deque(maxlen=POSE_MEDIAN_WINDOW)   # HUD 防抖窗口（非歧义帧）
     size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
     t_start = time.monotonic()            # 循环起点，终端摘要的 t= 与最终平均帧率都以它为基准
@@ -351,6 +373,14 @@ def run_aruco_live(argv=None) -> int:
                 status = pose_status_line(cfg.pose.enabled, len(poses), pose_failures)
                 if status:
                     hud_lines.append(status)
+                # 防抖：只把"非歧义"的帧放进窗口，再取中位数——HUD 上单独一行
+                if poses and not poses[0].ambiguous:
+                    pose_history.append((poses[0].distance_mm, poses[0].tilt_deg,
+                                         poses[0].yaw_deg))
+                if pose_history:
+                    med = median_pose_line(pose_history)
+                    if med:
+                        hud_lines.append(med)
                 draw_hud(canvas, hud_lines)
 
                 # ---- 输出：headless 落盘 / 窗口显示，二选一，不自动降级 ----

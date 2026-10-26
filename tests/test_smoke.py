@@ -159,3 +159,16 @@ def test_live_hud_reports_pose_status():
     assert pose_status_line(False, 0, 0) is None          # 没开位姿：不画
     assert pose_status_line(True, 1, 0) is None           # 有解：每码单独一行，不用状态行
     assert pose_status_line(True, 0, 3) == "pose: no solution (fail 3)"
+
+
+def test_live_hud_median_needs_three_samples():
+    """防抖行：样本不足 3 条不画；够了就取中位数，且不受离群帧拖动。"""
+    from vision.cli.live import median_pose_line
+
+    assert median_pose_line([]) is None
+    assert median_pose_line([(511, 6.4, -0.3), (512, 6.5, -0.2)]) is None
+
+    # 9 条里混进一条离群（d=900, tilt=40）——中位数必须还在 511/6.4 附近
+    history = [(511, 6.4, -0.3)] * 8 + [(900, 40.0, 170.0)]
+    line = median_pose_line(history)
+    assert line is not None and "d 511" in line and "tilt 6.4" in line, line
