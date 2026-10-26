@@ -84,23 +84,42 @@ HUD_POSE_LIMIT = 3
 POSE_MEDIAN_WINDOW = 9
 
 
+def corrected_yaw_deg(tilt_deg: float, yaw_deg: float) -> float:
+    """把 HUD 里的 yaw 折算回"码面内真实转角"。
+
+    为什么需要：`yaw = atan2(R[1,0], R[0,0])` 是**码 x 轴在图像里的方向**，它会被倾角放大：
+
+        yaw_measured = atan( tan(α) / cos(tilt) )      α = 码面内真实转角
+
+    实测：码面内只歪 5°，开到 tilt=60° 时 yaw 会读成 9.9°；开 70° 读成 14.3°。
+    所以"开门式"旋转时看到 yaw 从 0.x 涨到 10+ **不是解错了**，是这个定义在高倾角下放大。
+    反解：α = atan( tan(yaw) · cos(tilt) )。
+    """
+    import math
+    return math.degrees(math.atan(math.tan(math.radians(yaw_deg))
+                                  * math.cos(math.radians(tilt_deg))))
+
+
 def median_pose_line(history) -> str | None:
     """把最近若干帧的 (d, tilt, yaw) 压成一行中位数，用于 HUD 稳定读数。
 
     为什么需要：实时 HUD 是逐帧刷新的，角点噪声会让 `d` 在小数位上跳、码接近正视时
     还会在两解之间翻，肉眼根本读不出"到底多少"。取中位数能同时解决两类抖动。
 
+    `yawc` 是折算回码面内的真实转角（见 `corrected_yaw_deg`），高倾角时看它才稳定。
+
     :param history: [(distance_mm, tilt_deg, yaw_deg), ...]，已剔除 ambiguous 帧
-    :return: 形如 `med d 511 tilt 6.4 (n=9)` 的字符串；样本不足 3 条时返回 None
+    :return: 形如 `med d 511mm tilt 6.4 yaw 6.5 yawc 6.5 (n=9)`；样本不足 3 条时返回 None
     """
     if len(history) < 3:
         return None
     ds = sorted(x[0] for x in history)
     ts = sorted(x[1] for x in history)
     ys = sorted(x[2] for x in history)
+    cs = sorted(corrected_yaw_deg(x[1], x[2]) for x in history)
     mid = len(history) // 2
     return (f"med d {ds[mid]:.0f}mm tilt {ts[mid]:.1f} yaw {ys[mid]:.1f} "
-            f"(n={len(history)})")
+            f"yawc {cs[mid]:.1f} (n={len(history)})")
 
 
 def pose_status_line(enabled: bool, n_poses: int, failures: int) -> str | None:
