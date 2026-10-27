@@ -257,11 +257,13 @@ def spatial_rows(out: Path, mode: str | None) -> list:
             row["status"] = FAIL
             row["note"] = (row["note"] + "；人工复查发现明显张开或整体错位").strip("；")
 
+    # raw / sync 没开 D2C，深度不在彩色坐标系里，量出来的偏移没有意义。
+    # 整段记 SKIP（保留数字作诊断），不能因为「有选中图对」就混进空间验收。
     if mode in ("raw", "sync"):
         for row in rows:
-            if row["status"] == UNVERIFIED and not row["pair_id"]:
-                row["status"] = SKIP
-                row["note"] = f"{mode} 模式未开 D2C，空间检查不适用"
+            row["status"] = SKIP
+            row["note"] = (f"{mode} 模式未开 D2C，空间检查不适用；"
+                           + (row["note"] or "")).strip("；")
     return rows
 
 
