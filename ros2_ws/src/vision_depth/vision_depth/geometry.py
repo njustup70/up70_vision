@@ -11,6 +11,17 @@
 import numpy as np
 
 
+def optical_output_frame(image_frame: str, info_frame: str, requested: str) -> str:
+    """核对图像、内参和输出坐标系；未做 TF 时不能只改标签。"""
+    if not image_frame or not info_frame or image_frame != info_frame:
+        raise ValueError(f"深度图 frame={image_frame!r} 与内参 frame={info_frame!r} 不一致或为空")
+    if not (image_frame.endswith('_optical_frame') or image_frame.endswith('_optical')):
+        raise ValueError(f"输入 frame={image_frame!r} 未标识为光学系，拒绝将光学坐标冒充其他坐标")
+    if requested and requested != image_frame:
+        raise ValueError(f"output_frame={requested!r} 与输入 {image_frame!r} 不一致；未执行坐标变换")
+    return image_frame
+
+
 def quaternion_from_z_axis(normal) -> tuple:
     """构造一个让局部 z 轴对准给定方向的四元数，返回 (x, y, z, w)。
 
