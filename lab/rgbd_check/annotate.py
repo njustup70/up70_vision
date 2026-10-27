@@ -280,7 +280,10 @@ class _Window:
             self.message = "重选当前边：左图点彩色起点"
             return "none"
         if char == "u":
-            reason = input("这条边不可测的原因（回车用默认）：").strip()
+            try:
+                reason = input("这条边不可测的原因（回车用默认）：").strip()
+            except EOFError:                        # 没有终端（后台起窗口）时用默认原因
+                reason = ""
             self.state.add_unmeasurable(f"edge{len(self.state.edges) + 1}", reason)
             self.draft = []
             self.message = f"已记为不可测：{reason or '人工判定不可测'}"
@@ -311,6 +314,10 @@ def run(out: Path) -> int:
     annotations = load_annotations(out)
     done = {frame["pair_id"]: frame for frame in annotations.get("frames", [])}
 
+    # Qt 后端的窗口句柄是在第一次 imshow 时才真正创建的；先 setMouseCallback 会报
+    # "NULL window handler"。所以先画一帧、再挂回调，并且全程复用同一个窗口。
+    cv2.namedWindow(_WINDOW, cv2.WINDOW_AUTOSIZE)
+
     for entry in entries:
         data = np.load(entry["_npz"])
         window = _Window(entry, data["color"], data["depth"])
@@ -319,13 +326,15 @@ def run(out: Path) -> int:
             window.state.edges = previous["edges"]
             window.message = "已载入上次的标注；可直接 Esc 退出或重标"
 
-        cv2.namedWindow(_WINDOW, cv2.WINDOW_AUTOSIZE)
+        cv2.imshow(_WINDOW, window.render())
+        # 再抽一次事件循环：Qt 后端的窗口句柄要等事件处理完才存在，
+        # 紧接着 setMouseCallback 会报 "NULL window handler"。
+        cv2.waitKey(1)
         cv2.setMouseCallback(_WINDOW, window.on_mouse)
         while True:
             cv2.imshow(_WINDOW, window.render())
             if window.on_key(cv2.waitKey(20)) in ("save", "quit"):
                 break
-        cv2.destroyWindow(_WINDOW)
 
         done[entry["pair_id"]] = window.state.to_frame()
         _persist(out, annotations, done)
@@ -356,8 +365,12 @@ def _ask_manual_review(out: Path, entry: dict, state: "PairState", annotations: 
     line = "、".join(f"{e['edge_id']} {e['measurement']['offset_px']:+.2f} px"
                     for e in measured)
     print(f"  {entry['condition_id']}：{line}")
-    answer = input("    人工复查（看 overlays 里的 *_annotated.png）：两端无明显张开、"
-                   "无整体错位？[y/N/回车=跳过] ").strip().lower()
+    try:
+        answer = input("    人工复查（看 overlays 里的 *_annotated.png）：两端无明显张开、"
+                       "无整体错位？[y/N/回车=跳过] ").strip().lower()
+    except EOFError:                                # 后台起窗口时没有终端可问，留未复查
+        print("    没有终端可交互，人工复查保持未填")
+        return
     review = {"y": "yes", "n": "no"}.get(answer)
     if not review:
         print("    保持未复查（报告里记 UNVERIFIED）")
