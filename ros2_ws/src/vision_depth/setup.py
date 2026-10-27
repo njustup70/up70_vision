@@ -27,6 +27,8 @@ setup(
             "fuse_node = vision_depth.fuse_node:main",
             "depth_viewer = vision_depth.depth_viewer:main",
             "fake_camera_node = vision_depth.fake_camera_node:main",
+            # RGB-D 采集入口：录「预热 + 稳定段」并写 meta/快照，见计划书 7.1
+            "rgbd_capture = vision_depth.rgbd_capture:main",
         ],
     },
 )

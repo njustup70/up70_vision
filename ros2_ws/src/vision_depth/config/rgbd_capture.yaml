@@ -1,0 +1,70 @@
+
+# RGB-D 同步采集的唯一参数来源。只有 rgbd_capture.launch.py 读这个文件，
+# 纯深度入口 camera_only.launch.py 仍用它自己的默认值，两套互不影响。
+#
+# 优先级（计划书步骤 A 第 6 条）：
+#     显式启动参数  >  本文件  >  launch 里声明的默认值
+# 也就是说：这里写什么，就发什么；命令行上再给一次，就以命令行为准。
+# 但「模式开关」例外——mode 决定的 enable_frame_sync / depth_registration
+# 不允许用命令行改反，冲突时 launch 直接报错，不静默覆盖（见计划书 7.1）。
+#
+# 填 0 表示「用相机默认档」。改完这里要重新 build，因为安装的是 share 下的副本。
+
+# 采集模式：raw（同步关、D2C 关）/ sync（同步开、D2C 关）/ aligned（同步开、D2C 开）。
+# 计划书步骤 B 就是按这三种模式分次启动对照的，名字不要改。
+mode: aligned
+
+camera_name: camera
+
+color:
+  enable: true
+  width: 0
+  height: 0
+  fps: 0
+
+depth:
+  enable: true
+  width: 0
+  height: 0
+  fps: 0
+  # true：深度值按 scale 换算成毫米（16UC1）。关掉会让所有距离错一个量级且不报错。
+  enable_depth_scale: true
+
+frame_sync:
+  # 由 mode 决定，这里只是记录 aligned/sync 下的取值；显式传参与之相反会报错。
+  # 注意：关彩色时必须同时关同步，否则深度会整条停发（话题在、不吐数据）。
+  enable: true
+
+# D2C（depth to color）：把深度对齐到彩色坐标。目标固定为彩色，
+# 因为后续「彩色框 + 深度」的融合要的是彩色像素坐标下的深度。
+d2c:
+  registration: true
+  # SW 是官方驱动的默认软件对齐；只有在本机驱动与所选档位都证实支持时才比 HW。
+  align_mode: SW
+  align_target_stream: COLOR
+
+# 时间域：global（相机全局时间）/ device / system。默认 global，
+# 换档位或换驱动版本后要重新核对时间戳语义。
+time_domain: global
+
+# 点云必须关：1280x800 的 PointCloud2 是 16.4 MB/帧，30fps 近 500 MB/s，
+# 会打满 DDS 缓冲，表现是「话题有频率但数据不完整」。
+point_cloud:
+  enable: false
+  enable_colored: false
+
+# 驱动自带的后处理。这里全部显式写出来，是为了让 meta 能如实记录
+# 「这段深度有没有被滤波/插值过」——计划书步骤 C 第 5 条要求分清
+# 原始测量与补出来的像素。noise_removal 是驱动默认开着的，关掉会改变基线，
+# 所以本阶段保留开启，并在报告里注明。
+postprocess:
+  noise_removal: true
+  spatial: false
+  temporal: false
+  decimation: false
+  threshold: false
+  hardware_noise_removal: false
+  disp_outliers: false
+
+# 多机同场时用序列号锁定设备；留空表示由驱动选第一台。
+serial_number: ""
