@@ -92,7 +92,7 @@ class Truth:
     height_mm: float | None = None
     size_mm: tuple | None = None       # (长, 宽, 高)，直尺量的三边
     tilt_deg: float | None = None      # 光轴偏离竖直的角度，手机水平仪读数
-    n_targets: int = 1                 # 场景里摆了几个可吸物块
+    n_targets: int | None = 1          # None 表示未知，不可判定检出数
 
 
 def decode_depth(msg) -> np.ndarray:
@@ -274,9 +274,10 @@ def evaluate_checks(result: dict, truth: Truth, intrinsics: Intrinsics) -> list:
     # 控制组也拿不到它们，所以「目标数」只数分数大于 0 的候选。
     candidates = [c for c in clusters if c["score"] > 0.0]
     count = len(candidates)
-    status = PASS if count == truth.n_targets else FAIL
+    status = SKIP if truth.n_targets is None else PASS if count == truth.n_targets else FAIL
+    expected = "未提供目标数" if truth.n_targets is None else f"{truth.n_targets} 个"
     rows.append(_row("5 检出", f"{count} 个候选（共 {len(clusters)} 簇）",
-                     f"{truth.n_targets} 个", "-", status))
+                     expected, "-", status))
 
     return rows
 
@@ -312,7 +313,7 @@ def jitter_stats(frames: list, intrinsics: Intrinsics, params: SuctionParams,
     }
     if positions:
         arr = np.stack(positions)
-        stats["pos_median_mm"] = arr.mean(axis=0).round(2).tolist()
+        stats["pos_median_mm"] = np.median(arr, axis=0).round(2).tolist()
         stats["pos_std_mm"] = round(float(np.std(arr, axis=0).max()), 2)
         stats["score_std"] = round(float(np.std(scores)), 3)
     return stats
@@ -652,7 +653,9 @@ def main() -> int:
                       "size_mm": list(truth.size_mm) if truth.size_mm else None,
                       "tilt_deg": truth.tilt_deg,
                       "n_targets": truth.n_targets},
-            "verdict": ("pass" if all(r["status"] != FAIL for r in rows) else "fail"),
+            "verdict": ("fail" if any(r["status"] == FAIL for r in rows)
+                        else "incomplete" if any(r["status"] == SKIP for r in rows)
+                        else "pass"),
         }
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(payload, indent=2, ensure_ascii=False),

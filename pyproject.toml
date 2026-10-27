@@ -40,6 +40,7 @@ lab = [
     #   「跑一次统计」就变成「先 source 一遍环境才能跑」，离线复算会很别扭。
     #   上界 <1 是因为 1.x 尚未发布，0.x 的 API 已经够用且稳定。
     "rosbags>=0.9,<1",
+    "matplotlib>=3.6,<4",
 ]
 
 [tool.setuptools.packages.find]
