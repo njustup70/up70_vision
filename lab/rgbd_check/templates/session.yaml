@@ -1,0 +1,52 @@
+# 一次 RGB-D 采集的场景配置（录包前填）。复制到现场目录改名后使用，不要就地改模板。
+#
+# 三个原则：
+#   1. 未知一律写 null，不写 0、不写「大概」。0 会被当成实测值参与统计。
+#   2. 用户实测的 scene 字段由人填，采集器只补 capture 里的实际信息，不改写这里。
+#   3. condition_id 决定报告里它算哪一行；本轮只认 center_near / center_far / right_mid。
+#
+# 用法：
+#   ros2 run vision_depth rgbd_capture --ros-args \
+#     -p output_dir:=/abs/path/bags/raw_004 \
+#     -p duration_s:=10.0 -p warmup_s:=3.0 \
+#     -p session_config:=/abs/path/session_raw_004.yaml
+
+schema_version: 1
+
+# 会话名，建议与 bag 同名（raw_004）
+session: null
+
+scene:
+  # center_near / center_far / right_mid；诊断场景另起名字并单列，不占这三行
+  condition_id: null
+  position: null            # center / left / right / up / down
+  distance_band: null       # near / mid / far
+  # 实际距离（毫米），卷尺量到哪写到哪；不许用历史读数顶替
+  measured_distance_mm: null
+  # 量的基准：例如「镜头前沿到箱子近面」
+  distance_reference: null
+  object_id: null           # box_01 ...
+  object_size_mm: null      # [长, 宽, 高]，实测
+  camera_fixed: null        # true / false / null（不确定就 null）
+  measurement_notes: null   # 量具、分度、倾角测量方式等
+
+capture:
+  # raw / sync / aligned，必须与 launch 的 mode 一致；不一致时以 launch 为准并在报告里体现
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false           # 采集器收尾时改写
+  # 四路话题。留 null 表示让采集器自动发现——只在每种角色唯一候选时才会填
+  topics:
+    color: null
+    depth: null
+    color_info: null
+    depth_info: null
+  depth_unit: mm
+  time_domain: global
+  # 请求档位，例如 "color 1280x800@30, depth 848x480@30"；实际值由采集器写进 meta
+  requested_profile: null
+  actual_profile: null
+  geometry_evidence: null   # 采集器写 snapshots/stream_probe.json
+  snapshots: null           # 采集器写 snapshots/

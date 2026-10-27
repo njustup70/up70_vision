@@ -1,0 +1,290 @@
+"""命令行：`inspect` / `analyze` / `annotate` 三个子命令与退出码。
+
+用大白话说
+    `inspect` 先看 bag 里有什么；`analyze` 算配对、挑中间那一对、出图和报告；
+    `annotate` 开窗口点边界。三个都是纯离线，不需要 source ROS，也不需要相机。
+
+为什么入口固定在 `python -m lab.rgbd_check`
+    仓库规范不新建 `scripts/`；`lab/` 里现有工具都是包 + `__main__.py` 的形式
+    （见 `lab/pose_check`），新工具跟着走，别自成一套。
+
+退出码（计划书 7.2）
+    0 = 正常完成，已执行的检查没有失败（仍可能有 UNVERIFIED）
+    1 = 分析完成，但有验收失败（FAIL）
+    2 = 参数、输入、依赖或运行错误，没完成分析
+
+已知的坑
+    · 没有标注时空间结论必须是 UNVERIFIED，不能因为「配对看起来不错」就写 PASS。
+    · 输出目录存在一律拒绝：报告里混进上一次的图，比没有报告更糟。
+"""
+
+import argparse
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from .bag import BagError, inspect_bag, load_images, scan
+from .pairing import DEFAULT_TOL_NS, DEFAULT_WARMUP_NS, pair_frames
+from .report import (read_meta, refresh, save_selected, write_overlays, write_pairs,
+                     write_report, write_unmatched, write_annotations, load_annotations)
+from .select import OFFSET_LIMIT_PX, pick_mid_pair
+from .status import FAIL, UNVERIFIED
+
+#: 旧 bag（raw_001..003）没有 capture.topics，只能按驱动默认话题猜；猜错了 scan 会报出实际话题。
+DEFAULT_TOPICS = {
+    "color": "/camera/color/image_raw",
+    "depth": "/camera/depth/image_raw",
+    "color_info": "/camera/color/camera_info",
+    "depth_info": "/camera/depth/camera_info",
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """参数表。子命令各自独立，避免 analyze 的参数混进 inspect。"""
+    parser = argparse.ArgumentParser(
+        prog="python -m lab.rgbd_check",
+        description="离线检查同步 RGB-D bag：话题、配对、静态像素对齐")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_inspect = sub.add_parser("inspect", help="列出 bag 里的话题、编码、尺寸与内参")
+    p_inspect.add_argument("bag", type=Path, help="bag 目录")
+
+    p_analyze = sub.add_parser("analyze", help="配对、选帧、出叠加图与报告")
+    p_analyze.add_argument("bag", type=Path, help="bag 目录")
+    p_analyze.add_argument("--out", type=Path, required=True, help="输出目录（必须不存在）")
+    p_analyze.add_argument("--meta", type=Path, default=None,
+                           help="场景 meta.yaml；默认读 bag 目录下的 meta.yaml")
+    p_analyze.add_argument("--tol-ms", type=float, default=DEFAULT_TOL_NS / 1e6,
+                           help="配对容差（毫秒），默认 10；不接受接近帧周期的值")
+    p_analyze.add_argument("--warmup-s", type=float, default=DEFAULT_WARMUP_NS / 1e9,
+                           help="排除的预热时长（秒），默认 3")
+    p_analyze.add_argument("--annotations", type=Path, default=None,
+                           help="已有标注 JSON；复制进输出目录并复算空间偏移")
+    p_analyze.add_argument("--condition-id", default=None,
+                          help="场景编号；默认取 meta.yaml 的 scene.condition_id")
+    for role, topic in DEFAULT_TOPICS.items():
+        p_analyze.add_argument(f"--{role.replace('_', '-')}-topic", default=None,
+                               help=f"{role} 话题；默认取 meta.yaml，其次 {topic}")
+
+    p_annotate = sub.add_parser("annotate", help="开本地窗口点选边界（每边 4 次点击）")
+    p_annotate.add_argument("out", type=Path, help="analyze 的输出目录")
+    return parser
+
+
+def _topics_from(meta: dict, args) -> dict:
+    """话题优先级：命令行 > meta.yaml > 驱动默认值。"""
+    configured = ((meta.get("capture") or {}).get("topics") or {})
+    topics = {}
+    for role, default in DEFAULT_TOPICS.items():
+        given = getattr(args, f"{role}_topic", None)
+        topics[role] = (given or configured.get(role) or default)
+    return topics
+
+
+def _flatten_sync(result) -> dict:
+    """把配对结果摊平成报告要用的字段（键名固定，report.py 按名字取）。"""
+    data = result.to_dict()
+    return {
+        "status": data["status"],
+        "reasons": data["reasons"],
+        "color_rate": result.rates.get("color"),
+        "depth_rate": result.rates.get("depth"),
+        "pairs": result.stats.get("pairs"),
+        "color_frames": result.counts.get("color"),
+        "depth_frames": result.counts.get("depth"),
+        "abs_dt_p50_ms": result.stats.get("abs_dt_p50_ms"),
+        "abs_dt_p95_ms": result.stats.get("abs_dt_p95_ms"),
+        "abs_dt_max_ms": result.stats.get("abs_dt_max_ms"),
+        "signed_dt_p50_ms": result.stats.get("signed_dt_p50_ms"),
+        "signed_dt_min_ms": result.stats.get("signed_dt_min_ms"),
+        "signed_dt_max_ms": result.stats.get("signed_dt_max_ms"),
+        "warmup_dropped": data["warmup_dropped"],
+        "anomaly_count": data["anomaly_count"],
+        "frequency": data["frequency"],
+        "rules": data["rules"],
+    }
+
+
+def run_inspect(args) -> int:
+    """打印话题表与内参摘要；不写文件。"""
+    try:
+        report = inspect_bag(args.bag)
+    except BagError as exc:
+        print(f"❌ {exc}")
+        return 2
+
+    if not report["images"]:
+        print(f"❌ {args.bag} 里没有图像话题；实际有：{report['bag_topics']}")
+        return 2
+
+    print(f"bag：{args.bag}")
+    print(f"{'话题':<44}{'编码':<10}{'尺寸':<12}{'帧数':>6}  {'帧率':>6}  frame_id")
+    for entry in report["images"]:
+        size = f"{entry.get('width')}x{entry.get('height')}"
+        fps = entry.get("fps_estimate")
+        print(f"{entry['topic']:<44}{entry.get('encoding', '?'):<10}{size:<12}"
+              f"{entry['messages']:>6}  {(f'{fps:.2f}' if fps else '—'):>6}  "
+              f"{entry.get('frame_id', '')}")
+
+    if report["infos"]:
+        print("\n内参（CameraInfo 首帧）：")
+        for info in report["infos"]:
+            k = info.get("k") or [0] * 9
+            print(f"  {info['topic']:<44} {info.get('width')}x{info.get('height')} "
+                  f"fx={k[0]:.2f} fy={k[4]:.2f} cx={k[2]:.2f} cy={k[5]:.2f} "
+                  f"D={len(info.get('d') or [])} 项 {info.get('distortion_model')}")
+    else:
+        print("\n⚠ 没有 CameraInfo：空间检查缺内参证据")
+    return 0
+
+
+def run_analyze(args) -> int:
+    """配对 + 选帧 + 出图 + 写报告。"""
+    out: Path = args.out
+    if out.exists():
+        print(f"❌ 输出目录已存在，拒绝覆盖：{out}")
+        return 2
+    if args.tol_ms <= 0:
+        print("❌ --tol-ms 必须大于 0")
+        return 2
+
+    meta_path = args.meta or (args.bag / "meta.yaml")
+    meta = read_meta(meta_path)
+    topics = _topics_from(meta, args)
+    capture = meta.get("capture") or {}
+    duration_s = capture.get("duration_s")
+    condition = (args.condition_id or (meta.get("scene") or {}).get("condition_id")
+                 or "unassigned")
+
+    try:
+        scan_result = scan(args.bag, topics)
+    except BagError as exc:
+        print(f"❌ {exc}")
+        return 2
+
+    result = pair_frames(scan_result.frames["color"], scan_result.frames["depth"],
+                         tol_ns=int(args.tol_ms * 1e6),
+                         warmup_ns=int(args.warmup_s * 1e9),
+                         stable_duration_s=duration_s)
+    selection = pick_mid_pair(result, duration_s or 10.0)
+
+    out.mkdir(parents=True)
+    write_pairs(out, result)
+    write_unmatched(out, result)
+
+    selected_entry = None
+    if selection is not None:
+        try:
+            frames = load_images(args.bag, topics["color"], [selection.pair.color.index],
+                                 "color")
+            depths = load_images(args.bag, topics["depth"], [selection.pair.depth.index],
+                                 "depth")
+        except BagError as exc:
+            print(f"❌ 选中帧解码失败：{exc}")
+            return 2
+        color = frames[selection.pair.color.index]
+        depth = depths[selection.pair.depth.index]
+        pid = f"c{selection.pair.color.index}_d{selection.pair.depth.index}"
+        label = (f"{condition} | {pid} | dt={selection.pair.dt_ns / 1e6:+.2f} ms | "
+                 f"color {color.shape[1]}x{color.shape[0]} | depth {depth.shape[1]}x{depth.shape[0]}")
+        write_overlays(out, pid, color, depth, label)
+        selected_entry = save_selected(out, selection, color, depth, condition)
+
+    summary = {
+        "schema_version": 1,
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "session": meta.get("session"),
+        "bag": str(args.bag),
+        "meta": str(meta_path),
+        "capture": {
+            "mode": capture.get("mode"),
+            "color_topic": topics["color"],
+            "depth_topic": topics["depth"],
+            "color_info_topic": topics["color_info"],
+            "depth_info_topic": topics["depth_info"],
+            "color_profile": (capture.get("actual_profile") or {}).get("color"),
+            "depth_profile": (capture.get("actual_profile") or {}).get("depth"),
+            "time_domain": capture.get("time_domain"),
+            "warmup_s": args.warmup_s,
+            "duration_s": duration_s,
+            "depth_unit": capture.get("depth_unit"),
+            "driver_version": (meta.get("environment") or {}).get("driver_version"),
+        },
+        "camera_info": scan_result.infos,
+        "sync": _flatten_sync(result),
+        "selected": selected_entry,
+        "reasons": list(result.reasons),
+    }
+    (out / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if args.annotations:
+        if not args.annotations.is_file():
+            print(f"❌ 标注文件不存在：{args.annotations}")
+            return 2
+        try:
+            data = json.loads(args.annotations.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"❌ 标注不是合法 JSON：{exc}")
+            return 2
+        write_annotations(out, data)
+    elif not (out / "annotations.json").is_file():
+        write_annotations(out, load_annotations(out))
+
+    refresh(out, capture.get("mode"))
+    write_report(out, json.loads((out / "summary.json").read_text(encoding="utf-8")))
+
+    sync = summary["sync"]
+    print(f"配对：{sync['pairs']} 对；配对率 彩色 {sync['color_rate']} / 深度 {sync['depth_rate']}"
+          f"（容差 ±{args.tol_ms:g} ms，预热 {args.warmup_s:g} s）")
+    print(f"时间同步：{sync['status']}")
+    for reason in sync["reasons"]:
+        print(f"  · {reason}")
+    spatial = json.loads((out / "summary.json").read_text(encoding="utf-8")).get("spatial") or {}
+    print(f"空间对齐：{spatial.get('status')}（门槛 {OFFSET_LIMIT_PX:g} px；"
+          f"{'有' if selected_entry else '没有'}选中图对）")
+    print(f"报告：{out / 'report.html'}")
+    return 1 if FAIL in (sync["status"], spatial.get("status")) else 0
+
+
+def run_annotate(args) -> int:
+    """开窗口点选，然后重算空间结果。"""
+    from .annotate import run as run_window
+
+    out: Path = args.out
+    if not (out / "summary.json").is_file():
+        print(f"❌ {out} 不是 analyze 的输出目录（缺 summary.json）")
+        return 2
+    code = run_window(out)
+    if code != 0:
+        return code
+
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    rows = refresh(out, (summary.get("capture") or {}).get("mode"))
+    for row in rows:
+        value = row["abs_offset_px"]
+        print(f"  {row['condition_id']:<12} {row['edge_id']:<6} "
+              f"{'—' if value is None else f'{value:.2f} px':>10}  {row['status']}")
+    overall = (json.loads((out / "summary.json").read_text(encoding="utf-8"))
+               .get("spatial") or {}).get("status", UNVERIFIED)
+    print(f"空间对齐：{overall}（门槛 {OFFSET_LIMIT_PX:g} px）")
+    return 1 if overall == FAIL else 0
+
+
+def main(argv=None) -> int:
+    """解析参数并分发；异常一律收敛成退出码 2，不把堆栈甩给用户。"""
+    args = build_parser().parse_args(argv)
+    if args.command == "inspect":
+        return run_inspect(args)
+    if args.command == "analyze":
+        return run_analyze(args)
+    if args.command == "annotate":
+        return run_annotate(args)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
