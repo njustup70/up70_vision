@@ -60,6 +60,20 @@ for t in targets:                                # 按可吸性分数降序
 
 后续改进路线见 [深度相机识别改进方案](docs/深度相机识别改进方案.md)，涵盖真实数据结论、2D 与深度融合、视觉侧职责及接口验收；其中待实施内容不代表当前已实现。
 
+同步 RGB-D 的采集与静态像素对齐冒烟检查单独走一条线，计划与门槛见
+[同步 RGB-D 采集与对齐改进计划](docs/同步RGB-D采集与对齐改进计划.md)。入口只有三个：
+
+```bash
+ros2 launch vision_depth rgbd_capture.launch.py mode:=aligned   # raw / sync / aligned
+ros2 run vision_depth rgbd_capture --ros-args -p output_dir:=... -p duration_s:=10.0 \
+  -p session_config:=...
+python -m lab.rgbd_check inspect|analyze|annotate ...
+```
+
+报告落在 `output/rgbd/<session>/`（`report.html`、`pairs.csv`、`summary.json`、
+`spatial_edges.csv`、`overlays/`、`annotations.json`），本阶段默认不入库。
+注意：本阶段的「对齐深度」不接入 `fuse_node`——纯深度基线先用 raw 话题。
+
 算法先在 `lab/proto_depth.py` 里跑通并调好参数，再提炼到这里（ROS2 接入方案 10.2 的四步落地）。`lab/` 那个脚本保留作为离线调试工具，读 npy/bag 看中间结果；ROS 侧的 `fuse_node` 调的是这里。
 
 进度、实测数字、未完成项与踩过的坑见 [`docs/progress.md`](docs/progress.md)。改参数或做精度测试前先看一遍，尤其是「未完成与下一步」和「踩过的坑」两节。

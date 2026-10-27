@@ -62,6 +62,20 @@ raw_003（205mm 立方体、60° 倾角）当前结果：盒高 +2.4mm、倾角 
 | E4 | 时序平滑与超时 | 未开始 | 离线验证用了时间中位数，节点里没有 |
 | E5 | 多场景验证 | 未开始 | 目前只验过单个纸箱 |
 
+### 2.4 同步 RGB-D 采集与静态像素对齐（2026-10-27 起）
+
+计划与门槛见 [`同步RGB-D采集与对齐改进计划.md`](同步RGB-D采集与对齐改进计划.md)。
+软件与现场分开记状态：软件写完不等于数据通过，报告生成也不等于验收通过。
+
+| 编号 | 项 | 状态 | 说明 |
+|---|---|---|---|
+| R0 | 采集入口 `rgbd_capture.launch.py` + `rgbd_capture` 节点 | 完成 | raw/sync/aligned 三态；参数冲突报错；录完写 meta 与 `snapshots/` |
+| R1 | 离线工具 `python -m lab.rgbd_check`（inspect/analyze/annotate） | 完成 | 合成小 bag 上 33 项回归通过；本机 Jazzy 容器内实跑 |
+| R2 | 环境清单 + 10 s 短包 | 未开始 | 需要开相机；输出 `raw_004` 起的参数快照 |
+| R3 | 三模式同步对照（各 30 s） | 未开始 | 门槛：配对率两侧 ≥99%、容差固定 10 ms、时间戳无零值/重复/倒退 |
+| R4 | D2C 三场景冒烟（center_near / center_far / right_mid） | 未开始 | 每段 10 s + 预热 3 s；每对图两条边，共 6 条；门槛 ≤5 px + 人工复查 |
+| R5 | 运动 20 s + 稳定段 120 s 连续录制 | 未开始 | 30 fps 请求下双流各 ≥25 fps |
+
 ---
 
 ## 三、已完成
@@ -284,6 +298,20 @@ ros2 launch vision_depth camera_only.launch.py
 ros2 run vision_depth fuse_node --ros-args -p min_score:=0.5 -p detect_every:=2
 # ROS：假相机 + 真值
 ros2 run vision_depth fake_camera_node --ros-args -p data_dir:=data/syn/single_01
+
+# ROS：RGB-D 采集（mode=raw / sync / aligned，默认 aligned）
+ros2 launch vision_depth rgbd_capture.launch.py mode:=aligned
+ros2 run vision_depth rgbd_capture --ros-args \
+  -p output_dir:=$PWD/bags/raw_004 -p duration_s:=10.0 -p warmup_s:=3.0 \
+  -p session_config:=$PWD/configs/session_raw_004.yaml
+
+# 离线：看话题 -> 配对/报告 -> 点选六条边
+python -m lab.rgbd_check inspect bags/raw_004
+python -m lab.rgbd_check analyze bags/raw_004 --out output/rgbd/raw_004
+python -m lab.rgbd_check annotate output/rgbd/raw_004
+
+# RGB-D 工具回归（容器内，带 rosbags；合成 bag，不需要真相机）
+python tests/test_rgbd_check.py
 ```
 
 ---
