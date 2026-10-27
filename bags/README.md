@@ -71,6 +71,37 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
   + 3 s 预热。遮挡样例另录一段（两个箱子前后错开），不占这三个名额。
 - 同一段 bag 的彩色与深度必须来自同一次录制；两次录制不能当同次对照。
 
+## 本轮 RGB-D 包清单（2026-10-27）
+
+`raw_004`–`raw_008` 是排查用的中间包（丢帧对照、SHM 验证），`raw_009` 起是本轮正式样本：
+
+| 包 | 用途 | 模式 | 稳定段 | 体积 | 同步结论 |
+|---|---|---|---|---|---|
+| `raw_009` | 环境清单 + 短包完整性 | aligned | 10 s | 750 MB | PASS |
+| `raw_010` | 三模式对照：同步关、D2C 关 | raw | 30 s | 1.99 GB | PASS |
+| `raw_011` | 三模式对照：同步开、D2C 关 | sync | 30 s | 1.99 GB | PASS |
+| `raw_012` | 三模式对照：同步开、D2C 开 | aligned | 30 s | 1.99 GB | PASS |
+| `raw_013` | 场景 `center_near` | aligned | 10 s | 604 MB | PASS（稳态仅 20.6 fps，拍摄中相机被碰倒） |
+| `raw_014` | 场景 `center_near`（重录） | aligned | 10 s | 735 MB | PASS |
+| `raw_015` | 场景 `center_far` | aligned | 10 s | 736 MB | PASS |
+| `raw_016` | **作废**：要求「右侧」却拍成中心（x=52%） | aligned | 10 s | 743 MB | PASS（数据作废，勿引用） |
+| `raw_017` | 场景 `right_mid` | aligned | 10 s | 732 MB | PASS |
+| `raw_018` | 运动样例（箱子移出/移入画面） | aligned | 45 s | 2.88 GB | PASS |
+| `raw_019` | 连续录制 | aligned | 120 s | 7.43 GB | PASS |
+
+逐包数字（帧数、配对率、时间差、帧率）见
+[`vision/depth/docs/progress.md`](../vision/depth/docs/progress.md) 第二轮至第四轮。
+
+引用这些包时注意三件事：
+
+1. **距离是口述值**。near/mid/far ≈ 400/550/700 mm 没有卷尺实测，所有 `meta.yaml` 的
+   `measured_distance_mm` 都是 `null`，只在注释里写「口述」。不能当已知量参与误差计算。
+2. **空间对齐全部是 `UNVERIFIED`**。三场景的 6 条边还没点选，`spatial_edges.csv` 六行都是
+   「未标注」；「配对率 100%」只证明时间对得上，不证明像素对齐达标。
+3. **`raw_016` 不要用**。它名义上是 `right_mid`，实测箱子中心在画面中央，条件不符。
+
+遮挡样例（两个箱子前后错开）与 `ros2 bag play` 回放一致性核对都还没做。
+
 ## 体积参考
 
 深度 848×480@30fps 约 27 MB/s，单深度 35 秒约 930 MB。
@@ -79,10 +110,11 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
 
 | 档位 | 速率 | 13 s（预热 3 + 稳定 10） | 120 s 稳定段 |
 |---|---|---|---|
-| 848×480@30 | ≈58 MB/s | ≈750 MB（`raw_009` 实测 750 MB） | ≈7 GB |
+| 848×480@30 | ≈58–62 MB/s | ≈750 MB（`raw_009` 实测 750 MB） | 7.43 GB（`raw_019` 实测，120 s） |
 | 1280×720@30 | ≈113 MB/s | ≈1.4 GB（`raw_004` 实测 1.4 GB） | ≈13.6 GB |
 
 按 848 档估：三模式各 30 s 约 5.5 GB，整轮采集（3×30 s + 三场景 + 遮挡 + 运动 + 120 s）
-约 15 GB。录制前先确认磁盘；`rgbd_capture` 结束时会打印实际体积与时长。
+约 15 GB；实测 `raw_009`–`raw_019` 共 11 段、约 20 GB（含 `raw_016` 作废段与
+`raw_014` 重录段）。录制前先确认磁盘；`rgbd_capture` 结束时会打印实际体积与时长。
 纯深度的最小可用集仍是 `ros2 bag record -o bags/raw_00X /camera/depth/image_raw
 /camera/depth/camera_info`。
