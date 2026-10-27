@@ -36,7 +36,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, LogInfo,
-                            OpaqueFunction)
+                            OpaqueFunction, SetEnvironmentVariable)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -275,10 +275,16 @@ def _resolve(context):
 
     driver_launch = os.path.join(
         get_package_share_directory("orbbec_camera"), "launch", "gemini_330_series.launch.py")
+    dds_profile = os.path.join(get_package_share_directory("vision_depth"),
+                               "config", "fastdds_shm_only.xml")
+    lines.append(f"DDS 传输：仅 SHM（{dds_profile}）；采集端由 rgbd_capture 同步设置")
 
     return [
         LogInfo(msg=line) for line in lines
     ] + [
+        # 大图走 UDP 会分片，接收端一忙就在 transport 层丢帧（实测 1280x720 时
+        # 13 秒丢了 113 条，配对率掉到 87%）。两端都在本机，只走 SHM 最稳。
+        SetEnvironmentVariable("FASTRTPS_DEFAULT_PROFILES_FILE", dds_profile),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(driver_launch),
             launch_arguments=resolved.items(),

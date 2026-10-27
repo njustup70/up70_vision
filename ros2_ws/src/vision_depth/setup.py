@@ -14,6 +14,9 @@ setup(
         (f"share/{package_name}", ["package.xml"]),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
+        # Fast DDS 的仅 SHM 配置：大图走 UDP 分片会丢帧，本机采集两端都在同机，
+        # 只走共享内存最稳。见 config/fastdds_shm_only.xml 里的说明。
+        (os.path.join("share", package_name, "config"), glob("config/*.xml")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

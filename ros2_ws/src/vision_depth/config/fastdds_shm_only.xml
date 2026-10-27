@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  仅共享内存的 Fast DDS 配置：图传数据（1280x720 深度约 1.8 MB、彩色约 2.8 MB/帧）
+  走默认 UDP 时要分片，接收端一慢就在 transport 层丢帧。本机录制时两端都在同机，
+  可以只走 SHM，跳过 UDP 分片这条链路。
+
+  用法：两个终端都先
+      export FASTRTPS_DEFAULT_PROFILES_FILE=$PWD/configs/fastdds_shm_only.xml
+  再分别 launch 与 ros2 run vision_depth rgbd_capture。
+
+  注意：这个 profile 是 is_default_profile，会让本机所有节点都只用 SHM——
+  与外部机器通信会断。只在本机采集时用，别写进 shell 的永久配置。
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>shm_only</transport_id>
+      <type>SHM</type>
+      <!-- 32 MB 段：够放一帧大图，不必再拆多段 -->
+      <segment_size>33554432</segment_size>
+    </transport_descriptor>
+  </transport_descriptors>
+
+  <participant profile_name="shm_only_participant" is_default_profile="true">
+    <rtps>
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <userTransports>
+        <transport_id>shm_only</transport_id>
+      </userTransports>
+    </rtps>
+  </participant>
+</profiles>

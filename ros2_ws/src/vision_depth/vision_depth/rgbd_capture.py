@@ -26,6 +26,10 @@
       「每种角色唯一候选」时才敢填，多个候选一律报错等人指定，猜错方向比报错更贵。
     · 停止输入后 `ros2 bag record` 不会自己退出，所以正常收尾全靠这里发信号；
       节点被 Ctrl-C 时也要先收尾再退出。
+    · 大图走默认 UDP 会分片，接收端一忙就在 transport 层丢帧（实测 1280x720
+      13 秒丢 113 条、配对率 87%）。所以本节点在 `rclpy.init()` 之前把传输切成
+      仅 SHM，launch 里对驱动做同样设置；两端不一致会互相看不见。
+      退回默认传输：`RGBD_CAPTURE_DDS_PROFILE=none`。
 
 退出码：0 = 录制完成且 meta 完整；1 = 录制跑完但 bag 不完整/中途异常；
         2 = 参数、输入或环境错误（没开始录或提前中止）。
@@ -102,10 +106,19 @@ def parse_topic_info(text: str) -> dict:
     return info
 
 
+#: 录包订阅端的队列深度下限。相机发布端只留 5 帧，而录制端一次要落盘 1~3 MB，
+#: 队列一满 DDS 就丢消息（日志里那句 "messages lost on the transport layer"）。
+#: 这个值只影响录制端能缓冲多少帧，不代表发布端 QoS——发布端的真实值存在
+#: `snapshots/topic_info/` 里，两者不要混。
+RECORDER_QUEUE_DEPTH = 60
+
+
 def qos_overrides(per_topic: dict) -> dict:
     """把解析出来的 QoS 转成 `ros2 bag record --qos-profile-overrides-path` 的格式。
 
-    只写能确定的键：缺了就用 rosbag2 的默认值，总比写一个错的好。
+    reliability / durability 必须与发布端一致，否则根本连不上；history 固定
+    keep_last、depth 取「发布端深度」与 `RECORDER_QUEUE_DEPTH` 的较大者，
+    给落盘留出缓冲。缺字段就不写，让 rosbag2 用默认值，总比写错好。
 
     :param per_topic: `{topic: {"qos": {...}}}`
     :return: 可直接 `yaml.safe_dump` 的字典
@@ -121,7 +134,7 @@ def qos_overrides(per_topic: dict) -> dict:
         if "history" in qos:
             entry["history"] = qos["history"]
         if "depth" in qos:
-            entry["depth"] = int(qos["depth"])
+            entry["depth"] = max(int(qos["depth"]), RECORDER_QUEUE_DEPTH)
         if entry:
             overrides[topic] = entry
     return overrides
@@ -146,6 +159,37 @@ def driver_version(pkg: str = "orbbec_camera") -> str | None:
         return ElementTree.fromstring(text).findtext("version")
     except ElementTree.ParseError:
         return None
+
+
+def apply_dds_profile() -> str | None:
+    """在 `rclpy.init()` 之前把传输切到「仅 SHM」，返回最终使用的 profile 路径。
+
+    这一步必须早于 init：DDS 传输在创建 participant 时就定死了，节点起来以后再
+    改环境变量没有任何作用。也正因为如此，不能做成 ROS 参数。
+
+    为什么默认开：1280x720 双流时实测 13 秒在 transport 层丢了 113 条，
+    配对率掉到 87%；换仅 SHM 后 288/288 全配上、零丢帧。但只有两端都用同一份
+    profile 才通——驱动用 SHM、采集节点用默认传输时，连发布者都看不到，
+    所以 launch 与这里必须一起设置。
+
+    想退回默认传输：`RGBD_CAPTURE_DDS_PROFILE=none`（或直接 export 自己的
+    FASTRTPS_DEFAULT_PROFILES_FILE，这里不覆盖已有值）。
+    """
+    choice = os.environ.get("RGBD_CAPTURE_DDS_PROFILE", "shm").strip()
+    if choice.lower() in ("none", "off", "false"):
+        return os.environ.get("FASTRTPS_DEFAULT_PROFILES_FILE")
+    if choice.lower() == "shm":
+        try:
+            from ament_index_python.packages import get_package_share_directory
+
+            choice = os.path.join(get_package_share_directory("vision_depth"),
+                                  "config", "fastdds_shm_only.xml")
+        except Exception:                           # noqa: BLE001 - 找不到包就退回默认
+            return None
+    if not os.path.isfile(choice):
+        return None
+    os.environ.setdefault("FASTRTPS_DEFAULT_PROFILES_FILE", choice)
+    return os.environ.get("FASTRTPS_DEFAULT_PROFILES_FILE")
 
 
 class RgbdCapture(Node):
@@ -270,16 +314,17 @@ class RgbdCapture(Node):
 
         def on_info(role: str):
             def callback(msg: CameraInfo) -> None:
-                k = list(msg.k)
+                # 一律转成 Python 原生 float：msg.k 里是 numpy.float64，
+                # yaml.safe_dump 表示不了它，会把「写快照」直接变成崩溃。
                 self._info[role] = {
-                    "frame_id": msg.header.frame_id,
+                    "frame_id": str(msg.header.frame_id),
                     "width": int(msg.width),
                     "height": int(msg.height),
-                    "distortion_model": msg.distortion_model,
-                    "k": k,
-                    "d": list(msg.d),
-                    "r": list(msg.r),
-                    "p": list(msg.p),
+                    "distortion_model": str(msg.distortion_model),
+                    "k": [float(v) for v in msg.k],
+                    "d": [float(v) for v in msg.d],
+                    "r": [float(v) for v in msg.r],
+                    "p": [float(v) for v in msg.p],
                     "binning_x": int(msg.binning_x),
                     "binning_y": int(msg.binning_y),
                 }
@@ -314,6 +359,43 @@ class RgbdCapture(Node):
                 return True
         return False
 
+    def _camera_node_path(self) -> str:
+        """找出驱动真正注册的节点名。
+
+        orbbec_camera 起在 component_container 里，节点是 `/camera/camera`
+        而不是 `/camera`。写死 `/camera` 的话 `ros2 param dump` 只会回一句
+        "Node not found"，参数快照就空了——而快照恰恰是这段 bag 最需要的证据。
+        所以先按参数给的节点名试，再试「同名嵌套」这一层，最后才退回原值。
+        """
+        given = str(self.get_parameter("camera_node").value).strip("/")
+        if not given:
+            return f"/{self.get_name()}"
+
+        # 以 `ros2 node list` 为准：rclpy 的 get_node_names() 在不同发行版里
+        # 带不带前导斜杠、能不能看到别的容器里的节点都不一样，实测这次就没看到
+        # `/camera/camera`，参数快照直接空了。CLI 的输出和 `ros2 param dump`
+        # 用的是同一套图，拿它做判断最不容易自欺。
+        # 必须加 --no-daemon：ros2 的守护进程可能是早先用默认传输起的，
+        # 换成仅 SHM 后它看不见驱动，`ros2 node list` 会安安静静返回空。
+        ok, text = _run(["ros2", "node", "list", "--no-daemon"])
+        nodes = [line.strip() for line in text.splitlines()
+                 if line.strip().startswith("/") and line.strip() != f"/{self.get_name()}"]
+        if not nodes:
+            # CLI 拿不到就退回本进程的图；两条路都空时再报错，别假装解析成功。
+            nodes = [name if name.startswith("/") else "/" + name
+                     for name in self.get_node_names()
+                     if name.strip("/") != self.get_name()]
+
+        for candidate in (f"/{given}/{given}", f"/{given}"):
+            if candidate in nodes:
+                return candidate
+        nested = [name for name in nodes if name.startswith(f"/{given}/")]
+        if len(nested) == 1:
+            self.get_logger().info(f"驱动节点按容器路径解析为 {nested[0]}")
+            return nested[0]
+        self.get_logger().warning(f"没在 {nodes} 里找到名为 {given} 的驱动节点")
+        return f"/{given}"
+
     # ---------- 快照 ----------
 
     def _snapshot(self, stage: Path, args: dict, topics: dict, session: dict) -> dict:
@@ -334,10 +416,14 @@ class RgbdCapture(Node):
             if ok:
                 per_topic[topic] = parse_topic_info(text)
 
-        ok, text = _run(["ros2", "param", "dump", f"/{self.get_parameter('camera_node').value}"])
+        node_path = self._camera_node_path()
+        # --no-daemon 同样是为了绕开「守护进程还是默认传输时起的」这个坑：
+        # 走守护进程会得到 "Node not found"，而直连就能拿到参数。
+        ok, text = _run(["ros2", "param", "dump", "--no-daemon", "--timeout", "5", node_path])
         (stage / "camera_params.yaml").write_text(text + "\n", encoding="utf-8")
         if not ok:
-            self.get_logger().warning("ros2 param dump 失败，参数快照以日志与命令行记录为准")
+            self.get_logger().warning(f"ros2 param dump {node_path} 失败，"
+                                     "参数快照以日志与命令行记录为准")
 
         (stage / "camera_info_color.yaml").write_text(
             yaml.safe_dump(self._info.get("color"), allow_unicode=True), encoding="utf-8")
@@ -392,10 +478,11 @@ class RgbdCapture(Node):
             if not name:
                 continue
             summary["message_count"][name] = count
-            # 实际频率按稳定段算：预热那段驱动在丢帧，算进去会低估。
-            span = summary["bag_duration_s"] or duration_s
-            stable = max(span - self._warmup_s, 1e-6)
-            summary["actual_fps"][name] = round(count / stable, 2)
+            # 用整段 bag 时长做分母，而不是「时长 - 预热」：message_count 里含预热帧，
+            # 分子分母必须同一区间。之前按稳定段算，13 s 的包会算出 33 fps 这种
+            # 超过请求档位的假数——比缺一个字段更糟。
+            span = summary["bag_duration_s"] or (duration_s + self._warmup_s)
+            summary["actual_fps"][name] = round(count / span, 2)
         return summary
 
     def _write_meta(self, output_dir: Path, session: dict, args: dict, topics: dict,
@@ -515,9 +602,13 @@ class RgbdCapture(Node):
         self.get_logger().info(f"开始录制 {total_s:.1f} 秒（预热 {args['warmup_s']:.1f} + "
                                f"稳定段 {args['duration_s']:.1f}）：{' '.join(cmd)}")
         started = _now_iso()
+        # 录包进程的输出单独存一份进 snapshots：里面有「transport 层丢了多少条」
+        # 这类关键数字，只在终端滚过去就没了，而它恰好能解释配对率为什么低。
+        record_log = open(stage / "rosbag2_record.log", "w", encoding="utf-8")
         try:
-            proc = subprocess.Popen(cmd)
+            proc = subprocess.Popen(cmd, stdout=record_log, stderr=subprocess.STDOUT)
         except OSError as exc:
+            record_log.close()
             self.get_logger().error(f"起不了 ros2 bag record：{exc}")
             self._write_failure(session, args, topics, stage, out, [str(exc)])
             return 2
@@ -525,6 +616,7 @@ class RgbdCapture(Node):
         interrupted = not self._wait(total_s, proc)
         end = _now_iso()
         ok = self._stop_recorder(proc)
+        record_log.close()
 
         # 快照搬进 bag 目录：bag 目录是 rosbag2 建的，只能在录完之后搬。
         self._move_snapshots(stage, out)
@@ -549,6 +641,8 @@ class RgbdCapture(Node):
                       ("节点被中断，录制提前结束" if interrupted else "ros2 bag record 非正常退出"),
             "started_at": started,
             "finished_at": end,
+            "camera_node_resolved": self._camera_node_path(),
+            "dds_profile": os.environ.get("FASTRTPS_DEFAULT_PROFILES_FILE"),
             "time_domain": (session.get("capture") or {}).get("time_domain"),
             "requested_profile": requested,
             "actual_profile": actual,
@@ -637,6 +731,9 @@ class RgbdCapture(Node):
 
 def main(argv=None) -> int:
     """节点入口：跑完一次就退出，退出码 0/1/2 见模块头。"""
+    profile = apply_dds_profile()
+    if profile:
+        print(f"[rgbd_capture] DDS 传输：仅 SHM（{profile}）")
     rclpy.init(args=argv)
     node = RgbdCapture()
     try:
