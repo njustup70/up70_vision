@@ -71,10 +71,34 @@ raw_003（205mm 立方体、60° 倾角）当前结果：盒高 +2.4mm、倾角 
 |---|---|---|---|
 | R0 | 采集入口 `rgbd_capture.launch.py` + `rgbd_capture` 节点 | 完成 | raw/sync/aligned 三态；参数冲突报错；录完写 meta 与 `snapshots/` |
 | R1 | 离线工具 `python -m lab.rgbd_check`（inspect/analyze/annotate） | 完成 | 合成小 bag 上 33 项回归通过；本机 Jazzy 容器内实跑 |
-| R2 | 环境清单 + 10 s 短包 | 未开始 | 需要开相机；输出 `raw_004` 起的参数快照 |
+| R2 | 环境清单 + 10 s 短包 | 完成 | `raw_009`：848×480@30、277/277 帧全配上、时间差 P95 10 µs；见下方第一轮结论 |
 | R3 | 三模式同步对照（各 30 s） | 未开始 | 门槛：配对率两侧 ≥99%、容差固定 10 ms、时间戳无零值/重复/倒退 |
 | R4 | D2C 三场景冒烟（center_near / center_far / right_mid） | 未开始 | 每段 10 s + 预热 3 s；每对图两条边，共 6 条；门槛 ≤5 px + 人工复查 |
 | R5 | 运动 20 s + 稳定段 120 s 连续录制 | 未开始 | 30 fps 请求下双流各 ≥25 fps |
+
+#### 第一轮结论（2026-10-27）
+
+环境清单（`raw_009/snapshots/`）：
+
+| 项 | 实测 |
+|---|---|
+| 设备 | Orbbec Gemini 336L，序列号 CP82841000AX，固件 1.6.00（ISP 20250930），USB3.2 / 5000 M |
+| 驱动 | `orbbec_camera` 2.9.3，节点注册在容器里，名字是 `/camera/camera` |
+| 档位 | 彩色 1280×720@30 MJPG、深度 1280×720@30 Y16（D2C 到彩色）；848×480@30 同频可用 |
+| 内参 | 彩色与对齐深度同一组：fx=611.54、fy=611.34、cx=636.71、cy=357.56（1280×720） |
+| 话题 | 对齐深度 `/camera/depth/image_raw`，原始未对齐 `/camera/depth/image_unaligned`；frame_id 均为 `camera_color_optical_frame` |
+| 后处理 | `noise_removal=true`，spatial / temporal / decimation / threshold 均 false；`depth_registration=true`、`enable_frame_sync=true`、`time_domain=global` |
+
+短包结果（`raw_009`，848×480@30、aligned、稳定段 10 s + 预热 3 s）：
+
+- 配对 277/277，两侧配对率 100%/100%；有符号时间差 P50 −0.005 ms，绝对值 P50 0.005 ms、P95 0.010 ms、最大 0.012 ms；无零值/重复/倒退时间戳。
+- 实际约 27.7 fps（请求 30），间隔 P95 约 35 ms；`rosbag2` 无 transport 丢帧告警。
+- 空间对齐 `UNVERIFIED`：这段没有标注，按规则不给结论。
+- 体积：13 s ≈ 750 MB（848×480 双流约 58 MB/s）。
+
+**关键结论：配对率低的根因不是时钟，是 DDS 丢帧。** 1280×720 时 13 s 在 transport 层丢 113 条、配对率仅 87%/88.5%；改成仅 SHM 后零丢帧、100% 配对。因此采集档位冻结为 **848×480@30 + 仅 SHM**：1280×720 下 3×30 s + 120 s 约 16 GB 且必然丢帧，不适合本轮。
+
+排查用的中间包：`raw_004`（1280×720，丢帧）、`raw_005`（848×480，仍有丢帧）、`raw_006`（加深队列无效）、`raw_007`（手动 export SHM，零丢帧）、`raw_008`（5 s 单命令验证）。
 
 ---
 
@@ -260,6 +284,10 @@ raw_003（205mm 立方体、60° 倾角）当前结果：盒高 +2.4mm、倾角 
 | 15 | 相机打不开，或节点频率越来越低 | 相机被 MVS 客户端占用；ROS 深度 QoS 用了 reliable | 相机独占，先关占用者；深度用 `best_effort` |
 | 16 | 点云整体缩小/放大一千倍 | 深度单位 mm 与 m 混用 | Orbbec 16UC1 + `enable_depth_scale=true` 全程毫米；ROS 输出时才除 1000 |
 | 17 | 顶面法向和中心在大斜视高盒上偏 | `top_ratio` 是百分位取层，侧面上沿混入 | 用 `--save-viz` 看洋红区域是否在顶面；必要时改薄片法（`select_slab`）而不是盲目调 20% |
+| 18 | 图像话题有频率但配对率只有 87%，帧数比 CameraInfo 少 | 1280×720 大图走默认 UDP 被分片，录制端一慢就在 transport 层丢帧（13 s 丢 113 条） | 两端都用 `config/fastdds_shm_only.xml`（仅 SHM）；同一段 288/288 全配上，零丢帧 |
+| 19 | `ros2 param dump /camera` 回 `Node not found` | 驱动在容器里，节点名是 `/camera/camera`；且守护进程若是默认传输时起的，CLI 看不见仅 SHM 的节点 | 先 `ros2 node list --no-daemon` 解析节点名，再 `ros2 param dump --no-daemon --timeout 5` |
+| 20 | 实际帧率算出 33 fps，超过请求的 30 | 分子 `message_count` 含预热帧，分母却减掉了预热 | 分母改用整段 bag 时长，分子分母必须同区间 |
+| 21 | 1280×720 双流 13 s 就 1.4 GB，120 s 段约 13 GB | 彩色 rgb8 2.8 MB/帧 + 对齐深度 1.8 MB/帧，30 fps | 采集档位冻结 848×480@30（约 58 MB/s）；需要高分辨率时先算磁盘与带宽，再单独出对照包 |
 
 ---
 

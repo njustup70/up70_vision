@@ -51,6 +51,12 @@ ros2 run vision_depth rgbd_capture --ros-args \
 - 场景配置模板：`lab/rgbd_check/templates/session.yaml`；bag 内 meta 结构见
   `lab/rgbd_check/templates/meta.yaml`。模板放在 `lab/` 而不是 `bags/`，是因为
   `.gitignore` 只放行 `bags/*/meta.yaml`，`bags/templates/` 会被整目录忽略。
+- **DDS 传输默认走仅 SHM**（`config/fastdds_shm_only.xml`）：launch 与 `rgbd_capture`
+  都会自动设置，不用手动 export。实测默认 UDP 时 1280×720 双流 13 秒在 transport
+  层丢 113 条、配对率只有 87%；改仅 SHM 后 288/288 全配上。要退回默认传输设
+  `RGBD_CAPTURE_DDS_PROFILE=none`，但要知道代价是丢帧。
+- **档位冻结在 848×480@30**（彩色与深度同频，D2C 到彩色）。1280×720@30 能跑，
+  但录制约 113 MB/s 且必丢帧。
 - 采集完成后，bag 目录里除 `*.mcap` 与 `meta.yaml` 外还有 `snapshots/`：驱动实际参数、
   发布端 QoS、两侧 CameraInfo 和首帧几何探测。**`snapshots/` 不入库**，但报告要引用它。
 - 离线检查与出报告：
@@ -68,7 +74,15 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
 ## 体积参考
 
 深度 848×480@30fps 约 27 MB/s，单深度 35 秒约 930 MB。
-**对齐双流（彩色 1280×800 + 深度）按 30–40 MB/s 估，120 秒约 4 GB。**
-录制前先确认磁盘，尤其步骤 E 的连续录制段；`rgbd_capture` 结束时会打印实际体积与时长。
+
+对齐双流实测（2026-10-27，mcap）：
+
+| 档位 | 速率 | 13 s（预热 3 + 稳定 10） | 120 s 稳定段 |
+|---|---|---|---|
+| 848×480@30 | ≈58 MB/s | ≈750 MB（`raw_009` 实测 750 MB） | ≈7 GB |
+| 1280×720@30 | ≈113 MB/s | ≈1.4 GB（`raw_004` 实测 1.4 GB） | ≈13.6 GB |
+
+按 848 档估：三模式各 30 s 约 5.5 GB，整轮采集（3×30 s + 三场景 + 遮挡 + 运动 + 120 s）
+约 15 GB。录制前先确认磁盘；`rgbd_capture` 结束时会打印实际体积与时长。
 纯深度的最小可用集仍是 `ros2 bag record -o bags/raw_00X /camera/depth/image_raw
 /camera/depth/camera_info`。

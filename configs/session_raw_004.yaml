@@ -1,0 +1,41 @@
+# raw_004：第一轮 10 s 短包。目的只验「双流都在、内参对得上、单位是毫米」，
+# 不用于任何精度结论；画面内容未指定，所以物块与距离都留 null（没量）。
+#
+# 第二轮起（三模式对照）复制本文件改 session / condition_id / duration_s。
+#
+# 话题为什么写死：D2C 打开后驱动同时发 /camera/depth/image_raw（已对齐到彩色）
+# 和 /camera/depth/image_unaligned（原始 848x480）。两个候选时采集器会拒绝猜，
+# 所以这里显式指定对齐那一路；CameraInfo 的 width/height 是 1280x720，与彩色一致，
+# 可作「这条确实是彩色坐标系下的深度」的旁证。
+
+schema_version: 1
+session: raw_004
+
+scene:
+  condition_id: short_check
+  position: null
+  distance_band: null
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: null
+  object_size_mm: null
+  camera_fixed: true
+  measurement_notes: 10 s 短包，仅验数据完整性、内参与单位；画面内容、距离与倾角未记录
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 1280x720@30 MJPG, depth 1280x720@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null
