@@ -1,0 +1,39 @@
+# raw_024：三场景重录 · 中心远处（箱子叠放垫高后整体后移）。
+#
+# 与 raw_023 只差前后距离：箱子仍叠放垫高、水平居中，推远到箱面距镜头前沿约 700 mm；
+# 哑光背景板不动（约 1.17 m），与箱子保持约 470 mm 深度差，仍能形成可量的台阶。
+#
+# 保留叠放的原因同 raw_023：不垫高时相机俯角让左右轮廓背后是地面（约 500 mm），
+# 与箱子只差 100 mm 且断续，量不出边。
+
+schema_version: 1
+session: raw_024
+
+scene:
+  condition_id: center_far
+  position: center
+  distance_band: far
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01_on_box_02
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 目标箱叠放垫高后整体后移，距镜头前沿口述约 700 mm（未卷尺实测）；背景板约 1.17 m 未动
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null

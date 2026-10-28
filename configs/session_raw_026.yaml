@@ -1,0 +1,37 @@
+# raw_026：120 秒静止连续录制（补齐第四轮）。
+#
+# raw_019 只覆盖了 118.79 / 120 s（当时录包器没有收尾余量，最后 1.2 s 被截断），
+# 按「必须覆盖声明时长」的判据不通过。这一段用加了 1 s 余量的录包器重录，
+# 画面保持静止（当前 right_mid 摆法不动），只测频率/间隔/配对随时间是否稳定。
+
+schema_version: 1
+session: raw_026
+
+scene:
+  condition_id: continuous_120s
+  position: right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01_on_box_02
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 第四轮补齐：静止画面连续录 120 s，沿用 right_mid 摆法不动；距离约 535 mm（深度读数，非卷尺）
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 120.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null

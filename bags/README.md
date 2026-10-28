@@ -94,8 +94,32 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
 | `raw_018` | 运动样例（箱子移出/移入画面） | aligned | 45 s | 2.88 GB | PASS |
 | `raw_019` | 连续录制 | aligned | 120 s | 7.43 GB | PASS |
 
-逐包数字（帧数、配对率、时间差、帧率）见
-[`vision/depth/docs/progress.md`](../vision/depth/docs/progress.md) 第二轮至第四轮。
+### 2026-10-28 重采（`raw_021` 起）
+
+上面那批（`raw_009`–`raw_019`）复算后**覆盖不足声明时长**，且箱子四周是深度无效区、轮廓边量不出来。
+这一轮换了摆法并重录：
+
+| 包 | 用途 | 模式 | 稳定段 | 体积 | 完整性 |
+|---|---|---|---|---|---|
+| `raw_021` | 完整性冒烟（改录包器后第一段） | aligned | 10 s | 818 MB | PASS |
+| `raw_022` | **诊断样本**：箱子未垫高，只有顶边可量（深度 407 mm） | aligned | 10 s | 820 MB | PASS |
+| `raw_023` | 场景 `center_near`（叠放垫高 + 哑光背景板） | aligned | 10 s | 823 MB | PASS |
+| `raw_024` | 场景 `center_far`（同上，推远到 700 mm） | aligned | 10 s | 822 MB | PASS |
+| `raw_025` | 场景 `right_mid`（同上，右移，中心 61.9%） | aligned | 10 s | 823 MB | PASS |
+| `raw_026` | 连续录制（补齐第四轮） | aligned | 120 s | 7.1 GB | PASS |
+| `raw_027` | 三模式对照：同步关、D2C 关 | raw | 30 s | 2.0 GB | PASS |
+| `raw_028` | 三模式对照：同步开、D2C 关 | sync | 30 s | 2.0 GB | PASS |
+| `raw_029` | 三模式对照：同步开、D2C 开 | aligned | 30 s | 2.0 GB | PASS |
+
+这一轮的摆法要点（下次重采要照做）：
+
+1. **箱子叠放垫高**：不垫高时相机俯角让左右轮廓背后是地面（约 500 mm，与箱子只差 100 mm 且断续），只有顶边可量。
+2. **哑光背景板**（约 1.17 m）：给轮廓外侧提供有效深度和 ≥400 mm 深度台阶；要覆盖箱体四周 ≥150 mm。
+3. **只标顶边 + 右侧竖边**：左侧是红外投影阴影，黑带 22–53 px，深度在那一侧没有有效值。
+4. 相机必须接 **USB 3.0**：2.0 下没有 848×480@30 这个档位（驱动会报 `No matched video stream profile`）。
+
+逐包数字（帧数、配对率、时间差、帧率、黑带宽度）见
+[`vision/depth/docs/progress.md`](../vision/depth/docs/progress.md) 的「2026-10-28 重采一轮」。
 
 引用这些包时注意三件事：
 

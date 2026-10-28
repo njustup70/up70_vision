@@ -1,0 +1,36 @@
+# raw_025：三场景重录 · 右侧中距离（right_mid）。
+#
+# 与 raw_023 / raw_024 同一套摆法（箱子叠放垫高、哑光背景板），只把箱子整体右移到画面
+# 右侧三分之一处，距离回到中间档约 550 mm。
+
+schema_version: 1
+session: raw_025
+
+scene:
+  condition_id: right_mid
+  position: right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01_on_box_02
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 箱子叠放垫高后整体右移约 25 cm，距镜头前沿口述约 550 mm（未卷尺实测）；背景板未动
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null

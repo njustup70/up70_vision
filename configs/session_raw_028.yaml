@@ -1,0 +1,32 @@
+capture:
+  actual_profile: null
+  camera_node: camera
+  complete: false
+  depth_unit: mm
+  duration_s: 30.0
+  geometry_evidence: null
+  mode: sync
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  snapshots: null
+  time_domain: global
+  topics:
+    color: /camera/color/image_raw
+    color_info: /camera/color/camera_info
+    depth: /camera/depth/image_raw
+    depth_info: /camera/depth/camera_info
+  warmup_s: 3.0
+scene:
+  camera_fixed: true
+  condition_id: sync_sync
+  distance_band: mid
+  distance_reference: null
+  measured_distance_mm: null
+  measurement_notes: 第二轮完整性重录：sync 模式（同步开、D2C 关），稳定段 30 s；只对照时间同步，不做空间验收
+  object_id: box_01_on_box_02
+  object_size_mm:
+  - 205.0
+  - 205.0
+  - 205.0
+  position: right
+schema_version: 1
+session: raw_028
