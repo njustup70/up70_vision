@@ -6,13 +6,15 @@ scene:
   distance_band: mid
   measured_distance_mm: null
   distance_reference: null
+  nominal_distance_mm: 550.0
+  distance_source: nominal_spoken
   object_id: box_01_on_box_02
   object_size_mm:
   - 205.0
   - 205.0
   - 205.0
   camera_fixed: true
-  measurement_notes: 箱子叠放垫高后整体右移约 25 cm，距镜头前沿口述约 550 mm（未卷尺实测）；背景板未动
+  measurement_notes: 箱子叠放垫高后整体右移约 25 cm，距镜头前沿口述约 550 mm（未卷尺实测）；背景板未动；原摆放已撤除，无法回补尺测，nominal_distance_mm 仅为标称档
 capture:
   mode: aligned
   camera_node: camera

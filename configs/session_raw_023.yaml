@@ -16,6 +16,10 @@ scene:
   distance_band: near
   measured_distance_mm: null
   distance_reference: null
+  # 标称档：口述 near=400 mm，非尺测。原摆放已撤除，无法回补实测，
+  # 所以 measured_distance_mm 保持 null，只把标称值单独记下来备查。
+  nominal_distance_mm: 400.0
+  distance_source: nominal_spoken   # nominal_spoken / tape_measured / depth_reading
   object_id: box_01_on_box_02
   object_size_mm: [205.0, 205.0, 205.0]
   camera_fixed: true

@@ -25,6 +25,10 @@ scene:
   measured_distance_mm: null
   # 量的基准：例如「镜头前沿到箱子近面」
   distance_reference: null
+  # 标称距离（毫米）：只在「只按档位摆放、没拿尺量」时填。与上面两栏分开记，
+  # 因为它不能参与误差计算，报告里也不能当真值用
+  nominal_distance_mm: null
+  distance_source: null     # nominal_spoken / tape_measured / depth_reading / null
   object_id: null           # box_01 ...
   object_size_mm: null      # [长, 宽, 高]，实测
   camera_fixed: null        # true / false / null（不确定就 null）

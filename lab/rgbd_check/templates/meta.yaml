@@ -18,6 +18,8 @@ scene:
   distance_band: null
   measured_distance_mm: null
   distance_reference: null
+  nominal_distance_mm: null # 标称档（口述/按档位摆放），非尺测；不得当真值参与误差计算
+  distance_source: null     # nominal_spoken / tape_measured / depth_reading
   object_id: null
   object_size_mm: null
   camera_fixed: null
