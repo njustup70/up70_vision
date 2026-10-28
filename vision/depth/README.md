@@ -74,6 +74,7 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 新增 `summarize` 汇总三场景、`compare-replay` 比较回放重录的 header/内容/配对。
 实际覆盖、几何前提、窗口复查按键及旧包更正见
 [2026-10-28 验收修正说明](docs/RGB-D验收修正与补采说明-20261028.md)。
+新录包的独立复算和空间边界限制见 [重采核查](docs/RGB-D重采核查-20261028.md)。
 
 报告落在 `output/rgbd/<session>/`（`report.html`、`pairs.csv`、`summary.json`、
 `spatial_edges.csv`、`overlays/`、`annotations.json`），本阶段默认不入库。

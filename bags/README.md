@@ -123,10 +123,11 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
 
 引用这些包时注意三件事：
 
-1. **距离是口述值**。near/mid/far ≈ 400/550/700 mm 没有卷尺实测，所有 `meta.yaml` 的
-   `measured_distance_mm` 都是 `null`，只在注释里写「口述」。不能当已知量参与误差计算。
-2. **空间对齐全部是 `UNVERIFIED`**。三场景的 6 条边还没点选，`spatial_edges.csv` 六行都是
-   「未标注」；「配对率 100%」只证明时间对得上，不证明像素对齐达标。
+1. **距离是标称值，不是实测值**。`raw_023/024/025` 已补记 `scene.nominal_distance_mm`
+   （400 / 700 / 550 mm）与 `distance_source: nominal_spoken`，但 `measured_distance_mm` 仍是
+   `null`：那是口述档位，不是卷尺读数。原摆放已于 2026-10-28 撤除，无法回补实测。标称值
+   只能用来分组，不能当已知量参与误差计算。
+2. **空间对齐全部是 `UNVERIFIED`**。三场景六条边已有标注和 `manual_review=yes` 记录，但右边紧邻深度无效黑带，不能确认深度有效区边缘就是实物边界；共同网格也未核清。「配对率 100%」只证明时间戳配对，不证明像素对齐达标。详见 [重采核查](../vision/depth/docs/RGB-D重采核查-20261028.md)。
 3. **`raw_016` 不要用**。它名义上是 `right_mid`，实测箱子中心在画面中央，条件不符。
 
 遮挡样例（两个箱子前后错开）与 `ros2 bag play` 回放一致性核对都还没做。
