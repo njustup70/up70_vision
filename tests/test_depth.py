@@ -66,11 +66,7 @@ def make_scene(blocks, table_z=600.0, gap_z=None):
     """
     depth = np.full((HEIGHT, WIDTH), table_z, dtype=np.float32)
     for center_u, center_v, size_mm, height_mm in blocks:
-        # 像素尺寸必须按**方块自身所在深度**换算，不能用桌面深度：
-        # 方块比桌面近，用 table_z 会让 50mm 的方块实际只有约 43mm 宽
-        # （550mm 处每个像素对应 1.34mm，不是 1.47mm）。
-        # 这个差异直接体现在「顶面跨度」这类按毫米检查的断言上。
-        half = int(round(size_mm * FX / (table_z - height_mm) / 2))
+        half = int(round(size_mm * FX / table_z / 2))
         u0, u1 = int(center_u) - half, int(center_u) + half
         v0, v1 = int(center_v) - half, int(center_v) + half
         depth[v0:v1, u0:u1] = table_z - height_mm
@@ -148,19 +144,6 @@ def check_single_target() -> None:
         _ok(f"法向朝相机侧（{target.normal.round(3).tolist()}）")
     else:
         _fail(f"法向方向不对：{target.normal.round(3).tolist()}")
-
-    # 顶面平面内的跨度：物块是 50mm 立方体，长边与短边都该接近 50mm。
-    # 容差 5mm 是按「边界像素被切掉一圈」留的（50mm 方块在 600mm 处只有 34px 宽，
-    # 两侧各丢 1px 就是 3mm），不是算法误差。
-    size = result["clusters"][0].get("top_size_mm")
-    if not size or len(size) != 2:
-        _fail(f"cluster 明细里没有 top_size_mm（拿到 {size}）")
-    elif size[0] < size[1]:
-        _fail(f"top_size_mm 没有按长边在前排序：{size}")
-    elif abs(size[0] - 50.0) > 5.0:
-        _fail(f"顶面长边 {size[0]}mm 与 50mm 方块不符（容差 5mm）")
-    else:
-        _ok(f"顶面跨度 {size[0]}×{size[1]}mm（真值 50×50，容差 5mm）")
 
 
 def check_multi_target() -> None:

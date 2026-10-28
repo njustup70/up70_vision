@@ -8,11 +8,6 @@
     只放算法。读 bag、读 npy、命令行参数都在 `lab/`；收消息发消息在 ROS 包。
     这样同一份代码能被 lab 脚本、ROS 节点、单元测试三处共用，不需要复制。
 
-    这里只放**与抓取相关**的那几步：顶面拟合、可吸性打分、编排、门面。
-    反投影、体素降采样、平面拟合、深度图连通域这四件事与吸盘无关，
-    住在 `primitives.py`，那边将来做深度-彩色对齐、手眼标定也要用。
-    判据：一段代码能用不提到「吸盘/抓取」的话描述清楚，就该去 primitives。
-
 五步链路（对应计划书 B1~B5）
     1. ROI 裁剪 + 体素降采样：40 万点降到十分之一，RANSAC 从秒级降到十几毫秒
     2. RANSAC 去桌面：桌面是视场里最大的平面，天然是最大的 inlier 集合
@@ -36,18 +31,14 @@
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 
-from .primitives import (
-    MIN_PLANE_POINTS,
-    backproject,
-    fit_plane_ransac,
-    label_clusters,
-    planar_extent,
-    select_slab,
-    voxel_downsample,
-)
 from .types import GraspTarget, Intrinsics, SuctionParams
+
+#: 判定「相邻像素属于同一物体」时，深度差的上限是参数里的 cluster_jump_mm。
+#: 这里只放与算法结构绑定的常量。
+_MIN_PLANE_POINTS = 3
 
 
 def _validate(depth: np.ndarray, intrinsics: Intrinsics) -> np.ndarray:
@@ -69,6 +60,113 @@ def _validate(depth: np.ndarray, intrinsics: Intrinsics) -> np.ndarray:
     return depth.astype(np.float32, copy=False)
 
 
+def backproject(depth_mm: np.ndarray, intrinsics: Intrinsics) -> tuple:
+    """深度图 -> 点云。返回 (points (N,3) 毫米, pixel_uv (N,2))。
+
+    深度是 z 深度（沿光轴），所以是 x=(u-cx)z/fx、y=(v-cy)z/fy 的直接代入。
+    把 z 深度当欧氏距离会让点云边缘整体外扩——两者只在图像正中心相等。
+    """
+    v, u = np.nonzero(depth_mm > 0)
+    z = depth_mm[v, u].astype(np.float32)
+    x = (u.astype(np.float32) - intrinsics.cx) * z / intrinsics.fx
+    y = (v.astype(np.float32) - intrinsics.cy) * z / intrinsics.fy
+    return np.stack([x, y, z], axis=1), np.stack([u, v], axis=1)
+
+
+def voxel_downsample(points: np.ndarray, leaf_mm: float) -> np.ndarray:
+    """体素降采样：按 leaf 分格，每格用落点均值代表。
+
+    分格后先摊平成一维整数编码再排序，不用 `np.unique(axis=0)`——
+    后者会把每一行当成 void 逐字节比较，14 万点要几十毫秒，直接吃掉帧预算。
+    一维编码下走的是普通整数排序，快一个量级。
+    """
+    if leaf_mm <= 0 or len(points) == 0:
+        return points
+
+    keys = np.floor(points / leaf_mm).astype(np.int64)
+    origin = keys.min(axis=0)
+    span = keys.max(axis=0) - origin + 1
+    # 每轴格子数远小于 2000，三维编码在 int64 里不会溢出
+    code = ((keys[:, 0] - origin[0]) * span[1] + (keys[:, 1] - origin[1])) * span[2] \
+        + (keys[:, 2] - origin[2])
+
+    _, inverse, counts = np.unique(code, return_inverse=True, return_counts=True)
+    n_vox = len(counts)
+    sums = np.zeros((n_vox, 3), dtype=np.float64)
+    for axis in range(3):
+        sums[:, axis] = np.bincount(inverse, weights=points[:, axis], minlength=n_vox)
+    return (sums / counts[:, None]).astype(np.float32)
+
+
+def fit_plane_ransac(points: np.ndarray, thresh_mm: float, iters: int,
+                     rng: np.random.Generator) -> tuple:
+    """RANSAC 找最大平面，返回 (法向, 偏移 d, inlier 掩码)，平面写作 n·p + d = 0。
+
+    三点采样得到的平面受点噪声影响很大，所以找到内点后用它做一次最小二乘精化
+    （SVD 取最小奇异向量），否则法向会在多次调用之间跳动。
+    """
+    n_pts = len(points)
+    if n_pts < _MIN_PLANE_POINTS:
+        raise ValueError(f"点太少（{n_pts}），无法拟合平面")
+
+    best_count = 0
+    best_inliers = None
+    best_normal = None
+    best_d = 0.0
+
+    for _ in range(max(int(iters), 1)):
+        idx = rng.choice(n_pts, _MIN_PLANE_POINTS, replace=False)
+        p0, p1, p2 = points[idx]
+        normal = np.cross(p1 - p0, p2 - p0)
+        norm = float(np.linalg.norm(normal))
+        if norm < 1e-9:
+            continue
+        normal = normal / norm
+        d = float(-normal @ p0)
+        inliers = np.abs(points @ normal + d) < thresh_mm
+        count = int(inliers.sum())
+        if count > best_count:
+            best_count, best_inliers, best_normal, best_d = count, inliers, normal, d
+
+    if best_inliers is None or best_count < _MIN_PLANE_POINTS:
+        raise ValueError(
+            "RANSAC 找不到任何平面：检查 plane_thresh_mm 是不是按米填的（应为毫米）"
+        )
+
+    pts = points[best_inliers]
+    centroid = pts.mean(axis=0)
+    _, _, vt = np.linalg.svd(pts - centroid, full_matrices=False)
+    normal = vt[2].astype(np.float64)
+    d = float(-normal @ centroid)
+    inliers = np.abs(points @ normal + d) < thresh_mm
+    return normal, d, inliers
+
+
+def label_clusters(depth_mm: np.ndarray, jump_mm: float) -> np.ndarray:
+    """按「深度连续」切连通域，返回标签图（0 表示背景/边界）。
+
+    深度图是组织化点云：相邻像素在 3D 空间本来就挨着，只有跨物体边界时深度
+    才跳变。所以在跳变处切断，剩下的连通域就是欧式聚类的等价结果，
+    而且只用一遍 cv2.connectedComponents，比 KD 树聚类快两个量级。
+    """
+    valid = depth_mm > 0
+    filled = np.where(valid, depth_mm, 0).astype(np.float32)
+
+    jump_h = np.abs(np.diff(filled, axis=1)) > jump_mm
+    jump_v = np.abs(np.diff(filled, axis=0)) > jump_mm
+
+    border = np.zeros_like(valid)
+    border[:, :-1] |= jump_h
+    border[:, 1:] |= jump_h
+    border[:-1, :] |= jump_v
+    border[1:, :] |= jump_v
+    border |= ~valid
+
+    work = (valid & ~border).astype(np.uint8)
+    _, labels = cv2.connectedComponents(work, connectivity=8)
+    return labels
+
+
 def fit_top_face(points: np.ndarray, plane_normal: np.ndarray, plane_d: float,
                  top_ratio: float) -> tuple:
     """取离桌面最远的一层点拟合平面，返回 (吸附点, 法向, 用到的点数)。
@@ -82,7 +180,7 @@ def fit_top_face(points: np.ndarray, plane_normal: np.ndarray, plane_d: float,
     dist = np.abs(points @ plane_normal + plane_d)
     cutoff = float(np.percentile(dist, 100.0 * (1.0 - top_ratio)))
     top_pts = points[dist >= cutoff]
-    if len(top_pts) < MIN_PLANE_POINTS:
+    if len(top_pts) < _MIN_PLANE_POINTS:
         return None, None, 0
 
     centroid = top_pts.mean(axis=0)
@@ -93,12 +191,9 @@ def fit_top_face(points: np.ndarray, plane_normal: np.ndarray, plane_d: float,
     if float(normal @ (-centroid)) < 0:
         normal = -normal
 
-    # 吸附点就是重心本身，**不要再做「投影回平面」**。
-    # SVD 拟合前已经减掉了重心，平面本来就过重心，重心到平面的距离恒为 0。
-    # 原来这里减的是 `(centroid - top_pts[0]) @ normal`，那是**第一个点**相对
-    # 重心的法向偏移，不是重心到平面的距离——等于把吸附点沿法向挪了
-    # 0~17mm，挪多少取决于数组顺序。合成数据上每点残差≈0，所以一直没暴露；
-    # 真实纸盒顶面有 1~3mm 起伏时，吸附点 z 会偏移几毫米（raw_003 实测 +3.9mm）。
+    # 把重心投影回拟合平面，保证吸附点确实落在面上
+    offset = float((centroid - top_pts[0]) @ normal)
+    centroid = centroid - offset * normal
     return centroid.astype(np.float64), normal.astype(np.float64), int(len(top_pts))
 
 
@@ -236,10 +331,6 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
     remaining[pixels[on_table, 1], pixels[on_table, 0]] = 0
 
     labels = label_clusters(remaining, params.cluster_jump_mm)
-    # 标签图放进返回值：`analyze` 的定位就是「把中间结果交出来方便定位问题」，
-    # 而「哪块像素属于哪个簇」正是最难靠文字描述的东西。只在 ROI 范围内，
-    # 离线调试与可视化用；`detect_grasp_targets` 不碰它。
-    result["label_map"] = labels
 
     targets = []
     for label in range(1, int(labels.max()) + 1):
@@ -257,16 +348,6 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
         if top_center is None:
             continue
 
-        # 顶面自身平面内的二维跨度（长边, 短边）。放进明细是为了离线核对
-        # 「量出来的尺寸对不对」——它只跟 fx/fy 和深度有关，与相机怎么摆无关。
-        # 不能用 bbox_size_mm 代替：那是相机系轴对齐包围盒，斜视时混进了
-        # 深度方向的跨度，必然大于真实长宽。
-        slab = select_slab(pts, top_center, top_normal, params.flat_distance_mm)
-        if len(slab) >= MIN_PLANE_POINTS:
-            top_size = planar_extent(slab, top_normal)
-        else:
-            top_size = (0.0, 0.0)
-
         # 竖直方向取桌面法向本身：物块顶面就该平行于桌面
         score, detail = score_suction(roi, k_roi, top_center, top_normal,
                                       normal, pts, params)
@@ -278,7 +359,6 @@ def analyze(depth_mm: np.ndarray, intrinsics: Intrinsics,
             "top_center_mm": top_center.round(2).tolist(),
             "top_normal": top_normal.round(4).tolist(),
             "bbox_size_mm": (hi - lo).round(2).tolist(),
-            "top_size_mm": [round(float(v), 1) for v in top_size],
             "score": round(score, 3),
             "score_detail": detail,
         })

@@ -230,11 +230,3 @@ class FrameSource(ABC):
 | 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`aruco/stub.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
 | 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`aruco/pose.py` + `tests/test_pose.py` |
 | 2026-10-18 | 3.3 的签名补 `ambiguity_ratio` / `ambiguity_deg`；2.3 的 `yaw_deg` 区间笔误 `(180, 180]` 改为 `(−180, 180]` | 复核意见 P2-1（字段原本是死的）与 P3-4（笔误） |
-
-## 深度抓取输出：光学坐标系（2026-10-27）
-
-`/grasp_targets` 与 `/grasp_markers` 沿用深度图 `header.frame_id` 和采集时间；
-深度图与 CameraInfo 的 frame 必须一致。`output_frame` 默认为空（沿用输入），
-非空时必须与输入一致，否则跳过该帧；节点不做 TF 变换。位置单位米，
-局部 Z 轴对准朝相机的顶面法向，绕该轴的转角是构造值，并非物块真实 yaw。
-这是 ROS 接口契约变更，合并前需按协作规范获得对方同意。

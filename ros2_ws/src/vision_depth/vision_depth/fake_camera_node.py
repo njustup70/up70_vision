@@ -74,7 +74,7 @@ class FakeCameraNode(Node):
         self.declare_parameter("depth_topic", "/camera/depth/image_raw")
         self.declare_parameter("info_topic", "/camera/depth/camera_info")
         self.declare_parameter("truth_topic", "/ground_truth_targets")
-        self.declare_parameter("frame_id", "camera_depth_optical_frame")
+        self.declare_parameter("frame_id", "camera_link")
         self.declare_parameter("fps", 15.0)
         self.declare_parameter("loop", True)
         self.declare_parameter("add_noise", True)

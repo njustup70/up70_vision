@@ -32,7 +32,6 @@
 """
 
 import time
-from copy import deepcopy
 
 import numpy as np
 import rclpy
@@ -46,7 +45,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from vision.depth import Intrinsics, SuctionParams, detect_grasp_targets
 
-from .geometry import optical_output_frame, quaternion_from_z_axis
+from .geometry import quaternion_from_z_axis
 
 #: 箭头长度（毫米）。只是给人看的，不参与计算。
 ARROW_LENGTH_MM = 50.0
@@ -97,7 +96,7 @@ class FuseNode(Node):
         self.declare_parameter("info_topic", "/camera/depth/camera_info")
         self.declare_parameter("output_topic", "/grasp_targets")
         self.declare_parameter("marker_topic", "/grasp_markers")
-        self.declare_parameter("output_frame", "")
+        self.declare_parameter("output_frame", "camera_link")
         self.declare_parameter("detect_every", 1)
         self.declare_parameter("min_score", 0.0)
         self.declare_parameter("use_2d_dets", False)
@@ -115,7 +114,6 @@ class FuseNode(Node):
             self.get_logger().warn("use_2d_dets=true 目前未实现，仍按纯几何检测")
 
         self._intrinsics = None       # 最新的内参（Intrinsics）
-        self._info_frame = ""
         self._params = SuctionParams()
         self._rng = np.random.default_rng(0)
         self._frames = 0
@@ -137,7 +135,6 @@ class FuseNode(Node):
         if self._intrinsics is None:
             try:
                 self._intrinsics = Intrinsics.from_camera_info(msg.k, msg.width, msg.height)
-                self._info_frame = msg.header.frame_id
             except ValueError as exc:
                 self.get_logger().error(f"内参不合法，检测无法进行：{exc}")
                 return
@@ -155,14 +152,6 @@ class FuseNode(Node):
         if self._intrinsics is None:
             if self._frames == 1:
                 self.get_logger().info("还没收到 camera_info，先跳过检测")
-            return
-
-        try:
-            optical_output_frame(msg.header.frame_id, self._info_frame, self._out_frame)
-        except ValueError as exc:
-            if not self._warned:
-                self.get_logger().error(str(exc))
-                self._warned = True
             return
 
         try:
@@ -186,7 +175,7 @@ class FuseNode(Node):
         elapsed_ms = (time.perf_counter() - t_start) * 1000.0
 
         targets = [t for t in targets if t.score >= self._min_score]
-        header = deepcopy(msg.header)
+        header = msg.header
         self._pub.publish(self._make_detections(targets, header))
         self._marker_pub.publish(self._make_markers(targets, header))
 
@@ -208,6 +197,7 @@ class FuseNode(Node):
         """
         array = Detection3DArray()
         array.header = header
+        array.header.frame_id = self._out_frame
 
         for target in targets:
             detection = Detection3D()
@@ -251,6 +241,7 @@ class FuseNode(Node):
 
         clear = Marker()
         clear.header = header
+        clear.header.frame_id = self._out_frame
         clear.action = Marker.DELETEALL
         array.markers.append(clear)
 
@@ -260,6 +251,7 @@ class FuseNode(Node):
 
             marker = Marker()
             marker.header = header
+            marker.header.frame_id = self._out_frame
             marker.ns = "grasp_normal"
             marker.id = int(target.target_id)
             marker.type = Marker.ARROW
