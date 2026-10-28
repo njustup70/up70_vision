@@ -9,6 +9,7 @@
 
   <!-- 只声明 ROS 依赖。pip 依赖（vision 包）写在 Dockerfile，两者不混 -->
   <depend>rclpy</depend>
+  <exec_depend>rosbag2_py</exec_depend>
   <depend>sensor_msgs</depend>
   <depend>vision_msgs</depend>
   <depend>geometry_msgs</depend>

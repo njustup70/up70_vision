@@ -36,6 +36,7 @@
 """
 
 import json
+import math
 import os
 import re
 import shutil
@@ -48,6 +49,7 @@ from xml.etree import ElementTree
 
 import rclpy
 import yaml
+from vision.depth.timing import capture_coverage
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image
@@ -502,6 +504,7 @@ class RgbdCapture(Node):
                 "time_domain": extra.pop("time_domain", None),
                 "requested_profile": extra.pop("requested_profile", None),
                 "actual_profile": extra.pop("actual_profile", None),
+                "geometry_validation": (session.get("capture") or {}).get("geometry_validation"),
                 **extra,
             },
             "environment": {
@@ -516,6 +519,37 @@ class RgbdCapture(Node):
 
     # ---------- 主流程 ----------
 
+    def _wait_recorder_ready(self, proc, node_name: str, topics: dict, timeout_s: float) -> bool:
+        """只认本次 recorder 的四路订阅，不把探测节点的订阅当作就绪。"""
+        deadline = time.monotonic() + timeout_s
+        while rclpy.ok() and proc.poll() is None and time.monotonic() < deadline:
+            if all(any(info.node_name == node_name for info in
+                       self.get_subscriptions_info_by_topic(topic)) for topic in topics.values()):
+                return True
+            rclpy.spin_once(self, timeout_sec=0.1)
+        self.get_logger().error("录包节点未在期限内建立四路订阅，保留已有 bag")
+        return False
+
+    def _recorded_coverage(self, out: Path, topics: dict, args: dict) -> dict:
+        """读取实际落盘的接收时间；进程正常退出并不能证明录够时长。"""
+        import rosbag2_py
+
+        times = {"color": [], "depth": []}
+        reader = rosbag2_py.SequentialReader()
+        try:
+            reader.open(rosbag2_py.StorageOptions(uri=str(out), storage_id=args["bag_storage"]),
+                        rosbag2_py.ConverterOptions("", ""))
+            roles = {topics[role]: role for role in times}
+            reader.set_filter(rosbag2_py.StorageFilter(topics=list(roles)))
+            while reader.has_next():
+                topic, _, stamp_ns = reader.read_next()
+                times[roles[topic]].append(int(stamp_ns))
+            return capture_coverage(times, round(args["warmup_s"] * 1e9), args["duration_s"])
+        except Exception as exc:  # 读取失败不能继续宣称录制完整
+            return {"status": "FAIL", "reasons": [f"无法检查落盘覆盖：{exc}"], "streams": {}}
+        finally:
+            del reader
+
     def run(self) -> int:
         """一次采集的完整流程；返回值就是进程退出码。"""
         args = self._params()
@@ -529,11 +563,14 @@ class RgbdCapture(Node):
         if out.exists():
             self.get_logger().error(f"{out} 已存在；本工具不覆盖、不复用已有 bag，换个编号")
             return 2
-        if args["duration_s"] <= 0:
+        if not math.isfinite(args["duration_s"]) or args["duration_s"] <= 0:
             self.get_logger().error("duration_s 必须大于 0（这是稳定段时长，不含预热）")
             return 2
-        if args["warmup_s"] < 0:
+        if not math.isfinite(args["warmup_s"]) or args["warmup_s"] < 0:
             self.get_logger().error("warmup_s 不能是负数")
+            return 2
+        if not math.isfinite(args["ready_timeout_s"]) or args["ready_timeout_s"] <= 0:
+            self.get_logger().error("ready_timeout_s 必须为有限正数")
             return 2
         if not Path(args["session_config"]).is_file():
             self.get_logger().error(f"session_config 不存在：{args['session_config']}")
@@ -592,15 +629,17 @@ class RgbdCapture(Node):
             return 2
         self._destroy_probes()
 
-        total_s = args["warmup_s"] + args["duration_s"]
+        total_s = args["warmup_s"] + args["duration_s"] + 1.0
+        recorder_name = f"rgbd_recorder_{os.getpid()}"
         cmd = ["ros2", "bag", "record", "-o", str(out), "--storage", args["bag_storage"]]
+        cmd += ["--node-name", recorder_name, "--disable-keyboard-controls"]
         qos_path = stage / "bag_qos_overrides.yaml"
         if qos_path.is_file() and snapshot["qos_overrides"]:
             cmd += ["--qos-profile-overrides-path", str(qos_path)]
         cmd += snapshot["recorded_topics"]
 
         self.get_logger().info(f"开始录制 {total_s:.1f} 秒（预热 {args['warmup_s']:.1f} + "
-                               f"稳定段 {args['duration_s']:.1f}）：{' '.join(cmd)}")
+                               f"稳定段 {args['duration_s']:.1f} + 余量 1.0）：{' '.join(cmd)}")
         started = _now_iso()
         # 录包进程的输出单独存一份进 snapshots：里面有「transport 层丢了多少条」
         # 这类关键数字，只在终端滚过去就没了，而它恰好能解释配对率为什么低。
@@ -613,7 +652,8 @@ class RgbdCapture(Node):
             self._write_failure(session, args, topics, stage, out, [str(exc)])
             return 2
 
-        interrupted = not self._wait(total_s, proc)
+        ready = self._wait_recorder_ready(proc, recorder_name, topics, args["ready_timeout_s"])
+        interrupted = not ready or not self._wait(total_s, proc)
         end = _now_iso()
         ok = self._stop_recorder(proc)
         record_log.close()
@@ -622,6 +662,11 @@ class RgbdCapture(Node):
         self._move_snapshots(stage, out)
 
         summary = self._bag_summary(out, args["duration_s"])
+        integrity = self._recorded_coverage(out, topics, args)
+        for role in ("color_info", "depth_info"):
+            if not summary["message_count"].get(topics[role]):
+                integrity["status"] = "FAIL"
+                integrity["reasons"].append(f"落盘缺少 {role}")
         requested = (session.get("capture") or {}).get("requested_profile")
         actual = {}
         for role in ("color", "depth"):
@@ -636,9 +681,15 @@ class RgbdCapture(Node):
             }
         size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
         extra = {
-            "complete": bool(ok and not interrupted and (out / "metadata.yaml").is_file()),
-            "reason": None if (ok and not interrupted) else
-                      ("节点被中断，录制提前结束" if interrupted else "ros2 bag record 非正常退出"),
+            "complete": bool(ok and not interrupted and integrity["status"] == "PASS"
+                             and (out / "metadata.yaml").is_file()),
+            "reason": ("录包订阅未就绪" if not ready else
+                       "节点被中断，录制提前结束" if interrupted else
+                       "ros2 bag record 非正常退出" if not ok else
+                       "；".join(integrity["reasons"]) or None),
+            "integrity": integrity,
+            "recorder_node": recorder_name,
+            "recording_margin_s": 1.0,
             "started_at": started,
             "finished_at": end,
             "camera_node_resolved": self._camera_node_path(),

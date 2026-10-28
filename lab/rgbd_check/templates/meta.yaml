@@ -28,7 +28,7 @@ capture:
   camera_node: null
   warmup_s: null
   duration_s: null
-  complete: false           # 录制正常收尾才是 true；false 的段不能进统计
+  complete: false           # 正常收尾、四路落盘且双图像覆盖完整才为 true；失败段保留作诊断
   reason: null              # 未完成时的原因
   topics:
     color: null
@@ -47,6 +47,16 @@ capture:
   finished_at: null
   snapshots: snapshots      # 参数、QoS、内参与首帧探测都在这里
   geometry_evidence: snapshots/stream_probe.json
+  recording_margin_s: 1.0
+  integrity: null           # 稳定窗口、各路覆盖/缺失时长和 PASS/FAIL；由实际 bag 计算
+  geometry_validation:      # 不能只靠 K/frame_id 相同判通过；依据详见几何语义核查说明
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
 
 environment:
   ros_distro: null

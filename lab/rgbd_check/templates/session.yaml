@@ -49,4 +49,12 @@ capture:
   requested_profile: null
   actual_profile: null
   geometry_evidence: null   # 采集器写 snapshots/stream_probe.json
+  geometry_validation:
+    status: UNVERIFIED      # 只有核清下列信息并提供依据后才能填写 PASS
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
   snapshots: null           # 采集器写 snapshots/

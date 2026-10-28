@@ -25,6 +25,8 @@
 import bisect
 from dataclasses import dataclass, field
 
+from vision.depth.timing import capture_coverage
+
 from .bag import FrameMeta
 from .status import FAIL, PASS, UNVERIFIED
 
@@ -64,6 +66,8 @@ class PairingResult:
     rates: dict = field(default_factory=dict)
     stats: dict = field(default_factory=dict)
     frequency: dict = field(default_factory=dict)
+    integrity: dict = field(default_factory=dict)
+    tail_dropped: dict = field(default_factory=dict)
     stable_start_bag_ns: int = 0
     warmup_dropped: dict = field(default_factory=dict)
     status: str = UNVERIFIED
@@ -88,6 +92,8 @@ class PairingResult:
             "rates": self.rates,
             "stats": self.stats,
             "frequency": self.frequency,
+            "integrity": self.integrity,
+            "tail_dropped": self.tail_dropped,
             "warmup_dropped": self.warmup_dropped,
             "anomaly_count": len(self.anomalies),
             "stable_start_bag_ns": self.stable_start_bag_ns,
@@ -157,6 +163,32 @@ def _scan_anomalies(frames, role: str) -> tuple:
     return anomalies, allowed
 
 
+def frequency_stats(frames, cutoff: int, duration_s) -> dict:
+    """接收间隔、header 频率和固定 10 秒趋势，三者不互相冒充。"""
+    stats = _interval_stats([f.bag_time_ns for f in frames], duration_s)
+    stamps = [f.stamp_ns for f in frames]
+    gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+    valid = bool(gaps) and all(g > 0 for g in gaps) and all(t > 0 for t in stamps)
+    stats["header_fps"] = round((len(stamps) - 1) * 1e9 / (stamps[-1] - stamps[0]), 3) \
+        if valid else None
+    stats["header_gap_p95_ms"] = round(_percentile(gaps, 95) / 1e6, 3) if valid else None
+    stats["header_gap_max_ms"] = round(max(gaps) / 1e6, 3) if valid else None
+    stats["fps_definition"] = "稳定窗口帧数 / 声明时长；header_fps 为 (帧数-1) / header 跨度"
+    stats["windows_10s"] = []
+    if duration_s:
+        duration_ns = round(duration_s * 1e9)
+        for left in range(0, duration_ns, 10_000_000_000):
+            right = min(left + 10_000_000_000, duration_ns)
+            window = [f for f in frames if cutoff + left <= f.bag_time_ns < cutoff + right]
+            item = _interval_stats([f.bag_time_ns for f in window], (right - left) / 1e9)
+            h = [f.stamp_ns for f in window]
+            item["header_fps"] = round((len(h) - 1) * 1e9 / (h[-1] - h[0]), 3) \
+                if len(h) > 1 and all(b > a > 0 for a, b in zip(h, h[1:])) else None
+            item.update(start_s=left / 1e9, end_s=right / 1e9)
+            stats["windows_10s"].append(item)
+    return stats
+
+
 def pair_frames(colors, depths, tol_ns: int = DEFAULT_TOL_NS,
                 warmup_ns: int = DEFAULT_WARMUP_NS,
                 stable_duration_s=None) -> PairingResult:
@@ -170,6 +202,9 @@ def pair_frames(colors, depths, tol_ns: int = DEFAULT_TOL_NS,
     :return: `PairingResult`
     """
     result = PairingResult(tol_ns=tol_ns, warmup_ns=warmup_ns)
+    result.integrity = capture_coverage(
+        {"color": [f.bag_time_ns for f in colors],
+         "depth": [f.bag_time_ns for f in depths]}, warmup_ns, stable_duration_s)
     if not colors or not depths:
         result.reasons.append(f"缺流：彩色 {len(colors)} 帧、深度 {len(depths)} 帧")
         result.status = UNVERIFIED
@@ -185,12 +220,17 @@ def pair_frames(colors, depths, tol_ns: int = DEFAULT_TOL_NS,
     depth_anomalies, depth_allowed = _scan_anomalies(depths, "depth")
     result.anomalies = color_anomalies + depth_anomalies
 
-    stable_colors = [f for f in colors if f.bag_time_ns >= cutoff]
-    stable_depths = [f for f in depths if f.bag_time_ns >= cutoff]
+    end = result.integrity["stable_end_bag_ns"]
+    stable_colors = [f for f in colors if f.bag_time_ns >= cutoff and
+                     (end is None or f.bag_time_ns < end)]
+    stable_depths = [f for f in depths if f.bag_time_ns >= cutoff and
+                     (end is None or f.bag_time_ns < end)]
     result.warmup_dropped = {
-        "color": len(colors) - len(stable_colors),
-        "depth": len(depths) - len(stable_depths),
+        "color": sum(f.bag_time_ns < cutoff for f in colors),
+        "depth": sum(f.bag_time_ns < cutoff for f in depths),
     }
+    result.tail_dropped = {role: sum(end is not None and f.bag_time_ns >= end for f in frames)
+                           for role, frames in (("color", colors), ("depth", depths))}
     result.counts = {"color": len(stable_colors), "depth": len(stable_depths)}
 
     legal_colors = sorted((f for f in stable_colors if f.index in color_allowed),
@@ -272,8 +312,8 @@ def pair_frames(colors, depths, tol_ns: int = DEFAULT_TOL_NS,
         "signed_dt_max_ms": None if not signed else round(max(signed) / 1e6, 3),
     }
     result.frequency = {
-        "color": _interval_stats([f.bag_time_ns for f in stable_colors], stable_s),
-        "depth": _interval_stats([f.bag_time_ns for f in stable_depths], stable_s),
+        "color": frequency_stats(stable_colors, cutoff, stable_s),
+        "depth": frequency_stats(stable_depths, cutoff, stable_s),
     }
 
     # 状态：时间戳异常一票否决；配对率两侧都要过线；没配上任何一对照样不算通过。
