@@ -93,6 +93,10 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
 | `raw_017` | 场景 `right_mid` | aligned | 10 s | 732 MB | PASS |
 | `raw_018` | 运动样例（箱子移出/移入画面） | aligned | 45 s | 2.88 GB | PASS |
 | `raw_019` | 连续录制 | aligned | 120 s | 7.43 GB | PASS |
+| `raw_030` | 像素网格核查：棋盘居中（465–490 mm） | aligned | 10 s | 860 MB | PASS |
+| `raw_031` | 像素网格核查：棋盘偏左 | aligned | 10 s | 860 MB | PASS |
+| `raw_032` | 像素网格核查：棋盘偏右 | aligned | 10 s | 862 MB | PASS |
+| `raw_030_322mm` | 作废：322 mm 时板上部低于量程下限，只作对照 | aligned | 10 s | 850 MB | 仅留档 |
 
 ### 2026-10-28 重采（`raw_021` 起）
 
@@ -127,7 +131,7 @@ python -m lab.rgbd_check annotate output/rgbd/raw_004     # 本机窗口，每�
    （400 / 700 / 550 mm）与 `distance_source: nominal_spoken`，但 `measured_distance_mm` 仍是
    `null`：那是口述档位，不是卷尺读数。原摆放已于 2026-10-28 撤除，无法回补实测。标称值
    只能用来分组，不能当已知量参与误差计算。
-2. **空间对齐全部是 `UNVERIFIED`**。三场景六条边已有标注和 `manual_review=yes` 记录，但右边紧邻深度无效黑带，不能确认深度有效区边缘就是实物边界；共同网格也未核清。「配对率 100%」只证明时间戳配对，不证明像素对齐达标。详见 [重采核查](../vision/depth/docs/RGB-D重采核查-20261028.md)。
+2. **空间对齐三场景仍是 `UNVERIFIED`，卡点已变**。像素网格已核清（`raw_030–032` 棋盘核查：彩色带畸变网格与对齐深度零畸变网格的位移场 ≤3.66 px，在 5 px 门槛内），现在卡的是**边的物理含义**——右边紧邻 7–19 px 深度无效黑带，不能确认深度有效区边缘就是实物边界。「配对率 100%」只证明时间戳配对。核查命令与限制见 [进度](../vision/depth/docs/progress.md) 的「像素网格核查」小节。
 3. **`raw_016` 不要用**。它名义上是 `right_mid`，实测箱子中心在画面中央，条件不符。
 
 遮挡样例（两个箱子前后错开）与 `ros2 bag play` 回放一致性核对都还没做。
