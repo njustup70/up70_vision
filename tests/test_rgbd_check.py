@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lab.rgbd_check.annotate import (display_to_image, in_image, validate_segment,
                                      view_region, PairState, PANEL_H, PANEL_W, BAR_H)
 from lab.rgbd_check.bag import FrameMeta, decode_image
+from lab.rgbd_check.grid import board_object_points, displacement_field, shift_summary
 from lab.rgbd_check.measure import edge_offset_px
 from lab.rgbd_check.pairing import DEFAULT_TOL_NS, pair_frames
 from lab.rgbd_check.report import spatial_rows
@@ -511,6 +512,36 @@ def test_full_pair_rate_but_short_capture_exits_one():
         assert summary['sync']['status'] == PASS
         assert summary['capture_integrity']['status'] == FAIL
         assert summary['capture']['warmup_s'] == 0
+
+
+def test_grid_shift_is_zero_without_distortion():
+    """d 全零时两套网格相同，位移必须处处为 0（否则判据本身就是错的）。"""
+    k = np.array([[400.0, 0.0, 424.0], [0.0, 400.0, 240.0], [0.0, 0.0, 1.0]])
+    _, _, shift = displacement_field(k, np.zeros(5), 848, 480)
+    assert shift.max() < 1e-9
+
+
+def test_grid_shift_grows_with_radius():
+    """径向畸变非零时，位移应由中心向边缘单调变大，中心附近接近 0。"""
+    k = np.array([[400.0, 0.0, 424.0], [0.0, 400.0, 240.0], [0.0, 0.0, 1.0]])
+    d = np.array([-0.05, 0.02, 0.0, 0.0, 0.0])
+    pix, _, shift = displacement_field(k, d, 848, 480)
+    center = np.linalg.norm(pix - np.array([424.0, 240.0]), axis=1) < 30
+    assert shift[center].max() < 0.05
+    assert shift.max() > 2.0
+    # 角上（半径最大处）的位移应大于半径 0.5 处的代表值
+    summary = shift_summary(k, d, 848, 480)
+    assert summary["max_px"] > summary["at_r0_5_px"]
+
+
+def test_board_object_points_use_measured_cell():
+    """对象点间距必须取尺量值，行列顺序与 cv2 的 (cols, rows) 一致。"""
+    obj = board_object_points(23.0, (6, 9))
+    assert obj.shape == (54, 3)
+    assert np.allclose(obj[:, 2], 0.0)
+    first_row = obj[:6, 0]
+    assert np.allclose(first_row, np.arange(6) * 23.0)   # 同一行沿 x 递增
+    assert np.isclose(obj[6, 1], 23.0)                  # 第 7 个点换行
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from .bag import BagError, inspect_bag, load_images, scan
 from .pairing import DEFAULT_TOL_NS, DEFAULT_WARMUP_NS, pair_frames
 from .geometry import assess_geometry
+from .grid import CELL_MM_DEFAULT, run_grid_check
 from .report import (read_meta, refresh, save_selected, write_overlays, write_pairs,
                      write_report, write_unmatched, write_annotations, load_annotations,
                      write_spatial)
@@ -80,6 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
     for role, topic in DEFAULT_TOPICS.items():
         p_analyze.add_argument(f"--{role.replace('_', '-')}-topic", default=None,
                                help=f"{role} 话题；默认取 meta.yaml，其次 {topic}")
+
+    p_grid = sub.add_parser("grid-check", help="棋盘核查彩色与对齐深度是否同一像素网格")
+    p_grid.add_argument("reports", nargs="+", type=Path, help="analyze 输出目录（需含 selected/ 与 summary.json）")
+    p_grid.add_argument("--cell-mm", type=float, default=CELL_MM_DEFAULT,
+                        help=f"棋盘方格边长（毫米），必须是尺量值；默认 {CELL_MM_DEFAULT}")
+    p_grid.add_argument("--corners", default="6x9",
+                        help="内角点排列，格式 列x行；默认 6x9（A4 竖版 7x10 格）")
 
     p_annotate = sub.add_parser("annotate", help="开本地窗口点选边界（每边 4 次点击）")
     p_annotate.add_argument("out", type=Path, help="analyze 的输出目录")
@@ -378,6 +386,13 @@ def main(argv=None) -> int:
         return run_annotate(args)
     if args.command == "summarize":
         return run_summarize(args)
+    if args.command == "grid-check":
+        try:
+            cols, rows = (int(v) for v in str(args.corners).lower().split("x"))
+        except ValueError:
+            print(f"❌ --corners 需要写成 列x行，例如 6x9；收到 {args.corners}")
+            return 2
+        return run_grid_check(args.reports, args.cell_mm, (cols, rows))
     if args.command == "compare-replay":
         from .replay import compare_replay
         topics = ((read_meta(args.original / "meta.yaml").get("capture") or {}).get("topics")
