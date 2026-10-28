@@ -225,7 +225,7 @@ def test_pair_state_limits_edges_and_requires_confirm():
     assert "只标" in state.add_edge("edge3", ((10, 10), (60, 10)), ((11, 12), (61, 12)))
     state.add_unmeasurable("edge3", "空洞太多")
     frame_dict = state.to_frame()
-    assert frame_dict["edges"][-1]["confirmed"] is False
+    assert len(frame_dict["edges"]) == 2  # 不可测同样不能突破每图两条边上限
 
 
 # ---------------- 偏移测量 ----------------
@@ -279,7 +279,8 @@ def _make_out(root: Path, offset_y: float, manual_review=None, size=(200, 200)) 
             ],
         }],
     }), encoding="utf-8")
-    (out / "summary.json").write_text(json.dumps({"session": "t", "spatial": {}}),
+    (out / "summary.json").write_text(json.dumps({"session": "t", "spatial": {},
+                                                "geometry": {"status": PASS}}),
                                       encoding="utf-8")
     return out
 
@@ -297,7 +298,8 @@ def test_spatial_rows_keep_missing_conditions():
 
 def test_spatial_threshold_boundary():
     with tempfile.TemporaryDirectory() as tmp:
-        ok = spatial_rows(_make_out(Path(tmp), offset_y=OFFSET_LIMIT_PX), "aligned")
+        ok = spatial_rows(_make_out(Path(tmp), offset_y=OFFSET_LIMIT_PX,
+                                   manual_review="yes"), "aligned")
         assert ok[0]["status"] == PASS
         with tempfile.TemporaryDirectory() as tmp2:
             bad = spatial_rows(_make_out(Path(tmp2), offset_y=OFFSET_LIMIT_PX + 0.5),
@@ -476,6 +478,39 @@ def _run_standalone() -> int:
           + (f"，{skipped} 项跳过" if skipped else "")
           + (f"，{failed} 项失败" if failed else ""))
     return 1 if failed else 0
+
+
+def test_replay_comparison_keeps_headers_content_and_pairing():
+    _require_rosbags()
+    from lab.rgbd_check.cli import main
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stamps = [1_000*MS+i*33*MS for i in range(5)]
+        _write_bag(root/'original', stamps, [s+MS for s in stamps])
+        _write_bag(root/'same', stamps, [s+MS for s in stamps])
+        assert main(['compare-replay', str(root/'original'), str(root/'same'),
+                     '--out', str(root/'pass')]) == 0
+        _write_bag(root/'changed', stamps, [s+2*MS for s in stamps])
+        assert main(['compare-replay', str(root/'original'), str(root/'changed'),
+                     '--out', str(root/'fail')]) == 1
+        result = json.loads((root/'fail'/'summary.json').read_text())
+        assert result['streams']['depth']['status'] == 'FAIL'
+        assert result['pairing']['status'] == 'FAIL'
+
+
+def test_full_pair_rate_but_short_capture_exits_one():
+    _require_rosbags()
+    from lab.rgbd_check.cli import main
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stamps = [1_000*MS+i*33*MS for i in range(5)]
+        _write_bag(root/'bag', stamps, [s+MS for s in stamps])
+        (root/'bag'/'meta.yaml').write_text('capture:\n  warmup_s: 0\n  duration_s: 10\n')
+        assert main(['analyze',str(root/'bag'),'--out',str(root/'out')]) == 1
+        summary=json.loads((root/'out'/'summary.json').read_text())
+        assert summary['sync']['status'] == PASS
+        assert summary['capture_integrity']['status'] == FAIL
+        assert summary['capture']['warmup_s'] == 0
 
 
 if __name__ == "__main__":

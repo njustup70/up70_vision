@@ -20,21 +20,23 @@
 import csv
 import html
 import json
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
 import yaml
 
-from .measure import edge_offset_px
+from .measure import edge_offset_px, edge_diagnostics, nonparallel_segments
 from .select import EDGES_PER_PAIR, OFFSET_LIMIT_PX, REQUIRED_CONDITIONS, pair_id
 from .status import FAIL, PASS, SKIP, UNVERIFIED, worst
 
 PAIR_COLUMNS = ("pair_id", "color_index", "color_stamp_ns", "depth_index", "depth_stamp_ns",
                 "dt_ms", "status", "color_image", "depth_image", "overlay_image")
 UNMATCHED_COLUMNS = ("role", "index", "stamp_ns", "kind", "reason")
-SPATIAL_COLUMNS = ("condition_id", "pair_id", "edge_id", "offset_px", "abs_offset_px",
-                   "limit_px", "manual_review", "status", "note")
+SPATIAL_COLUMNS = ("session", "condition_id", "pair_id", "edge_id", "offset_px", "abs_offset_px",
+                   "limit_px", "manual_review", "angle_deg", "along_offsets_px",
+                   "measurement_status", "status", "note")
 
 
 def _write_csv(path: Path, columns, rows) -> None:
@@ -133,13 +135,14 @@ def write_overlays(out: Path, pid: str, color: np.ndarray, depth: np.ndarray, la
 
 
 def save_selected(out: Path, selection, color: np.ndarray, depth: np.ndarray,
-                  condition_id: str, notes: str = "") -> dict:
+                  condition_id: str, notes: str = "", session: str = "") -> dict:
     """把选中的那一对存成 npz：`annotate` 用它点选，不需要再打开 bag。"""
     folder = out / "selected"
     folder.mkdir(exist_ok=True)
     pid = pair_id(selection.pair.color.index, selection.pair.depth.index)
     np.savez_compressed(folder / f"{pid}.npz", color=color, depth=depth)
     entry = {
+        "session": session,
         "pair_id": pid,
         "condition_id": condition_id,
         "image_size": [int(color.shape[1]), int(color.shape[0])],
@@ -158,8 +161,12 @@ def load_selected(out: Path) -> list:
     if not folder.is_dir():
         return []
     entries = []
+    summary_path = out / "summary.json"
+    session = json.loads(summary_path.read_text(encoding="utf-8")).get("session", "") \
+        if summary_path.is_file() else ""
     for path in sorted(folder.glob("*.json")):
         entry = json.loads(path.read_text(encoding="utf-8"))
+        entry.setdefault("session", session)
         entry["_npz"] = str(path.with_suffix(".npz"))
         entries.append(entry)
     return entries
@@ -170,7 +177,13 @@ def load_annotations(out: Path) -> dict:
     path = out / "annotations.json"
     if not path.is_file():
         return {"schema_version": 1, "frames": []}
-    return json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    summary_path = out / "summary.json"
+    session = json.loads(summary_path.read_text(encoding="utf-8")).get("session", "") \
+        if summary_path.is_file() else ""
+    for frame in data.get("frames", []):
+        frame.setdefault("session", session)
+    return data
 
 
 def write_annotations(out: Path, data: dict) -> None:
@@ -185,6 +198,9 @@ def _check_annotation(frame: dict, selected: dict | None) -> str | None:
     """核对标注与选中图能否对上；对不上返回原因，不"尽力匹配"。"""
     if selected is None:
         return f"配对编号 {frame.get('pair_id')} 不在本次选中的图对里"
+    if frame.get("session", "") != selected.get("session", "") or \
+            frame.get("condition_id") != selected.get("condition_id"):
+        return "标注的 session 或场景与选中图对不一致"
     if list(frame.get("image_size") or []) != list(selected.get("image_size") or []):
         return (f"标注尺寸 {frame.get('image_size')} 与选中图 {selected.get('image_size')} 不一致")
     if not frame.get("edges"):
@@ -199,71 +215,72 @@ def spatial_rows(out: Path, mode: str | None) -> list:
     :param mode: 采集模式；raw/sync 下空间检查记 SKIP（这两档本来就没开 D2C）
     :return: `spatial_edges.csv` 的行
     """
-    selected = {entry["pair_id"]: entry for entry in load_selected(out)}
-    annotations = {frame.get("pair_id"): frame for frame in load_annotations(out)["frames"]}
+    selected = load_selected(out)
+    annotations = {(f.get("session", ""), f.get("pair_id")): f
+                   for f in load_annotations(out)["frames"]}
+    summary_path = out / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.is_file() else {}
+    geometry = summary.get("geometry") or {}
     rows = []
-
     for condition in REQUIRED_CONDITIONS:
-        matched = [entry for entry in selected.values()
-                   if entry.get("condition_id") == condition]
-        if not matched:
-            rows.append({"condition_id": condition, "pair_id": "", "edge_id": "",
-                         "offset_px": None, "abs_offset_px": None,
-                         "limit_px": OFFSET_LIMIT_PX, "manual_review": None,
-                         "status": UNVERIFIED, "note": "本条件没有选中图对（未采或未配对）"})
-            continue
-        entry = matched[0]
-        frame = annotations.get(entry["pair_id"])
-        problem = _check_annotation(frame or {}, entry)
-        if problem:
-            rows.append({"condition_id": condition, "pair_id": entry["pair_id"], "edge_id": "",
-                         "offset_px": None, "abs_offset_px": None,
-                         "limit_px": OFFSET_LIMIT_PX, "manual_review": None,
-                         "status": UNVERIFIED, "note": problem})
-            continue
-        for edge in frame["edges"]:
-            edge_id = edge.get("edge_id") or "edge"
+        matched = [entry for entry in selected if entry.get("condition_id") == condition]
+        entry = matched[0] if len(matched) == 1 else {}
+        frame = annotations.get((entry.get("session", ""), entry.get("pair_id")), {})
+        problem = "本条件没有唯一选中图对（未采、未配对或多候选）" if not entry else \
+            _check_annotation(frame, entry)
+        edges = frame.get("edges") or []
+        structure_problem = ""
+        if len(edges) > EDGES_PER_PAIR or len({e.get("edge_id") for e in edges}) != len(edges):
+            structure_problem = "边界数量或编号不符合每图两条边要求"
+        if len(edges) == EDGES_PER_PAIR and all(e.get("confirmed") for e in edges):
+            if any(not nonparallel_segments(edges[0].get(key), edges[1].get(key))
+                   for key in ("color_segment", "depth_segment")):
+                structure_problem = "两条边缺失、退化或平行，不能验证二维错位"
+        for index in range(EDGES_PER_PAIR):
+            edge = edges[index] if index < len(edges) else {}
+            row = {"session": entry.get("session") or summary.get("session", ""),
+                   "condition_id": condition, "pair_id": entry.get("pair_id", ""),
+                   "edge_id": edge.get("edge_id") or f"edge{index + 1}",
+                   "offset_px": None, "abs_offset_px": None, "limit_px": OFFSET_LIMIT_PX,
+                   "manual_review": edge.get("manual_review"), "angle_deg": None,
+                   "along_offsets_px": [None, None, None], "measurement_status": UNVERIFIED,
+                   "status": UNVERIFIED, "note": problem or edge.get("reason") or ""}
+            rows.append(row)
+            if problem:
+                continue
             if not edge.get("confirmed"):
-                rows.append({"condition_id": condition, "pair_id": entry["pair_id"],
-                             "edge_id": edge_id, "offset_px": None, "abs_offset_px": None,
-                             "limit_px": OFFSET_LIMIT_PX,
-                             "manual_review": edge.get("manual_review"),
-                             "status": UNVERIFIED,
-                             "note": edge.get("reason") or "标注未确认"})
+                row["note"] = edge.get("reason") or "未标注或未确认"
                 continue
-            measured = edge_offset_px(edge.get("color_segment"), edge.get("depth_segment"))
-            if measured.offset_px is None:
-                rows.append({"condition_id": condition, "pair_id": entry["pair_id"],
-                             "edge_id": edge_id, "offset_px": None, "abs_offset_px": None,
-                             "limit_px": OFFSET_LIMIT_PX,
-                             "manual_review": edge.get("manual_review"),
-                             "status": UNVERIFIED, "note": measured.reason})
+            # 导入标注也要检查原图边界，不能只依赖窗口的点击校验。
+            segments = [edge.get(key) for key in ("color_segment", "depth_segment")]
+            width, height = entry["image_size"]
+            try:
+                outside = any(not (0 <= x < width and 0 <= y < height)
+                              for segment in segments for x, y in segment)
+                measured = edge_offset_px(*segments)
+            except (TypeError, ValueError, OverflowError):
+                row["note"] = "线段缺失或坐标格式错误"
                 continue
-            status = PASS if measured.abs_px <= OFFSET_LIMIT_PX else FAIL
-            rows.append({
-                "condition_id": condition, "pair_id": entry["pair_id"], "edge_id": edge_id,
-                "offset_px": round(measured.offset_px, 3),
-                "abs_offset_px": round(measured.abs_px, 3),
-                "limit_px": OFFSET_LIMIT_PX,
-                "manual_review": edge.get("manual_review") or "未复查",
-                "status": status,
-                "note": edge.get("reason") or "",
-            })
-
-    # 人工复查说「有明显张开」时，即使数值过线也要降级：数值只量中点。
-    for row in rows:
-        review = str(row.get("manual_review") or "")
-        if row["status"] == PASS and review.lower().startswith(("n", "fail", "有")):
-            row["status"] = FAIL
-            row["note"] = (row["note"] + "；人工复查发现明显张开或整体错位").strip("；")
-
-    # raw / sync 没开 D2C，深度不在彩色坐标系里，量出来的偏移没有意义。
-    # 整段记 SKIP（保留数字作诊断），不能因为「有选中图对」就混进空间验收。
+            if outside or measured.offset_px is None:
+                row["note"] = "端点超出原图范围" if outside else measured.reason
+                continue
+            row.update(offset_px=round(measured.offset_px, 3), abs_offset_px=round(measured.abs_px, 3),
+                       **edge_diagnostics(*segments))
+            row["measurement_status"] = PASS if measured.abs_px <= OFFSET_LIMIT_PX else FAIL
+            review = edge.get("manual_review")
+            row["status"] = row["measurement_status"]
+            if review == "no":
+                row.update(status=FAIL, note="人工复查发现明显张开或整体错位")
+            elif review != "yes" and row["status"] == PASS:
+                row.update(status=UNVERIFIED, note="数值合格，尚未人工复查")
+            if structure_problem and row["status"] != FAIL:
+                row.update(status=UNVERIFIED, note=structure_problem)
+            if geometry.get("status") != PASS:
+                row.update(status=UNVERIFIED,
+                           note=(row["note"] + "；几何语义尚未核清").strip("；"))
     if mode in ("raw", "sync"):
         for row in rows:
-            row["status"] = SKIP
-            row["note"] = (f"{mode} 模式未开 D2C，空间检查不适用；"
-                           + (row["note"] or "")).strip("；")
+            row.update(status=SKIP, note=f"{mode} 模式未开 D2C，空间检查不适用")
     return rows
 
 
@@ -279,9 +296,24 @@ def write_spatial(out: Path, rows: list) -> None:
         "limit_px": OFFSET_LIMIT_PX,
         "edges_per_pair": EDGES_PER_PAIR,
         "rows": [{key: row[key] for key in SPATIAL_COLUMNS} for row in rows],
+        "conditions": {condition: worst(row["status"] for row in rows
+                                          if row["condition_id"] == condition)
+                       for condition in REQUIRED_CONDITIONS},
         "note": "只报每条边的近似中点偏移；全工作区与毫米精度未验收",
     }
+    update_overall(summary)
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def update_overall(summary: dict) -> None:
+    """软件检查总体状态；现场运动、回放等仍需各自的证据，不能由这里代验收。"""
+    mode = (summary.get("capture") or {}).get("mode")
+    items = [(summary.get(key) or {}).get("status", UNVERIFIED)
+             for key in ("capture_integrity", "sync")]
+    if mode not in ("raw", "sync"):
+        items += [(summary.get(key) or {}).get("status", UNVERIFIED)
+                  for key in ("geometry", "spatial")]
+    summary["overall_status"] = worst(items)
 
 
 def _fmt(value, digits: int = 2) -> str:
@@ -298,6 +330,8 @@ def write_report(out: Path, summary: dict) -> None:
     sync = summary.get("sync") or {}
     spatial = summary.get("spatial") or {}
     capture = summary.get("capture") or {}
+    integrity = summary.get("capture_integrity") or {}
+    geometry = summary.get("geometry") or {}
     pair = summary.get("selected") or {}
 
     def row(label, value):
@@ -315,11 +349,26 @@ def write_report(out: Path, summary: dict) -> None:
         if key in sync
     )
     reasons = "".join(f"<li>{html.escape(str(r))}</li>" for r in summary.get("reasons") or [])
+    integrity_rows = "".join(row(role, value) for role, value in (integrity.get("streams") or {}).items())
+    geometry_rows = "".join(row(key, value) for key, value in geometry.items())
+    frequency_rows = ""
+    trend_rows = ""
+    for role, value in (sync.get("frequency") or {}).items():
+        frequency_rows += (f"<tr><td>{html.escape(role)}</td><td>{_fmt(value.get('fps'))}</td>"
+                           f"<td>{_fmt(value.get('header_fps'))}</td>"
+                           f"<td>{_fmt(value.get('gap_p95_ms'))}</td>"
+                           f"<td>{_fmt(value.get('gap_max_ms'))}</td></tr>")
+        for window in value.get("windows_10s") or []:
+            trend_rows += (f"<tr><td>{html.escape(role)}</td><td>{window['start_s']}–{window['end_s']}</td>"
+                           f"<td>{window['frames']}</td><td>{_fmt(window.get('fps'))}</td>"
+                           f"<td>{_fmt(window.get('header_fps'))}</td>"
+                           f"<td>{_fmt(window.get('gap_max_ms'))}</td></tr>")
 
     spatial_rows_html = ""
     for item in spatial.get("rows") or []:
         spatial_rows_html += (
             "<tr>"
+            f"<td>{html.escape(str(item.get('session') or ''))}</td>"
             f"<td>{html.escape(str(item.get('condition_id') or ''))}</td>"
             f"<td>{html.escape(str(item.get('pair_id') or ''))}</td>"
             f"<td>{html.escape(str(item.get('edge_id') or ''))}</td>"
@@ -327,6 +376,8 @@ def write_report(out: Path, summary: dict) -> None:
             f"<td>{_fmt(item.get('abs_offset_px'))}</td>"
             f"<td>{_fmt(item.get('limit_px'), 1)}</td>"
             f"<td>{html.escape(str(item.get('manual_review') or '—'))}</td>"
+            f"<td>{_fmt(item.get('angle_deg'))}</td>"
+            f"<td>{_fmt(item.get('along_offsets_px'))}</td>"
             f"<td>{status_span(item.get('status'))}</td>"
             f"<td>{html.escape(str(item.get('note') or ''))}</td>"
             "</tr>")
@@ -340,6 +391,13 @@ def write_report(out: Path, summary: dict) -> None:
             f'<figure><img src="overlays/{html.escape(pid)}_valid_mask.png">'
             "<figcaption>有效深度掩码（白 = 非零）</figcaption></figure>"
         )
+
+    output_links = "".join(f'<li><a href="{name}">{name}</a></li>' for name in
+                           ("pairs.csv", "unmatched.csv", "summary.json", "spatial_edges.csv", "annotations.json")
+                           if (out / name).is_file())
+    source_links = "".join(
+        f'<li><a href="{html.escape(os.path.relpath(item["report"], out))}">'
+        f'{html.escape(item["session"])}</a></li>' for item in summary.get("sources", []))
 
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -364,10 +422,18 @@ def write_report(out: Path, summary: dict) -> None:
 
 <h2>结论</h2>
 <table>
+ <tr><th>软件检查总体（不代替现场阶段验收）</th><td>{status_span(summary.get('overall_status', UNVERIFIED))}</td></tr>
+ <tr><th>采集完整性</th><td>{status_span(integrity.get('status', UNVERIFIED))}</td></tr>
  <tr><th>时间同步</th><td>{status_span(sync.get('status'))}</td></tr>
+ <tr><th>几何语义</th><td>{status_span(geometry.get('status', UNVERIFIED))}</td></tr>
  <tr><th>空间对齐</th><td>{status_span(spatial.get('status'))}</td></tr>
 </table>
 <ul>{reasons}</ul>
+
+<h2>实际时间覆盖</h2>
+<p>配对率只描述已收到的窗口内图像，不能证明录满声明时长。终点余量不参与配对统计。</p>
+<table>{row('声明稳定时长 s', integrity.get('declared_duration_s'))}{integrity_rows}</table>
+<p>{html.escape('；'.join(integrity.get('reasons') or []))}</p>
 
 <h2>采集与配置</h2>
 <table>
@@ -388,24 +454,28 @@ def write_report(out: Path, summary: dict) -> None:
 
 <h2>静态像素对齐（三场景 / 六条边）</h2>
 <table>
- <tr><th>条件</th><th>配对</th><th>边界</th><th>有符号偏移 px</th><th>绝对偏移 px</th>
- <th>门槛 px</th><th>人工复查</th><th>状态</th><th>备注</th></tr>
+ <tr><th>session</th><th>条件</th><th>配对</th><th>边界</th><th>有符号偏移 px</th><th>绝对偏移 px</th>
+ <th>门槛 px</th><th>人工复查</th><th>夹角 °</th><th>沿线 5/50/95% 偏移 px</th><th>状态</th><th>备注</th></tr>
  {spatial_rows_html}
 </table>
 <p>门槛 {_fmt(spatial.get('limit_px'), 1)} px 是待现场复核的排错门槛；数值只代表每条边的中点，
 两端是否张开由人工复查给出。</p>
+
+<h2>几何语义前置检查</h2><table>{geometry_rows}</table>
+<h2>频率与接收间隔</h2>
+<p>窗口 fps = 窗口帧数 / 声明时长；header fps = (帧数−1) / header 跨度。
+两者分开看，接收间隔反映落盘接收节奏，header 统计不能证明曝光完全同步。</p>
+<table><tr><th>流</th><th>窗口 fps</th><th>header fps</th><th>接收间隔 P95 ms</th><th>最大接收间隔 ms</th></tr>{frequency_rows}</table>
+<table><tr><th>流</th><th>窗口 s</th><th>帧数</th><th>窗口 fps</th><th>header fps</th><th>最大接收间隔 ms</th></tr>{trend_rows}</table>
 
 <h2>选中图对</h2>
 {images or '<p>本段没有选中图对。</p>'}
 
 <h2>输出文件</h2>
 <ul>
- <li><a href="pairs.csv">pairs.csv</a>：全部配对（序号 / 纳秒时间戳 / 有符号时间差）</li>
- <li><a href="unmatched.csv">unmatched.csv</a>：未配对帧与异常帧，分母完整</li>
- <li><a href="summary.json">summary.json</a>：参数、规则、统计与各项状态</li>
- <li><a href="spatial_edges.csv">spatial_edges.csv</a>：六行逐边结果</li>
- <li><a href="annotations.json">annotations.json</a>：本地窗口点选的原图坐标</li>
+ {output_links}
 </ul>
+<h2>来源报告</h2><ul>{source_links}</ul>
 </body></html>
 """
     (out / "report.html").write_text(doc, encoding="utf-8")

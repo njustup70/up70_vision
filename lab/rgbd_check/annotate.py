@@ -14,7 +14,7 @@
     窗口里的图是按显示比例缩放、还可能局部放大的。直接把窗口坐标当测量坐标，
     在缩放 ≠ 1 时会得到系统性偏差，而且看起来「挺合理」——这是本文件最危险的一处。
     规则固定：原图坐标 = 显示坐标 / 显示比例 + 裁剪偏移，左右面板各自先扣面板原点；
-    顶部还有一条 34 像素的说明栏，也要扣掉。
+    顶部还有两行共 58 像素的说明栏，也要扣掉。
 
 已知的坑
     · 边缘检测不参与：这是人工确认的对应参考，不是自动真值（计划书 D2）。
@@ -28,7 +28,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .measure import edge_offset_px
+from .measure import edge_offset_px, edge_diagnostics
 from .report import false_color, load_annotations, load_selected, write_annotations
 
 #: 每个面板的显示尺寸（像素）。两块并排约 1500 宽，普通笔记本也放得下。
@@ -36,7 +36,7 @@ PANEL_W = 760
 PANEL_H = 560
 
 #: 顶部说明栏高度。鼠标坐标是整个窗口的，扣面板原点时必须连它一起扣。
-BAR_H = 34
+BAR_H = 58
 
 #: 允许的放大档位；1 表示「整幅按面板缩放」，不是原始像素。
 ZOOM_LEVELS = (1.0, 2.0, 4.0)
@@ -50,7 +50,7 @@ EDGES_PER_PAIR = 2
 _WINDOW = "rgbd_check annotate"
 
 #: 状态条右侧的固定提示。`cv2.putText` 只认 ASCII（中文会画成方块），所以这里写英文。
-_HINT = "s=save  r=redo  u=unmeasurable  z=zoom  Esc=quit"
+_HINT = "s=save r=redo u=invalid y/n=review z=zoom Enter=next Esc=quit"
 
 
 def view_region(center, zoom: float, image_size) -> tuple:
@@ -87,7 +87,7 @@ def display_to_image(panel_x: float, panel_y: float, panel_origin, region) -> tu
 def in_image(point, image_size) -> bool:
     """点是否在原图范围内（含边界）。"""
     x, y = point
-    return 0 <= x <= image_size[0] and 0 <= y <= image_size[1]
+    return 0 <= x < image_size[0] and 0 <= y < image_size[1]
 
 
 def validate_segment(seg, image_size) -> str | None:
@@ -95,6 +95,8 @@ def validate_segment(seg, image_size) -> str | None:
     if not seg or len(seg) != 2:
         return "线段不完整"
     (x1, y1), (x2, y2) = seg
+    if not all(np.isfinite(v) for v in (x1, y1, x2, y2)):
+        return "端点须为有限坐标"
     if abs(x2 - x1) < 1e-6 and abs(y2 - y1) < 1e-6:
         return "两个端点重合，无法确定边的方向"
     if not in_image((x1, y1), image_size) or not in_image((x2, y2), image_size):
@@ -110,6 +112,7 @@ class PairState:
     condition_id: str
     image_size: tuple
     edges: list = field(default_factory=list)
+    session: str = ""
 
     def add_edge(self, edge_id: str, color_seg, depth_seg) -> str | None:
         """校验并加入一条边；返回 `None` 表示成功，否则是拒绝原因。"""
@@ -128,11 +131,14 @@ class PairState:
             "reason": measured.reason or "",
             "measurement": measured.to_dict(),
             "manual_review": None,
+            "diagnostics": edge_diagnostics(color_seg, depth_seg),
         })
         return None
 
     def add_unmeasurable(self, edge_id: str, reason: str) -> None:
         """记一条「不可测」的边：保留空位置与原因，不能算进合格。"""
+        if len(self.edges) >= EDGES_PER_PAIR:
+            return
         self.edges.append({
             "edge_id": edge_id, "color_segment": None, "depth_segment": None,
             "confirmed": False, "reason": reason or "人工判定不可测",
@@ -140,7 +146,7 @@ class PairState:
         })
 
     def to_frame(self) -> dict:
-        return {"pair_id": self.pair_id, "condition_id": self.condition_id,
+        return {"session": self.session, "pair_id": self.pair_id, "condition_id": self.condition_id,
                 "image_size": list(self.image_size), "edges": self.edges}
 
 
@@ -155,7 +161,8 @@ class _Window:
         self.depth_vis = false_color(depth)
         self.unmeasurable_reason = unmeasurable_reason
         self.state = PairState(pair_id=entry["pair_id"], condition_id=entry["condition_id"],
-                               image_size=(color.shape[1], color.shape[0]))
+                               image_size=(color.shape[1], color.shape[0]),
+                               session=entry.get("session", ""))
         self.zoom = 1.0
         self.center = (color.shape[1] / 2.0, color.shape[0] / 2.0)
         self.draft = []
@@ -175,6 +182,8 @@ class _Window:
                  f"edge {min(saved + 1, EDGES_PER_PAIR)}",
                  f"points {len(self.draft)}/4",
                  f"zoom {self.zoom:.0f}x"]
+        if saved < EDGES_PER_PAIR:
+            parts.append("click " + ("color-start", "color-end", "depth-start", "depth-end")[len(self.draft)])
         if saved:
             measured = self.state.edges[-1].get("measurement") or {}
             offset = measured.get("offset_px")
@@ -182,6 +191,9 @@ class _Window:
                 parts.append(f"last {offset:+.2f}px")
             else:
                 parts.append("last unmeasurable")
+            reviews = {e.get("manual_review") for e in self.state.edges if e.get("measurement")}
+            parts.append("review " + (next(iter(reviews)) if len(reviews) == 1 and None not in reviews
+                                       else "pending y/n"))
         return "   ".join(parts)
 
     # ---------- 坐标 ----------
@@ -252,8 +264,7 @@ class _Window:
         cv2.putText(bar, self._status(), (6, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 255, 255), 1, cv2.LINE_AA)
         # 窗口名只能是 ASCII，快捷键提示就画在右边，免得看不到能用哪些键。
-        (hint_w, _), _ = cv2.getTextSize(_HINT, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.putText(bar, _HINT, (canvas.shape[1] - hint_w - 8, 22),
+        cv2.putText(bar, _HINT, (6, 48),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (170, 170, 170), 1, cv2.LINE_AA)
         return np.vstack([bar, canvas])
 
@@ -284,7 +295,7 @@ class _Window:
         if len(self.draft) < 4:
             self.message = f"已点 {len(self.draft)}/4，下一步：{steps[len(self.draft)]}"
             return
-        edge_id = f"edge{len(self.state.edges) + 1}"
+        edge_id = self.next_edge_id()
         problem = self.state.add_edge(edge_id, (self.draft[0], self.draft[1]),
                                       (self.draft[2], self.draft[3]))
         self.draft = []
@@ -305,21 +316,30 @@ class _Window:
         if key == -1 or key == 255:
             return "none"
         char = chr(key & 0xFF).lower()
+        if char in ("y", "n"):
+            if self.draft:
+                self.message = "先完成或清除当前草稿，再复查"
+                return "none"
+            for edge in self.state.edges:
+                if (edge.get("measurement") or {}).get("offset_px") is not None:
+                    edge["manual_review"] = "yes" if char == "y" else "no"
+            self.message = "人工复查已记录；y 无明显张开 / n 有问题"
+            return "save"
         if char == "s":
             self.draft = []
             self.message = "已保存本窗口标注；Esc 退出"
             return "save"
         if char == "r":
+            if not self.draft and self.state.edges:
+                self.state.edges.pop()
+            for edge in self.state.edges:
+                edge["manual_review"] = None
             self.draft = []
             self.message = "重选当前边：左图点彩色起点"
             return "none"
         if char == "u":
-            try:
-                reason = input("这条边不可测的原因（回车用默认）：").strip()
-            except EOFError:                        # 没有终端（后台起窗口）时用默认原因
-                reason = self.unmeasurable_reason
-            reason = reason or self.unmeasurable_reason
-            self.state.add_unmeasurable(f"edge{len(self.state.edges) + 1}", reason)
+            reason = self.unmeasurable_reason or "人工判定不可测（空洞或边界不清，详见叠加图）"
+            self.state.add_unmeasurable(self.next_edge_id(), reason)
             self.draft = []
             self.message = f"已记为不可测：{reason or '人工判定不可测'}"
             return "save"
@@ -330,7 +350,14 @@ class _Window:
             return "none"
         if key == 27:
             return "quit"
+        if key in (10, 13):
+            return "next"
         return "none"
+
+    def next_edge_id(self) -> str:
+        used = {e["edge_id"] for e in self.state.edges}
+        return next((f"edge{i}" for i in range(1, EDGES_PER_PAIR + 1)
+                     if f"edge{i}" not in used), "edge2")
 
 
 def _persist(out: Path, annotations: dict, done: dict) -> None:
@@ -343,8 +370,7 @@ def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
         drop_edges=()) -> int:
     """跑完整个标注会话；返回退出码（0 有保存 / 2 没有可标注的图对）。
 
-    :param unmeasurable_reason: 按 `u` 时的默认原因。窗口在后台起（nohup）没有终端，
-        原来的 `input()` 会抛 EOFError，只能记一句通用文案；用这个参数把具体原因带进来。
+    :param unmeasurable_reason: 按 `u` 时保存的原因；没有设置时使用默认原因，不读终端。
     :param clear_edges: 清掉该目录已标的全部边，从头重标
     :param drop_edges: 只删这些 `edge_id`，其余保留（重标某一条时用）
     """
@@ -354,7 +380,8 @@ def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
         return 2
 
     annotations = load_annotations(out)
-    done = {frame["pair_id"]: frame for frame in annotations.get("frames", [])}
+    done = {(frame.get("session", ""), frame["pair_id"]): frame
+            for frame in annotations.get("frames", [])}
 
     # 重标：清掉已有边。每对图最多两条边，标满后 `u`/`r` 都进不去，只能先清。
     if clear_edges or drop_edges:
@@ -364,6 +391,8 @@ def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
                     if not (clear_edges or edge.get("edge_id") in drop_edges)]
             removed += len(frame.get("edges") or []) - len(kept)
             frame["edges"] = kept
+            for edge in kept:
+                edge["manual_review"] = None
         _persist(out, annotations, done)
         print(f"已清除 {removed} 条边（{'全部' if clear_edges else '、'.join(sorted(drop_edges))}），"
               f"本次从头标")
@@ -376,7 +405,8 @@ def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
         data = np.load(entry["_npz"])
         window = _Window(entry, data["color"], data["depth"],
                          unmeasurable_reason=unmeasurable_reason)
-        previous = done.get(entry["pair_id"])
+        identity = (entry.get("session", ""), entry["pair_id"])
+        previous = done.get(identity)
         if previous and previous.get("edges"):
             window.state.edges = previous["edges"]
             window.message = "已载入上次的标注；可直接 Esc 退出或重标"
@@ -388,13 +418,15 @@ def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
         cv2.setMouseCallback(_WINDOW, window.on_mouse)
         while True:
             cv2.imshow(_WINDOW, window.render())
-            if window.on_key(cv2.waitKey(20)) in ("save", "quit"):
+            action = window.on_key(cv2.waitKey(20))
+            if action in ("save", "quit", "next"):
+                done[identity] = window.state.to_frame()
+                _persist(out, annotations, done)
+                _save_annotated_image(out, entry, window)
+            if action in ("quit", "next") or cv2.getWindowProperty(_WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                 break
-
-        done[entry["pair_id"]] = window.state.to_frame()
-        _persist(out, annotations, done)
-        _save_annotated_image(out, entry, window)
-        _ask_manual_review(out, entry, window.state, annotations, done)
+        if action != "next":
+            break
 
     _persist(out, annotations, done)
     cv2.destroyAllWindows()
@@ -406,31 +438,3 @@ def _save_annotated_image(out: Path, entry: dict, window: "_Window") -> None:
     folder = out / "overlays"
     folder.mkdir(exist_ok=True)
     cv2.imwrite(str(folder / f"{entry['pair_id']}_annotated.png"), window.render())
-
-
-def _ask_manual_review(out: Path, entry: dict, state: "PairState", annotations: dict,
-                       done: dict) -> None:
-    """终端里问一句人工复查结论：数值只量中点，两端张开只能靠人看。"""
-    measured = [e for e in state.edges if e.get("measurement")]
-    if not measured:
-        print(f"  {entry['condition_id']}：没有可测量的边，跳过人工复查")
-        return
-    if any(e.get("manual_review") for e in measured):
-        return
-    line = "、".join(f"{e['edge_id']} {e['measurement']['offset_px']:+.2f} px"
-                    for e in measured)
-    print(f"  {entry['condition_id']}：{line}")
-    try:
-        answer = input("    人工复查（看 overlays 里的 *_annotated.png）：两端无明显张开、"
-                       "无整体错位？[y/N/回车=跳过] ").strip().lower()
-    except EOFError:                                # 后台起窗口时没有终端可问，留未复查
-        print("    没有终端可交互，人工复查保持未填")
-        return
-    review = {"y": "yes", "n": "no"}.get(answer)
-    if not review:
-        print("    保持未复查（报告里记 UNVERIFIED）")
-        return
-    for edge in measured:
-        edge["manual_review"] = review
-    done[entry["pair_id"]] = state.to_frame()
-    _persist(out, annotations, done)

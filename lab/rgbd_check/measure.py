@@ -19,6 +19,7 @@
 """
 
 from dataclasses import dataclass
+import math
 
 from .status import PASS, UNVERIFIED
 
@@ -55,10 +56,14 @@ class Measurement:
 
 def _segment_ok(seg) -> bool:
     """两个端点、长度不为零。重合端点无法定义方向。"""
-    if not seg or len(seg) != 2:
+    if seg is None or len(seg) != 2:
         return False
-    (x1, y1), (x2, y2) = seg
-    return abs(x2 - x1) > 1e-6 or abs(y2 - y1) > 1e-6
+    try:
+        (x1, y1), (x2, y2) = seg
+        return all(math.isfinite(v) for v in (x1, y1, x2, y2)) and \
+            (abs(x2 - x1) > 1e-6 or abs(y2 - y1) > 1e-6)
+    except (TypeError, ValueError):
+        return False
 
 
 def _cross(ax: float, ay: float, bx: float, by: float) -> float:
@@ -105,3 +110,39 @@ def edge_offset_px(color_seg, depth_seg) -> Measurement:
     hit = (mx + t * nx, my + t * ny)
     return Measurement(offset_px=float(t), status=PASS, reason="",
                        midpoint=(mx, my), normal=(nx, ny), hit=hit)
+
+
+def edge_diagnostics(color_seg, depth_seg) -> dict:
+    """夹角与 5%/50%/95% 位置的法向偏移；仅诊断，不增加验收点数。
+
+    任一交点在线段外就保留 null，禁止延长线段凑结果。
+    """
+    if not _segment_ok(color_seg) or not _segment_ok(depth_seg):
+        return {"angle_deg": None, "along_offsets_px": [None, None, None]}
+    (x, y), (x2, y2) = color_seg
+    (dx, dy), (dx2, dy2) = depth_seg
+    vx, vy, ux, uy = x2 - x, y2 - y, dx2 - dx, dy2 - dy
+    angle = math.degrees(math.atan2(_cross(vx, vy, ux, uy), vx * ux + vy * uy))
+    angle = (angle + 90) % 180 - 90  # 端点倒着点不应产生 180° 的假张开
+    length = math.hypot(vx, vy)
+    nx, ny = -vy / length, vx / length
+    denom = _cross(nx, ny, ux, uy)
+    offsets = []
+    for fraction in (0.05, 0.5, 0.95):
+        mx, my = x + fraction * vx, y + fraction * vy
+        if abs(denom) < _PARALLEL_EPS:
+            offsets.append(None)
+            continue
+        t = _cross(dx - mx, dy - my, ux, uy) / denom
+        u = _cross(dx - mx, dy - my, nx, ny) / denom
+        offsets.append(round(t, 3) if -1e-9 <= u <= 1 + 1e-9 else None)
+    return {"angle_deg": round(angle, 3), "along_offsets_px": offsets}
+
+
+def nonparallel_segments(first, second) -> bool:
+    """要求两条参考边方向不同；只判退化，不引入新的角度验收阈值。"""
+    if not _segment_ok(first) or not _segment_ok(second):
+        return False
+    a, b = first
+    c, d = second
+    return abs(_cross(b[0] - a[0], b[1] - a[1], d[0] - c[0], d[1] - c[1])) > _PARALLEL_EPS

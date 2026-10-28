@@ -76,6 +76,7 @@ class BagScan:
     topics: dict
     frames: dict = field(default_factory=dict)      # role -> [FrameMeta]
     infos: dict = field(default_factory=dict)       # role -> CameraInfo 摘要
+    geometry_changes: list = field(default_factory=list)
     topic_table: list = field(default_factory=list)  # 所有图像/内参话题，给 inspect 用
 
 
@@ -222,9 +223,19 @@ def scan(bag_dir: Path, topics: dict) -> BagScan:
                             step=int(msg.step),
                             frame_id=str(msg.header.frame_id),
                         ))
+                        first, current = result.frames[role][0], result.frames[role][-1]
+                        if (first.width, first.height, first.encoding, first.frame_id) != \
+                                (current.width, current.height, current.encoding, current.frame_id):
+                            note = f"{role} 图像几何/编码在序号 {index} 变化"
+                            if not result.geometry_changes:
+                                result.geometry_changes.append(note)
                     elif role not in result.infos:
                         # 内参在整段里应当不变；只留第一帧，后面变化了会在 analyze 里比对。
                         result.infos[role] = _info_summary(msg)
+                    elif result.infos[role] != _info_summary(msg):
+                        note = f"{role} CameraInfo 在序号 {index} 变化"
+                        if not any(item.startswith(f"{role} CameraInfo") for item in result.geometry_changes):
+                            result.geometry_changes.append(note)
                     index += 1
             return result
     except BagError:
