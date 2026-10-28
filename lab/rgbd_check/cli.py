@@ -74,6 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_annotate.add_argument("--unmeasurable-reason", default="",
                             help="按 u 记「不可测」时的默认原因。窗口在后台起时没有终端可输入，"
                                  "原因只能靠这个参数带进来，否则只会记成一句通用文案")
+    p_annotate.add_argument("--clear-edges", action="store_true",
+                            help="清掉已标的全部边再开窗口（重标整段时用）")
+    p_annotate.add_argument("--drop-edge", action="append", default=[], metavar="EDGE_ID",
+                            help="只删指定边（可重复，例如 --drop-edge edge2），其余保留")
     return parser
 
 
@@ -261,7 +265,8 @@ def run_annotate(args) -> int:
     if not (out / "summary.json").is_file():
         print(f"❌ {out} 不是 analyze 的输出目录（缺 summary.json）")
         return 2
-    code = run_window(out, unmeasurable_reason=args.unmeasurable_reason)
+    code = run_window(out, unmeasurable_reason=args.unmeasurable_reason,
+                      clear_edges=args.clear_edges, drop_edges=args.drop_edge)
     if code != 0:
         return code
 

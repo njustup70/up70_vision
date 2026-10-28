@@ -339,11 +339,14 @@ def _persist(out: Path, annotations: dict, done: dict) -> None:
     write_annotations(out, annotations)
 
 
-def run(out: Path, unmeasurable_reason: str = "") -> int:
+def run(out: Path, unmeasurable_reason: str = "", clear_edges: bool = False,
+        drop_edges=()) -> int:
     """跑完整个标注会话；返回退出码（0 有保存 / 2 没有可标注的图对）。
 
     :param unmeasurable_reason: 按 `u` 时的默认原因。窗口在后台起（nohup）没有终端，
         原来的 `input()` 会抛 EOFError，只能记一句通用文案；用这个参数把具体原因带进来。
+    :param clear_edges: 清掉该目录已标的全部边，从头重标
+    :param drop_edges: 只删这些 `edge_id`，其余保留（重标某一条时用）
     """
     entries = load_selected(out)
     if not entries:
@@ -352,6 +355,18 @@ def run(out: Path, unmeasurable_reason: str = "") -> int:
 
     annotations = load_annotations(out)
     done = {frame["pair_id"]: frame for frame in annotations.get("frames", [])}
+
+    # 重标：清掉已有边。每对图最多两条边，标满后 `u`/`r` 都进不去，只能先清。
+    if clear_edges or drop_edges:
+        removed = 0
+        for frame in done.values():
+            kept = [edge for edge in (frame.get("edges") or [])
+                    if not (clear_edges or edge.get("edge_id") in drop_edges)]
+            removed += len(frame.get("edges") or []) - len(kept)
+            frame["edges"] = kept
+        _persist(out, annotations, done)
+        print(f"已清除 {removed} 条边（{'全部' if clear_edges else '、'.join(sorted(drop_edges))}），"
+              f"本次从头标")
 
     # Qt 后端的窗口句柄是在第一次 imshow 时才真正创建的；先 setMouseCallback 会报
     # "NULL window handler"。所以先画一帧、再挂回调，并且全程复用同一个窗口。
