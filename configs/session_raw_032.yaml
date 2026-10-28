@@ -1,0 +1,48 @@
+# raw_032：共同像素网格核查 · 偏右下（第 3/3 段）。
+#
+# 与 raw_031 关于画面中心对称的一侧。三段合起来，角点覆盖中心 + 左上 + 右下，
+# 足够判断偏差是「常数平移」还是「随位置变化的网格差」。
+
+schema_version: 1
+session: raw_032
+
+scene:
+  condition_id: grid_lower_right
+  position: down-right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: 镜头前沿到棋盘平面
+  nominal_distance_mm: null
+  distance_source: null
+  object_id: chessboard_a4_7x10_23mm
+  checker_cell_mm: 23.0
+  checker_inner_corners: [6, 9]
+  object_size_mm: [161.0, 230.0, 1.0]
+  camera_fixed: true
+  measurement_notes: 与 raw_030 同机位、同一块棋盘（23 mm 格，内角点 6 x 9）；只把板子移到画面右下 1/4
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16; SW D2C to COLOR
+  actual_profile: null
+  geometry_evidence: null
+  geometry_validation:
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
+  snapshots: null
