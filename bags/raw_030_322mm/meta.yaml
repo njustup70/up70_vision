@@ -1,0 +1,109 @@
+schema_version: 1
+session: raw_030
+scene:
+  condition_id: grid_center
+  position: center
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: 镜头前沿到棋盘平面
+  nominal_distance_mm: null
+  distance_source: null
+  object_id: chessboard_a4_7x10_23mm
+  object_size_mm:
+  - 161.0
+  - 230.0
+  - 1.0
+  checker_cell_mm: 23.0
+  checker_inner_corners:
+  - 6
+  - 9
+  camera_fixed: true
+  measurement_notes: 方格 23 mm（尺量，不是打印标称值）、图案 7 列 x 10 行、内角点 6 x 9；A4 纸无硬背板，板上拟合残差 RMS 1.67 mm；板面距相机约 322 mm（深度读数，非尺测）
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16; SW D2C to COLOR
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 29.76
+      message_count: 417
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 29.76
+      message_count: 417
+  geometry_validation:
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
+  complete: true
+  reason: null
+  integrity:
+    status: PASS
+    reasons: []
+    declared_duration_s: 10.0
+    stable_start_bag_ns: 1793176516204194750
+    stable_end_bag_ns: 1793176526204194750
+    streams:
+      color:
+        first_bag_ns: 1793176513209516611
+        last_bag_ns: 1793176527204846565
+        available_after_warmup_s: 11.000651815
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+      depth:
+        first_bag_ns: 1793176513204194750
+        last_bag_ns: 1793176527200884172
+        available_after_warmup_s: 10.996689422
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+  recorder_node: rgbd_recorder_38830
+  recording_margin_s: 1.0
+  started_at: '2026-10-28T16:35:12+08:00'
+  finished_at: '2026-10-28T16:35:27+08:00'
+  camera_node_resolved: /camera/camera
+  dds_profile: /home/xiyang/up70/up70_vision/ros2_ws/install/vision_depth/share/vision_depth/config/fastdds_shm_only.xml
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 417
+    /camera/depth/image_raw: 417
+    /camera/color/camera_info: 417
+    /camera/color/image_raw: 417
+  actual_fps:
+    /tf_static: 0.07
+    /tf: 0.0
+    /camera/depth/camera_info: 29.76
+    /camera/depth/image_raw: 29.76
+    /camera/color/camera_info: 29.76
+    /camera/color/image_raw: 29.76
+  bag_duration_s: 14.014133563
+  bag_size_bytes: 849366049
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P

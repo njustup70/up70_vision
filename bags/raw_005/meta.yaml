@@ -1,0 +1,68 @@
+schema_version: 1
+session: raw_005
+scene:
+  condition_id: short_check_848
+  position: null
+  distance_band: null
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: null
+  object_size_mm: null
+  camera_fixed: true
+  measurement_notes: 10 s 短包，仅验双流完整性；对比 1280x720 与 848x480 的丢帧
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 27.0
+      message_count: 330
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 27.25
+      message_count: 333
+  complete: true
+  reason: null
+  started_at: '2026-10-27T22:33:15+08:00'
+  finished_at: '2026-10-27T22:33:28+08:00'
+  camera_node_resolved: /camera/camera
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 366
+    /camera/depth/image_raw: 333
+    /camera/color/camera_info: 367
+    /camera/color/image_raw: 330
+  actual_fps:
+    /tf_static: 0.08
+    /tf: 0.0
+    /camera/depth/camera_info: 29.95
+    /camera/depth/image_raw: 27.25
+    /camera/color/camera_info: 30.03
+    /camera/color/image_raw: 27.0
+  bag_duration_s: 12.221462172
+  bag_size_bytes: 674651223
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P

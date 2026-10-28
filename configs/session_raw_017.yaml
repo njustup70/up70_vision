@@ -1,0 +1,36 @@
+# raw_017：第一轮的带宽对照。与 raw_004 同场景、同模式、同 10 s 稳定段，
+# 只把双流从 1280x720@30 降到 848x480@30——raw_004 实测两路都只有约 24 fps、
+# 配对率 87%，先确认这是「分辨率/带宽」还是「驱动本身不稳」。
+# 画面内容仍未指定，不用于精度结论。
+
+schema_version: 1
+session: raw_017
+
+scene:
+  condition_id: right_mid
+  position: right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 箱子移至画面右侧中距（右移约 25 cm），口述约 550 mm，未用卷尺实测
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null

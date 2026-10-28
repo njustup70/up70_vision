@@ -9,6 +9,7 @@
 | `types.py` | `Intrinsics` / `SuctionParams` / `GraspTarget`。3D 类型只在这里，与根级 `types.py` 互不 import |
 | `primitives.py` | 与吸盘无关的基本运算：反投影、体素降采样、RANSAC 平面、深度图连通域 |
 | `core.py` | 抓取业务：顶面拟合、可吸性打分、编排、门面 `detect_grasp_targets()` |
+| `timing.py` | RGB-D 整数时间窗口与双流覆盖检查；ROS 外壳与离线工具共用，不读文件、不依赖 ROS |
 | `__init__.py` | 对外只暴露 `detect_grasp_targets` / `analyze` 和三个类型 |
 
 ## 文件归属判据
@@ -57,6 +58,28 @@ for t in targets:                                # 按可吸性分数降序
 - 可吸性五条：计划书 3.3 的初值，仍需实测调整
 
 ## 现在的位置
+
+后续改进路线见 [深度相机识别改进方案](docs/深度相机识别改进方案.md)，涵盖真实数据结论、2D 与深度融合、视觉侧职责及接口验收；其中待实施内容不代表当前已实现。
+
+同步 RGB-D 的采集与静态像素对齐冒烟检查单独走一条线，计划与门槛见
+[同步 RGB-D 采集与对齐改进计划](docs/同步RGB-D采集与对齐改进计划.md)。主要入口：
+
+```bash
+ros2 launch vision_depth rgbd_capture.launch.py mode:=aligned   # raw / sync / aligned
+ros2 run vision_depth rgbd_capture --ros-args -p output_dir:=... -p duration_s:=10.0 \
+  -p session_config:=...
+python -m lab.rgbd_check inspect|analyze|annotate ...
+```
+
+新增 `summarize` 汇总三场景、`compare-replay` 比较回放重录的 header/内容/配对、
+`grid-check` 用棋盘格核查彩色与对齐深度是否同一像素网格。
+实际覆盖、几何前提、窗口复查按键及旧包更正见
+[2026-10-28 验收修正说明](docs/RGB-D验收修正与补采说明-20261028.md)。
+新录包的独立复算和空间边界限制见 [重采核查](docs/RGB-D重采核查-20261028.md)。
+
+报告落在 `output/rgbd/<session>/`（`report.html`、`pairs.csv`、`summary.json`、
+`spatial_edges.csv`、`overlays/`、`annotations.json`），本阶段默认不入库。
+注意：本阶段的「对齐深度」不接入 `fuse_node`——纯深度基线先用 raw 话题。
 
 算法先在 `lab/proto_depth.py` 里跑通并调好参数，再提炼到这里（ROS2 接入方案 10.2 的四步落地）。`lab/` 那个脚本保留作为离线调试工具，读 npy/bag 看中间结果；ROS 侧的 `fuse_node` 调的是这里。
 

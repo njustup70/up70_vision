@@ -1,0 +1,44 @@
+# raw_023：三场景重录 · 中心近处（箱子叠放垫高）。
+#
+# 与 raw_022 的区别：raw_022 的箱子直接放桌面，相机俯角偏大，左右轮廓背后是地面
+# （约 500 mm，与箱子 407 mm 只差 100 mm 且断断续续），只有顶边可量。
+# 这一段把目标箱叠到另一个箱子上垫高，让左右轮廓离开地平线、背后落到哑光背景板上。
+#
+# 代价：目标箱不再是「直接放在支撑面上」，后续抓取场景（顶面 + 支撑平面同时可见）
+# 仍需另采；本段只服务像素对齐的边测量。
+
+schema_version: 1
+session: raw_023
+
+scene:
+  condition_id: center_near
+  position: center
+  distance_band: near
+  measured_distance_mm: null
+  distance_reference: null
+  # 标称档：口述 near=400 mm，非尺测。原摆放已撤除，无法回补实测，
+  # 所以 measured_distance_mm 保持 null，只把标称值单独记下来备查。
+  nominal_distance_mm: 400.0
+  distance_source: nominal_spoken   # nominal_spoken / tape_measured / depth_reading
+  object_id: box_01_on_box_02
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 目标箱叠放在另一个箱子上垫高，使左右轮廓落在哑光背景板上；距镜头前沿口述约 400 mm，未卷尺实测
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null

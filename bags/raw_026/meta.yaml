@@ -1,0 +1,96 @@
+schema_version: 1
+session: raw_026
+scene:
+  condition_id: continuous_120s
+  position: right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01_on_box_02
+  object_size_mm:
+  - 205.0
+  - 205.0
+  - 205.0
+  camera_fixed: true
+  measurement_notes: 第四轮补齐：静止画面连续录 120 s，沿用 right_mid 摆法不动；距离约 535 mm（深度读数，非卷尺）
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 120.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 29.97
+      message_count: 3719
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 29.97
+      message_count: 3719
+  geometry_validation: null
+  complete: true
+  reason: null
+  integrity:
+    status: PASS
+    reasons: []
+    declared_duration_s: 120.0
+    stable_start_bag_ns: 1793172219532533505
+    stable_end_bag_ns: 1793172339532533505
+    streams:
+      color:
+        first_bag_ns: 1793172216538640782
+        last_bag_ns: 1793172340610346780
+        available_after_warmup_s: 121.077813275
+        covered_duration_s: 120.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+      depth:
+        first_bag_ns: 1793172216532533505
+        last_bag_ns: 1793172340604798050
+        available_after_warmup_s: 121.072264545
+        covered_duration_s: 120.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+  recorder_node: rgbd_recorder_21746
+  recording_margin_s: 1.0
+  started_at: '2026-10-28T15:23:35+08:00'
+  finished_at: '2026-10-28T15:25:40+08:00'
+  camera_node_resolved: /camera/camera
+  dds_profile: /home/xiyang/up70/up70_vision/ros2_ws/install/vision_depth/share/vision_depth/config/fastdds_shm_only.xml
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 3719
+    /camera/depth/image_raw: 3719
+    /camera/color/camera_info: 3719
+    /camera/color/image_raw: 3719
+  actual_fps:
+    /tf_static: 0.01
+    /tf: 0.0
+    /camera/depth/camera_info: 29.97
+    /camera/depth/image_raw: 29.97
+    /camera/color/camera_info: 29.97
+    /camera/color/image_raw: 29.97
+  bag_duration_s: 124.079735698
+  bag_size_bytes: 7574517000
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P

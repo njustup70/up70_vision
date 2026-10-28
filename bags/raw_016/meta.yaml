@@ -1,0 +1,72 @@
+schema_version: 1
+session: raw_016
+scene:
+  condition_id: invalid_center_mid
+  position: center
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01
+  object_size_mm:
+  - 205.0
+  - 205.0
+  - 205.0
+  camera_fixed: true
+  measurement_notes: 实测箱子中心 x=441/848（52%），不符合「右侧」条件；作废样本，改用 raw_017
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 30.04
+      message_count: 365
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 30.04
+      message_count: 365
+  complete: true
+  reason: null
+  started_at: '2026-10-27T23:14:32+08:00'
+  finished_at: '2026-10-27T23:14:45+08:00'
+  camera_node_resolved: /camera/camera
+  dds_profile: /home/xiyang/up70/up70_vision/ros2_ws/install/vision_depth/share/vision_depth/config/fastdds_shm_only.xml
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 365
+    /camera/color/image_raw: 365
+    /camera/depth/image_raw: 365
+    /camera/color/camera_info: 365
+  actual_fps:
+    /tf_static: 0.08
+    /tf: 0.0
+    /camera/depth/camera_info: 30.04
+    /camera/color/image_raw: 30.04
+    /camera/depth/image_raw: 30.04
+    /camera/color/camera_info: 30.04
+  bag_duration_s: 12.15040062
+  bag_size_bytes: 743452054
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P
