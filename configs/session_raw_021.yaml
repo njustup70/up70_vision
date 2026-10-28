@@ -1,0 +1,35 @@
+# 验收程序修正后的首个 10 秒完整性短包。场景和尺测未确认，不能用于空间/抓取精度验收。
+schema_version: 1
+session: raw_021
+scene:
+  condition_id: capture_integrity_smoke
+  position: null
+  distance_band: null
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: null
+  object_size_mm: null
+  camera_fixed: null
+  measurement_notes: 仅验证新版录包就绪计时、实际覆盖与双流完整性；不代填场景、尺测或人工复查
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16; SW D2C to COLOR
+  geometry_validation:
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []

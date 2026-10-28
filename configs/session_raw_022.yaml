@@ -1,0 +1,39 @@
+# raw_022：三场景重录 · 中心近处（center_near）。
+#
+# 与 raw_014 的区别
+#   1) 箱子后面加哑光背景板，让轮廓外侧也有有效深度——raw_014 的箱体四周是深度无效区，
+#      点选量到的是「有效区边界」而不是「物体边界」。
+#   2) 录包器已加 1 s 收尾余量，实际覆盖应能录满声明时长（raw_021 已验证）。
+#   3) 距离仍以口述为准，未用卷尺实测，故 measured_distance_mm 保持 null。
+
+schema_version: 1
+session: raw_022
+
+scene:
+  condition_id: center_near
+  position: center
+  distance_band: near
+  measured_distance_mm: null
+  distance_reference: null
+  object_id: box_01
+  object_size_mm: [205.0, 205.0, 205.0]
+  camera_fixed: true
+  measurement_notes: 重录第一段：箱子居中、距镜头前沿口述约 400 mm（未卷尺实测）；箱后竖哑光背景板，要求轮廓外侧有有效深度
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16 (D2C 到彩色)
+  actual_profile: null
+  geometry_evidence: null
+  snapshots: null
