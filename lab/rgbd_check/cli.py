@@ -71,6 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_annotate = sub.add_parser("annotate", help="开本地窗口点选边界（每边 4 次点击）")
     p_annotate.add_argument("out", type=Path, help="analyze 的输出目录")
+    p_annotate.add_argument("--unmeasurable-reason", default="",
+                            help="按 u 记「不可测」时的默认原因。窗口在后台起时没有终端可输入，"
+                                 "原因只能靠这个参数带进来，否则只会记成一句通用文案")
     return parser
 
 
@@ -258,7 +261,7 @@ def run_annotate(args) -> int:
     if not (out / "summary.json").is_file():
         print(f"❌ {out} 不是 analyze 的输出目录（缺 summary.json）")
         return 2
-    code = run_window(out)
+    code = run_window(out, unmeasurable_reason=args.unmeasurable_reason)
     if code != 0:
         return code
 

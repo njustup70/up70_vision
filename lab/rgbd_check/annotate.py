@@ -44,7 +44,13 @@ ZOOM_LEVELS = (1.0, 2.0, 4.0)
 #: 每对图要标的边数（计划书 D2：方向不同的两条，例如上边与右边）。
 EDGES_PER_PAIR = 2
 
-_WINDOW = "rgbd_check annotate | s=保存 r=重选 u=不可测 z=放大 Esc=退出"
+#: 窗口名必须是纯 ASCII。OpenCV 4.6 + Qt 后端下，窗口名里带中文时
+#: `setMouseCallback` 会报 `NULL window handler`（窗口能显示、能收键盘，就是挂不上鼠标），
+#: 而 `namedWindow`/`imshow` 不报错，很容易误判成窗口没建出来。快捷键提示画在状态条里。
+_WINDOW = "rgbd_check annotate"
+
+#: 状态条右侧的固定提示。`cv2.putText` 只认 ASCII（中文会画成方块），所以这里写英文。
+_HINT = "s=save  r=redo  u=unmeasurable  z=zoom  Esc=quit"
 
 
 def view_region(center, zoom: float, image_size) -> tuple:
@@ -141,11 +147,13 @@ class PairState:
 class _Window:
     """窗口内的一次标注会话：状态机 + 画图 + 键位。"""
 
-    def __init__(self, entry: dict, color: np.ndarray, depth: np.ndarray):
+    def __init__(self, entry: dict, color: np.ndarray, depth: np.ndarray,
+                 unmeasurable_reason: str = ""):
         self.entry = entry
         self.color = color
         self.depth = depth
         self.depth_vis = false_color(depth)
+        self.unmeasurable_reason = unmeasurable_reason
         self.state = PairState(pair_id=entry["pair_id"], condition_id=entry["condition_id"],
                                image_size=(color.shape[1], color.shape[0]))
         self.zoom = 1.0
@@ -153,6 +161,28 @@ class _Window:
         self.draft = []
         self.message = "左图点彩色边起点（共 4 次点击）；s 保存 / r 重选 / u 不可测"
         self.cursor = (0, 0)
+
+    # ---------- 状态条 ----------
+
+    def _status(self) -> str:
+        """状态条只画 ASCII。
+
+        `cv2.putText` 不认中文，中文提示会画成一整排方块（`？？？`），比不提示还糟。
+        所以进度、点数、上一条边的结果都用英文短标签拼出来；中文提示只留在代码注释里。
+        """
+        saved = len(self.state.edges)
+        parts = [f"saved {saved}/{EDGES_PER_PAIR}",
+                 f"edge {min(saved + 1, EDGES_PER_PAIR)}",
+                 f"points {len(self.draft)}/4",
+                 f"zoom {self.zoom:.0f}x"]
+        if saved:
+            measured = self.state.edges[-1].get("measurement") or {}
+            offset = measured.get("offset_px")
+            if offset is not None:
+                parts.append(f"last {offset:+.2f}px")
+            else:
+                parts.append("last unmeasurable")
+        return "   ".join(parts)
 
     # ---------- 坐标 ----------
 
@@ -219,8 +249,12 @@ class _Window:
         canvas = np.hstack([left, right])
         cv2.line(canvas, (PANEL_W, 0), (PANEL_W, PANEL_H), (90, 90, 90), 1)
         bar = np.zeros((BAR_H, canvas.shape[1], 3), dtype=np.uint8)
-        cv2.putText(bar, self.message, (6, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        cv2.putText(bar, self._status(), (6, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 255, 255), 1, cv2.LINE_AA)
+        # 窗口名只能是 ASCII，快捷键提示就画在右边，免得看不到能用哪些键。
+        (hint_w, _), _ = cv2.getTextSize(_HINT, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        cv2.putText(bar, _HINT, (canvas.shape[1] - hint_w - 8, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (170, 170, 170), 1, cv2.LINE_AA)
         return np.vstack([bar, canvas])
 
     # ---------- 交互 ----------
@@ -283,7 +317,8 @@ class _Window:
             try:
                 reason = input("这条边不可测的原因（回车用默认）：").strip()
             except EOFError:                        # 没有终端（后台起窗口）时用默认原因
-                reason = ""
+                reason = self.unmeasurable_reason
+            reason = reason or self.unmeasurable_reason
             self.state.add_unmeasurable(f"edge{len(self.state.edges) + 1}", reason)
             self.draft = []
             self.message = f"已记为不可测：{reason or '人工判定不可测'}"
@@ -304,8 +339,12 @@ def _persist(out: Path, annotations: dict, done: dict) -> None:
     write_annotations(out, annotations)
 
 
-def run(out: Path) -> int:
-    """跑完整个标注会话；返回退出码（0 有保存 / 2 没有可标注的图对）。"""
+def run(out: Path, unmeasurable_reason: str = "") -> int:
+    """跑完整个标注会话；返回退出码（0 有保存 / 2 没有可标注的图对）。
+
+    :param unmeasurable_reason: 按 `u` 时的默认原因。窗口在后台起（nohup）没有终端，
+        原来的 `input()` 会抛 EOFError，只能记一句通用文案；用这个参数把具体原因带进来。
+    """
     entries = load_selected(out)
     if not entries:
         print("❌ 这个目录里没有 analyze 选出的图对（先跑 analyze）")
@@ -320,7 +359,8 @@ def run(out: Path) -> int:
 
     for entry in entries:
         data = np.load(entry["_npz"])
-        window = _Window(entry, data["color"], data["depth"])
+        window = _Window(entry, data["color"], data["depth"],
+                         unmeasurable_reason=unmeasurable_reason)
         previous = done.get(entry["pair_id"])
         if previous and previous.get("edges"):
             window.state.edges = previous["edges"]
