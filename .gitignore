@@ -48,6 +48,7 @@ data/*
 *.local.yaml
 
 # AI 协作内部目录：会话数据与项目记忆，不进版本库
+/AGENTS.md
 .workbuddy/
 .ai-memory/
 .codebuddy/

@@ -362,11 +362,12 @@ def refine_without_outliers(image_points: list, image_size: tuple[int, int],
     return second, dropped
 
 
-def write_calibration(path: str, intrinsics: CameraIntrinsics) -> str:
+def write_calibration(path: str, intrinsics: CameraIntrinsics, *, overwrite: bool = True) -> str:
     """把标定结果写成 YAML（带注释头，说明谁在读它）。
 
     :param path: 输出路径
     :param intrinsics: 标定结果
+    :param overwrite: False 使用排他创建；已有文件报错，保留旧标定。
     :return: 实际写入的路径
     :raises OSError: 目录建不出来或写失败
     """
@@ -385,7 +386,7 @@ def write_calibration(path: str, intrinsics: CameraIntrinsics) -> str:
         "#   rms_px        : 重投影 RMS（像素），越小越好；>1 说明这批图拍得不够好\n"
         f"# 生成时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     )
-    with open(path, "w", encoding="utf-8") as handle:
+    with open(path, "w" if overwrite else "x", encoding="utf-8") as handle:
         handle.write(header)
         # default_flow_style=None：短的列表（如 image_size）写成 [1280, 800]，长列表保持块状
         yaml.safe_dump(intrinsics.to_dict(), handle, allow_unicode=True,
@@ -465,6 +466,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--square-mm", type=float, default=None,
                     help="格子边长毫米（**必填**；填尺子量到的实际值，不是打印标称值）")
     ap.add_argument("--out", default=DEFAULT_OUT, help=f"标定结果写哪（默认 {DEFAULT_OUT}）")
+    ap.add_argument("--no-overwrite", action="store_true",
+                    help="结果文件已存在时拒绝写入，保护以前的标定")
     ap.add_argument("--from", dest="from_file", default=None,
                     help="不重新标，只读回一份已有标定并打印")
     ap.add_argument("--max-rms", type=float, default=RMS_USABLE,
@@ -588,7 +591,7 @@ def main(argv=None) -> int:
             intrinsics = refined
     ok = print_report(intrinsics, used, skipped, args.max_rms)
     try:
-        path = write_calibration(args.out, intrinsics)
+        path = write_calibration(args.out, intrinsics, overwrite=not args.no_overwrite)
         print(f"  已写入     : {path}")
         print(f"  下一步     : python lab/calibrate_camera.py --from {path}   # 复核")
     except OSError as exc:
