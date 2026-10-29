@@ -37,7 +37,29 @@ OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
 
 `--class-names` 按模型类别索引给出**完整类名表**；不传则读取权重旁的 `.names.json` 或模型元数据，仍没有时显示类别编号。`--imgsz`、类别、阈值必须与实际模型相符。输出保存模型 SHA-256 和推理参数。
 
-如果一帧有多个检测框，`frames/<pair>_boxes.png` 会标出从 0 开始的框号；有多个平面时分别保存 `<pair>_planeN.png` 和掩码。没有明确选择时状态为歧义，不自动选择最大框或最大平面。查看图后写入每帧选择，使用新输出目录重跑：
+### 搭档模型 `yolov8n_mix2`（2026-10-29）
+
+本地将 `yolov8n_mix2.onnx` 和 `yolov8n_mix2.names.json` 一起放入 `knowledge/models/`，保留同名配对；两者均被 Git 忽略，新 clone 需自行取得。类名表为 `0=block、1=top`，不凭名称推断对应单箱侧面或顶面。现有检测器接收 BGR 图，内部等比补边、转 RGB 并除以 255；已在项目容器 OpenCV 4.14 中验证 640 输入和 `(1,6,8400)` 输出兼容，无需重新导出或安装 torch。
+
+以下命令从仓库根运行，使用已保存的 `raw_036/c241_d240` 一对图，不重新读 bag；容器按当前用户创建报告。输出目录必须不存在，重复运行时换新名字。
+
+```bash
+docker compose -f .devcontainer/docker-compose.yml run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e OPENBLAS_NUM_THREADS=1 -e PYTHONDONTWRITEBYTECODE=1 up70-vision \
+  python -B -m lab.side_rgbd_measure output/rgbd/raw_036 \
+  --weights knowledge/models/yolov8n_mix2.onnx \
+  --imgsz 640 --conf 0.45 \
+  --out output/side/yolov8n_mix2_raw036_01
+```
+
+不传 `--class-id`，保留两个类别；不传 `--class-names`，自动读取同名 JSON。首轮结果位于上述输出目录的 `results.json`、`report.md` 和 `frames/`。模型 SHA-256 为 `9430baaae11efcad98f2434267c21567ecb4a190347c50f4201d1df2d6a00684`。
+
+**本次实际结果：** 校正图上检出一个 `top`，置信度约 0.6043，框为 `[339,68,486,359)`；该框跨越上下两个箱子，唯一平面候选也覆盖两块正面。此前用户确认的上方单箱人工框为 `[340,67,484,215)`，其复核不能沿用到本次 YOLO 输出。本轮仅证明模型加载、解码及侧面工具落盘链路通过，状态仍为 `candidate_unverified`，几何与空间均为 `UNVERIFIED`；没有单箱尺寸或绝对精度通过结论。
+
+本轮未进行 YOLO 60 帧检查。先核实搭档的类别定义及训练标注，确认实际检测框对应目标单箱，再在具备 `[lab]` 依赖（含 rosbags）的环境增加 `--bag bags/raw_036 --frames 60`，并改用新输出目录。多框、多平面仍按下述规则逐帧选择，不自动裁成上方箱子，也不将高置信度当作选面正确。
+
+检测框图与平面叠加图均显示从 0 开始的框号、模型类名和置信度，例如 `0: top 0.60`；人工框显示 `0: manual`，不显示置信度。平面图另加 `plane=N` 对应候选号，标签不表示已复核正确。如果一帧有多个检测框，`frames/<pair>_boxes.png` 会保留所有框；有多个平面时分别保存 `<pair>_planeN.png` 和掩码。没有明确选择时状态为歧义，不自动选择最大框或最大平面。查看图后写入每帧选择，使用新输出目录重跑：
 
 ```json
 {

@@ -8,7 +8,7 @@ import pytest
 from lab.side_rgbd_measure.evaluate import displacement, evaluate
 from lab.side_rgbd_measure.geometry import PlaneParams, measure_planes, visible_extent
 from lab.side_rgbd_measure.input import rectified_color_and_mask
-from lab.side_rgbd_measure.run import run_frames
+from lab.side_rgbd_measure.run import draw_detection_label, run_frames
 from vision.depth import Intrinsics
 from vision.types import Detection
 
@@ -187,3 +187,17 @@ def test_reference_rejects_invalid_or_unselected_truth():
         evaluate(result, {'frames': {}, 'side_size_mm': 123, 'size_source': 'ruler'})
     with pytest.raises(ValueError, match='truth boxes'):
         evaluate(result, {'frames': {'p1': {'boxes': [[0, 0, 0, 10]]}}})
+
+
+def test_detection_label_stays_inside_narrow_image():
+    """框号标签要落在图内：贴右边缘、图很窄时也不能画到图外或抛错。"""
+    image = np.zeros((40, 60, 3), np.uint8)
+    draw_detection_label(image, {'bbox_xyxy': [58, 38, 59, 39], 'class_name': 'top',
+                                 'score': 0.6043}, 3, plane_index=1)
+    assert image.shape == (40, 60, 3)
+    assert image.any(), '没有画出任何标签像素'
+    narrow = np.zeros((40, 24, 3), np.uint8)
+    draw_detection_label(narrow, {'bbox_xyxy': [22, 20, 23, 39], 'class_name': 'block',
+                                  'score': None}, 0)
+    assert narrow.shape == (40, 24, 3)
+    assert narrow.any(), '窄图里也应画出标签'
