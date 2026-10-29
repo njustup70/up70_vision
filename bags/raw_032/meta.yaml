@@ -1,0 +1,117 @@
+schema_version: 1
+session: raw_032
+scene:
+  condition_id: grid_lower_right
+  position: down-right
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: 镜头前沿到棋盘平面
+  nominal_distance_mm: null
+  distance_source: null
+  object_id: chessboard_a4_7x10_23mm
+  checker_cell_mm: 23.0
+  checker_inner_corners:
+  - 6
+  - 9
+  object_size_mm:
+  - 161.0
+  - 230.0
+  - 1.0
+  camera_fixed: true
+  measurement_notes: 与 raw_030 同机位、同一块棋盘（23 mm 格，内角点 6 x 9）；只把板子移到画面右下 1/4
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16; SW D2C to COLOR
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 30.03
+      message_count: 423
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 30.03
+      message_count: 423
+  geometry_validation:
+    status: PASS
+    same_pixel_grid: true
+    target_pixel_grid: 彩色=带畸变网格（D 非零、采集时未去畸变）；对齐深度=零畸变目标 K
+    depth_z_definition: 沿彩色光轴的 Z；与棋盘 PnP 几何相差 2%，对应格宽不确定度
+    backprojection: X=(u-cx)*Z/fx、Y=(v-cy)*Z/fy，Z 取对齐深度值
+    optical_frame: camera_color_optical_frame
+    grid_shift_max_px: 3.66
+    grid_shift_at_r0_5_px: 1.23
+    pnp_rms_px: 0.276
+    pnp_rms_zero_distortion_px: 0.277
+    board_center_px: [573.0, 202.6]
+    board_distance_mm: 488.1
+    limit_note: 位移场上限由驱动发布的 D 算出；棋盘只覆盖到 r≈0.37，画面边缘未独立验证
+    sources:
+    - grid_check.json
+  complete: true
+  reason: null
+  integrity:
+    status: PASS
+    reasons: []
+    declared_duration_s: 10.0
+    stable_start_bag_ns: 1793178088795302465
+    stable_end_bag_ns: 1793178098795302465
+    streams:
+      color:
+        first_bag_ns: 1793178085802683073
+        last_bag_ns: 1793178099881710211
+        available_after_warmup_s: 11.086407746
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+      depth:
+        first_bag_ns: 1793178085795302465
+        last_bag_ns: 1793178099877302263
+        available_after_warmup_s: 11.081999798
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+  recorder_node: rgbd_recorder_43202
+  recording_margin_s: 1.0
+  started_at: '2026-10-28T17:01:25+08:00'
+  finished_at: '2026-10-28T17:01:39+08:00'
+  camera_node_resolved: /camera/camera
+  dds_profile: /home/xiyang/up70/up70_vision/ros2_ws/install/vision_depth/share/vision_depth/config/fastdds_shm_only.xml
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 423
+    /camera/depth/image_raw: 423
+    /camera/color/camera_info: 423
+    /camera/color/image_raw: 423
+  actual_fps:
+    /tf_static: 0.07
+    /tf: 0.0
+    /camera/depth/camera_info: 30.03
+    /camera/depth/image_raw: 30.03
+    /camera/color/camera_info: 30.03
+    /camera/color/image_raw: 30.03
+  bag_duration_s: 14.088227919
+  bag_size_bytes: 861586287
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P

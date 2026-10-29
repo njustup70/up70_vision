@@ -1,0 +1,67 @@
+# bag 内 meta.yaml 的最小结构（采集器自动生成，这份是给人对照/手补的模板）。
+#
+# 为什么要有它：没有 meta 的 bag 等于废数据——过两周不会记得相机怎么架的、
+# 箱子摆在哪、这段是不是对齐模式。bags/README.md 对 meta 是硬性要求。
+#
+# 字段来源分两类，不要混：
+#   scene.*    人实测填写（采集器只复制，不改写）
+#   capture.*  采集器写实际值（请求档位与实测档位分开记）
+#
+# 未知写 null。null 表示「没测」，0 表示「测到 0」，两者不能互换。
+
+schema_version: 1
+session: null
+
+scene:
+  condition_id: null
+  position: null
+  distance_band: null
+  measured_distance_mm: null
+  distance_reference: null
+  nominal_distance_mm: null # 标称档（口述/按档位摆放），非尺测；不得当真值参与误差计算
+  distance_source: null     # nominal_spoken / tape_measured / depth_reading
+  object_id: null
+  object_size_mm: null
+  camera_fixed: null
+  measurement_notes: null
+
+capture:
+  mode: null                # raw / sync / aligned
+  camera_node: null
+  warmup_s: null
+  duration_s: null
+  complete: false           # 正常收尾、四路落盘且双图像覆盖完整才为 true；失败段保留作诊断
+  reason: null              # 未完成时的原因
+  topics:
+    color: null
+    depth: null
+    color_info: null
+    depth_info: null
+  depth_unit: mm
+  time_domain: null
+  requested_profile: null
+  actual_profile: null      # 由 bag 的 metadata.yaml 反算：宽高、编码、帧数、实际帧率
+  message_count: null
+  actual_fps: null
+  bag_duration_s: null
+  bag_size_bytes: null
+  started_at: null
+  finished_at: null
+  snapshots: snapshots      # 参数、QoS、内参与首帧探测都在这里
+  geometry_evidence: snapshots/stream_probe.json
+  recording_margin_s: 1.0
+  integrity: null           # 稳定窗口、各路覆盖/缺失时长和 PASS/FAIL；由实际 bag 计算
+  geometry_validation:      # 不能只靠 K/frame_id 相同判通过；依据详见几何语义核查说明
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
+
+environment:
+  ros_distro: null
+  driver: orbbec_camera
+  driver_version: null
+  host: null

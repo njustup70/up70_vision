@@ -7,8 +7,28 @@
 | 文件 | 放什么 |
 |---|---|
 | `types.py` | `Intrinsics` / `SuctionParams` / `GraspTarget`。3D 类型只在这里，与根级 `types.py` 互不 import |
-| `core.py` | 算法实现与门面函数 `detect_grasp_targets()` |
+| `primitives.py` | 与吸盘无关的基本运算：反投影、体素降采样、RANSAC 平面、深度图连通域 |
+| `core.py` | 抓取业务：顶面拟合、可吸性打分、编排、门面 `detect_grasp_targets()` |
+| `timing.py` | RGB-D 整数时间窗口与双流覆盖检查；ROS 外壳与离线工具共用，不读文件、不依赖 ROS |
 | `__init__.py` | 对外只暴露 `detect_grasp_targets` / `analyze` 和三个类型 |
+
+## 文件归属判据
+
+只有一条：**描述这段代码时，需不需要提到「吸盘 / 抓取 / 吸附面」？**
+
+| 不需要 → `primitives.py` | 需要 → `core.py` |
+|---|---|
+| `backproject`：像素 + 深度 → 三维点 | `fit_top_face`：一团点 → **物块顶面的吸附点** |
+| `voxel_downsample`：一堆点 → 更少的点 | `score_suction`：**吸盘能不能吸住** |
+| `fit_plane_ransac`：一堆点 → 平面方程 | `analyze` / `detect_grasp_targets`：→ 抓取目标 |
+| `label_clusters`：深度图 → 每个像素属于第几团 | |
+
+这条判据的意义是防止 `core.py` 继续膨胀。反投影、降采样、平面拟合、连通域这四件事
+将来做深度-彩色对齐、手眼标定、多目标分割时都要再用，它们不该被绑在"抓取"里。
+`fit_top_face` / `score_suction` 虽然也在算几何，但它们的存在理由就是吸盘，所以留在 core。
+
+读文件、解析 bag、真值对比、命令行参数一律在 `lab/`；ROS 消息转换一律在
+`ros2_ws/src/vision_depth/`。
 
 ## 对外接口
 
@@ -39,7 +59,31 @@ for t in targets:                                # 按可吸性分数降序
 
 ## 现在的位置
 
+后续改进路线见 [深度相机识别改进方案](docs/深度相机识别改进方案.md)，涵盖真实数据结论、2D 与深度融合、视觉侧职责及接口验收；其中待实施内容不代表当前已实现。
+
+同步 RGB-D 的采集与静态像素对齐冒烟检查单独走一条线，计划与门槛见
+[同步 RGB-D 采集与对齐改进计划](docs/同步RGB-D采集与对齐改进计划.md)。主要入口：
+
+```bash
+ros2 launch vision_depth rgbd_capture.launch.py mode:=aligned   # raw / sync / aligned
+ros2 run vision_depth rgbd_capture --ros-args -p output_dir:=... -p duration_s:=10.0 \
+  -p session_config:=...
+python -m lab.rgbd_check inspect|analyze|annotate ...
+```
+
+新增 `summarize` 汇总三场景、`compare-replay` 比较回放重录的 header/内容/配对、
+`grid-check` 用棋盘格核查彩色与对齐深度是否同一像素网格。
+实际覆盖、几何前提、窗口复查按键及旧包更正见
+[2026-10-28 验收修正说明](docs/RGB-D验收修正与补采说明-20261028.md)。
+新录包的独立复算和空间边界限制见 [重采核查](docs/RGB-D重采核查-20261028.md)。
+
+报告落在 `output/rgbd/<session>/`（`report.html`、`pairs.csv`、`summary.json`、
+`spatial_edges.csv`、`overlays/`、`annotations.json`），本阶段默认不入库。
+注意：本阶段的「对齐深度」不接入 `fuse_node`——纯深度基线先用 raw 话题。
+
 算法先在 `lab/proto_depth.py` 里跑通并调好参数，再提炼到这里（ROS2 接入方案 10.2 的四步落地）。`lab/` 那个脚本保留作为离线调试工具，读 npy/bag 看中间结果；ROS 侧的 `fuse_node` 调的是这里。
+
+进度、实测数字、未完成项与踩过的坑见 [`docs/progress.md`](docs/progress.md)。改参数或做精度测试前先看一遍，尤其是「未完成与下一步」和「踩过的坑」两节。
 
 ## 已知的坑
 

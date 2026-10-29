@@ -1,0 +1,49 @@
+# raw_031：共同像素网格核查 · 偏左上（第 2/3 段）。
+#
+# 同一机位、同一块棋盘，只把板子挪到画面左上 1/4。目的：让角点覆盖画面另一片区域。
+# 如果彩色与深度的偏差只出现在边缘、中心为零，那就是畸变网格不一致；
+# 如果整幅图都是同一个常数平移，那是外参问题。单靠居中的一段区分不了这两种。
+
+schema_version: 1
+session: raw_031
+
+scene:
+  condition_id: grid_upper_left
+  position: up-left
+  distance_band: mid
+  measured_distance_mm: null
+  distance_reference: 镜头前沿到棋盘平面
+  nominal_distance_mm: null
+  distance_source: null
+  object_id: chessboard_a4_7x10_23mm
+  checker_cell_mm: 23.0
+  checker_inner_corners: [6, 9]
+  object_size_mm: [161.0, 230.0, 1.0]
+  camera_fixed: true
+  measurement_notes: 与 raw_030 同机位、同一块棋盘（23 mm 格，内角点 6 x 9）；只把板子移到画面左上 1/4
+
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  complete: false
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: color 848x480@30 MJPG, depth 848x480@30 Y16; SW D2C to COLOR
+  actual_profile: null
+  geometry_evidence: null
+  geometry_validation:
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
+  snapshots: null
