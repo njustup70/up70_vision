@@ -103,7 +103,7 @@ detector:
   #   提醒：YOLOv8 是 AGPL-3.0；对外发布前要跟队长确认许可。
   yolo:
     weights: knowledge/models/yolov8n.onnx
-    conf: 0.25            # 置信度下限；调低会明显多出误检
+    conf: 0.45            # 置信度下限；实测 0.25 时环境物会被误检成方块（2026-10-29 调）
     iou: 0.45             # NMS 的 IoU 阈值；调低会吃掉相邻的框
     imgsz: 640            # ONNX 的固定输入边长（必须是 32 的倍数，与权重一致）
     max_detections: 32

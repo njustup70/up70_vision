@@ -10,6 +10,12 @@ from ..types import is_marker
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 #: 判色结果 -> 框颜色（BGR）。unknown 是灰色，表示"没判出颜色"
+#: 已知类名 -> 固定框色。`top` 是"红蓝各半"的塔顶，跟颜色不是一对一关系，
+#: 所以给它一个独立颜色，避免"HUD 里 top 框有时红有时蓝"这种看起来像 bug 的现象。
+CLASS_DRAW_BGR = {
+    "top": (255, 0, 255),
+}
+
 COLOR_DRAW_BGR = {
     "red": (0, 0, 255),
     "yellow": (0, 215, 255),
@@ -35,6 +41,18 @@ def put_text(image_bgr, text: str, org, scale: float = 0.5,
 
 def color_for(name: str | None):
     return COLOR_DRAW_BGR.get(str(name), COLOR_DRAW_BGR["unknown"])
+
+
+def box_color(det):
+    """一个检测框该用什么颜色画。
+
+    判色族（blob）按 `color` 上色；YOLO 的 `top` 按类名上色（固定品红），
+    `block` 仍按判出的红/蓝上色——这样"塔顶框变红/变蓝"就不会再被误认成判色出错。
+    """
+    name = str(getattr(det, "class_name", "") or "")
+    if name in CLASS_DRAW_BGR:
+        return CLASS_DRAW_BGR[name]
+    return color_for(det.color)
 
 def detection_label(det) -> tuple[str, float]:
     """拼检测框的标签文字与数值。
