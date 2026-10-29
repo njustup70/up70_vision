@@ -1,0 +1,97 @@
+# 单箱可见侧面：离线 RGB-D 测量
+
+此工具将人工框或 YOLO 框与对齐深度组合，列出平面候选，供人工复查和独立测量对照。候选是 `candidate_unverified`，不是物体中心、抓取目标或绝对精度通过。已有的顶面抓取与 ROS 接口不受影响。
+
+## 输入和环境
+
+在仓库根目录使用带项目依赖及 `[lab]` 可选依赖的 Python。输入为 `python -m lab.rgbd_check analyze` 产生的报告；要求采集模式 aligned、深度单位 mm、采集完整性及同步 PASS、两路 CameraInfo/尺寸/frame 相符。彩色 plumb_bob、对齐深度零畸变。几何与空间状态即使为 UNVERIFIED 也如实保留。
+
+默认测量报告中已保存的一对图；指定 `--bag` 后重新检查原包及一对一配对，从稳定区间等间隔选取不同帧，不够时如实报告实际数量。原包路径必须与报告来源一致；相机内参变化或不一致时拒绝处理。大批量读取会把选中图像放在内存中；848×480 的 60 对约需 120 MB 图像数据，另加算法内存。
+
+```bash
+# 先生成报告；输出目录必须不存在。已有报告可直接使用。
+python -m lab.rgbd_check analyze bags/<bag> --out output/rgbd/<report>
+
+# 一帧：窗口中在校正后的图选侧面；无显示时传 --bbox x1 y1 x2 y2。
+OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
+  --out output/side/<single>
+
+# 静止场景：同一人工框应用于 60 对；右、下边界不包含在框里。
+OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
+  --bag bags/<bag> --frames 60 --bbox 100 80 300 260 \
+  --out output/side/<manual>
+```
+
+框内的有效点不要求属于顶面。默认体素 4 mm、平面内点阈值 6 mm、200 次 RANSAC、种子 0、至少 120 个降采样点；最多 3 个候选。这是调试初值而非准确度门槛。结果保存每次参数；`--leaf-mm`、`--threshold-mm`、`--iterations`、`--seed`、`--min-points` 可调整。评估前冻结参数。
+
+## 模型与候选选择
+
+权重不入 Git。取得搭档的 ONNX 权重后，确认模型输入尺寸、BGR 输入预处理和输出兼容现有 YOLO 解码，再提供目标类别编号。若对方只有 `.pt`，可在已安装对应 ultralytics 的环境使用 `python lab/export_yolo.py --weights <file.pt>` 导出；某些模型结构或导出格式与当前解码器不兼容，必须用真实样本单独核查，不能把文件扩展名当兼容证明。
+
+```bash
+OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
+  --bag bags/<bag> --frames 60 --weights /path/to/model.onnx \
+  --imgsz 640 --class-id 0 --class-names box \
+  --out output/side/<yolo>
+```
+
+`--class-names` 按模型类别索引给出**完整类名表**；不传则读取权重旁的 `.names.json` 或模型元数据，仍没有时显示类别编号。`--imgsz`、类别、阈值必须与实际模型相符。输出保存模型 SHA-256 和推理参数。
+
+如果一帧有多个检测框，`frames/<pair>_boxes.png` 会标出从 0 开始的框号；有多个平面时分别保存 `<pair>_planeN.png` 和掩码。没有明确选择时状态为歧义，不自动选择最大框或最大平面。查看图后写入每帧选择，使用新输出目录重跑：
+
+```json
+{
+  "c241_d240": {"detection": 0, "plane": 1},
+  "c246_d245": {"plane": 0}
+}
+```
+
+使用 `--choices /path/to/choices.json`；框歧义需要先指定 `detection`，重跑查看候选平面后再指定 `plane`。选择逐帧生效，不能假定不同帧的候选号表示同一面。即使只剩一个候选，也须复查是否误选背景。
+
+## 结果与人工评估
+
+输出 `results.json`、`frames.csv`、`report.md` 和 `frames/`。框、法向、平面方程、内点、残差、可见重心和可见区域最小外接矩形均随帧保存；法向朝相机。`plane_distance_mm` 是光心到平面垂距，`centroid_z_mm` 是光轴深度，二者不是同一量。单帧没有可解释的重复性，统计值为 null。
+
+只在操作者逐帧复核后准备标注 JSON。示例中的数值与帧号是格式示例，不是已测结果：
+
+```json
+{
+  "size_source": "尺测，记录量具、端点和不确定度",
+  "side_size_mm": [200.0, 200.0],
+  "frames": {
+    "c241_d240": {
+      "boxes": [[100, 80, 300, 260]],
+      "side_review": "correct",
+      "complete_boundary": true
+    },
+    "c246_d245": {
+      "boxes": [],
+      "side_review": "unknown",
+      "complete_boundary": false
+    }
+  }
+}
+```
+
+`boxes` 是校正网格中人工标注的完整目标框；空列表表示人工确认这一帧无目标，缺少该字段表示不评估框。`side_review` 填 `correct`、`incorrect` 或 `unknown`，针对该运行的选面复查；尺寸误差同时要求 `correct`、`complete_boundary: true`、独立尺测及其来源。未标注的帧不参与框准确率；匹配阈值 IoU 0.5。没有分母时 Precision/Recall 为 null。
+
+```bash
+python -m lab.side_rgbd_measure.evaluate output/side/<manual>/results.json \
+  --annotations /path/to/manual_annotations.json --out output/side/<eval>
+
+# 两次运行必须基于同一 bag；人工框真值一致、选面复查分别记录。
+python -m lab.side_rgbd_measure.evaluate output/side/<manual>/results.json \
+  --annotations /path/to/manual_annotations.json \
+  --compare output/side/<yolo>/results.json \
+  --compare-annotations /path/to/yolo_annotations.json --out output/side/<comparison>
+```
+
+可选的独立平面垂距真值写入 `plane_distance_reference`：`{"value_mm": 500, "reference": "camera_optical_center_to_plane", "source": "..."}`。镜头前沿距离不是光心到平面的垂距，不能直接填入。独立法向真值写 `normal_reference`：`{"normal": [0, 0, -1], "frame_id": "camera_color_optical_frame", "source": "..."}`，frame 必须与结果一致。均只对 `side_review: correct` 的帧比较；没有参考则 UNVERIFIED。
+
+位移比较用 `--baseline <基准段/results.json>`，并在标注中写 `displacement`：`distance_mm`、`source`，以及由操作者确认的 `same_face`、`complete_boundary`、`orientation_unchanged`、`camera_fixed` 均为 true；`reviewed_pair_ids` 与 `baseline_reviewed_pair_ids` 分别列出两段中已确认选面正确的帧编号。两段光学 frame 必须相同。比较两组已复核重心的中位数位移模长；这不是绝对 XYZ 误差。要比较的标注、参考与来源由操作者提供，不从相机深度自动生成真值。
+
+## 最小实测安排
+
+固定相机，以一个侧面平整的箱子，在基准、沿同一直线约 50 mm 和约 100 mm 三个位置各独立摆放录制两次。每段预热 3 s、稳定录 10 s，按已有 aligned 配置采集；每段选 60 对，每段五张人工框及选面复查。记录尺测宽高、实际位移、量具、端点和不确定度。不同位置或姿态重新标注；尺寸测量只在四条物理边界完整可见且无显著深度缺失时比较。
+
+空间对齐尚未验收；结果只作此场景和输入条件下的诊断。测量精度、选择正确率和实际抓取效果需要独立真值和现场复核。
