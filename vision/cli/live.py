@@ -80,6 +80,46 @@ POSE_WARN_LIMIT = 3
 # 人话：窗口左上角最多列几个码的位姿数字。
 # 技术：HUD 每行 22 px、从 y=22 起排；码多时全列会把画面糊住，且会盖到画面中央的码。
 HUD_POSE_LIMIT = 3
+#: HUD 防抖窗口：最近多少帧一起取中位数。27 fps 下 9 帧约 0.33 s，肉眼读得出来又跟得上手
+POSE_MEDIAN_WINDOW = 9
+
+
+def corrected_yaw_deg(tilt_deg: float, yaw_deg: float) -> float:
+    """把 HUD 里的 yaw 折算回"码面内真实转角"。
+
+    为什么需要：`yaw = atan2(R[1,0], R[0,0])` 是**码 x 轴在图像里的方向**，它会被倾角放大：
+
+        yaw_measured = atan( tan(α) / cos(tilt) )      α = 码面内真实转角
+
+    实测：码面内只歪 5°，开到 tilt=60° 时 yaw 会读成 9.9°；开 70° 读成 14.3°。
+    所以"开门式"旋转时看到 yaw 从 0.x 涨到 10+ **不是解错了**，是这个定义在高倾角下放大。
+    反解：α = atan( tan(yaw) · cos(tilt) )。
+    """
+    import math
+    return math.degrees(math.atan(math.tan(math.radians(yaw_deg))
+                                  * math.cos(math.radians(tilt_deg))))
+
+
+def median_pose_line(history) -> str | None:
+    """把最近若干帧的 (d, tilt, yaw) 压成一行中位数，用于 HUD 稳定读数。
+
+    为什么需要：实时 HUD 是逐帧刷新的，角点噪声会让 `d` 在小数位上跳、码接近正视时
+    还会在两解之间翻，肉眼根本读不出"到底多少"。取中位数能同时解决两类抖动。
+
+    `yawc` 是折算回码面内的真实转角（见 `corrected_yaw_deg`），高倾角时看它才稳定。
+
+    :param history: [(distance_mm, tilt_deg, yaw_deg), ...]，已剔除 ambiguous 帧
+    :return: 形如 `med d 511mm tilt 6.4 yaw 6.5 yawc 6.5 (n=9)`；样本不足 3 条时返回 None
+    """
+    if len(history) < 3:
+        return None
+    ds = sorted(x[0] for x in history)
+    ts = sorted(x[1] for x in history)
+    ys = sorted(x[2] for x in history)
+    cs = sorted(corrected_yaw_deg(x[1], x[2]) for x in history)
+    mid = len(history) // 2
+    return (f"med d {ds[mid]:.0f}mm tilt {ts[mid]:.1f} yaw {ys[mid]:.1f} "
+            f"yawc {cs[mid]:.1f} (n={len(history)})")
 
 
 def pose_status_line(enabled: bool, n_poses: int, failures: int) -> str | None:
@@ -276,6 +316,8 @@ def run_aruco_live(argv=None) -> int:
     with_markers = 0      # 至少检出一个码的帧数；用来区分"有码帧 / 无码帧"
     saved = 0             # headless 实际落盘的 PNG 张数（汇总时报告）
     pose_failures = 0     # 位姿解算失败的次数；只进日志与汇总，不影响退出码
+    pose_ambiguous = 0    # 被判成“两解难分”的帧数：这类帧的 yaw 最不可信
+    pose_history = deque(maxlen=POSE_MEDIAN_WINDOW)   # HUD 防抖窗口（非歧义帧）
     size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
     t_start = time.monotonic()            # 循环起点，终端摘要的 t= 与最终平均帧率都以它为基准
@@ -346,11 +388,23 @@ def run_aruco_live(argv=None) -> int:
                              f"markers={len(markers)} ids={ids}",
                              f"fps={fps:.1f}"]
                 for pose in poses[:HUD_POSE_LIMIT]:
+                    if pose.ambiguous:
+                        pose_ambiguous += 1
+                    # 歧义帧打 *：两解难分时 yaw 最不可信（tilt/距离仍基本可信）
                     hud_lines.append(f"id {int(pose.marker_id)} d {pose.distance_mm:.0f}mm "
-                                     f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}")
+                                     f"tilt {pose.tilt_deg:.1f} yaw {pose.yaw_deg:.1f}"
+                                     + (" *amb" if pose.ambiguous else ""))
                 status = pose_status_line(cfg.pose.enabled, len(poses), pose_failures)
                 if status:
                     hud_lines.append(status)
+                # 防抖：只把"非歧义"的帧放进窗口，再取中位数——HUD 上单独一行
+                if poses and not poses[0].ambiguous:
+                    pose_history.append((poses[0].distance_mm, poses[0].tilt_deg,
+                                         poses[0].yaw_deg))
+                if pose_history:
+                    med = median_pose_line(pose_history)
+                    if med:
+                        hud_lines.append(med)
                 draw_hud(canvas, hud_lines)
 
                 # ---- 输出：headless 落盘 / 窗口显示，二选一，不自动降级 ----
@@ -419,7 +473,8 @@ def run_aruco_live(argv=None) -> int:
         frames=frames, with_markers=with_markers, avg_fps=avg_fps,
         # 失败次数单独报：它是"有多少帧拿不到毫米"的唯一线索，不算失败退出
         pose_note=(None if intrinsics is None
-                   else f"边长 {cfg.pose.marker_size_mm} mm，解算失败 {pose_failures} 次"),
+                   else (f"边长 {cfg.pose.marker_size_mm} mm，解算失败 {pose_failures} 次，"
+                         f"歧义 {pose_ambiguous} 帧（*amb 行的 yaw 不可信）")),
         saved_dir=(LIVE_OUT_SUBDIR if args.headless else None),
         saved_count=saved)
 

@@ -159,3 +159,31 @@ def test_live_hud_reports_pose_status():
     assert pose_status_line(False, 0, 0) is None          # 没开位姿：不画
     assert pose_status_line(True, 1, 0) is None           # 有解：每码单独一行，不用状态行
     assert pose_status_line(True, 0, 3) == "pose: no solution (fail 3)"
+
+
+def test_live_hud_median_needs_three_samples():
+    """防抖行：样本不足 3 条不画；够了就取中位数，且不受离群帧拖动。"""
+    from vision.cli.live import median_pose_line
+
+    assert median_pose_line([]) is None
+    assert median_pose_line([(511, 6.4, -0.3), (512, 6.5, -0.2)]) is None
+
+    # 9 条里混进一条离群（d=900, tilt=40）——中位数必须还在 511/6.4 附近
+    history = [(511, 6.4, -0.3)] * 8 + [(900, 40.0, 170.0)]
+    line = median_pose_line(history)
+    assert line is not None and "d 511" in line and "tilt 6.4" in line, line
+
+
+def test_corrected_yaw_removes_tilt_amplification():
+    """yaw 在高倾角下被 1/cos(tilt) 放大；yawc 必须把它折回真实面内角。
+
+    实测现象：码面内只歪 5°，tilt=60° 时 yaw 读 9.9°、tilt=70° 读 14.3°。
+    """
+    from vision.cli.live import corrected_yaw_deg, median_pose_line
+
+    assert abs(corrected_yaw_deg(60.0, 9.9) - 5.0) < 0.1
+    assert abs(corrected_yaw_deg(70.0, 14.3) - 5.0) < 0.1
+    assert abs(corrected_yaw_deg(0.0, 5.0) - 5.0) < 0.01      # 正视时不变
+
+    line = median_pose_line([(511, 60.0, 9.9)] * 5)
+    assert "yawc 5.0" in line, line
