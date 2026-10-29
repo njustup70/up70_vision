@@ -1,0 +1,102 @@
+schema_version: 1
+session: raw_034
+scene:
+  condition_id: center_far
+  position: center
+  distance_band: far
+  measured_distance_mm: 695
+  distance_reference: 镜头前沿至箱子正面
+  nominal_distance_mm: null
+  distance_source: user_supplied
+  object_id: null
+  object_size_mm: null
+  camera_fixed: true
+  measurement_notes: 用户提供距离695 mm，量具与测量不确定度未确认；两个200 mm规格箱子叠放，尺寸未独立实测；背景板贴近箱子背面。
+capture:
+  mode: aligned
+  camera_node: camera
+  warmup_s: 3.0
+  duration_s: 10.0
+  topics:
+    color: /camera/color/image_raw
+    depth: /camera/depth/image_raw
+    color_info: /camera/color/camera_info
+    depth_info: /camera/depth/camera_info
+  depth_unit: mm
+  time_domain: global
+  requested_profile: null
+  actual_profile:
+    color:
+      width: 848
+      height: 480
+      encoding: rgb8
+      frame_id: camera_color_optical_frame
+      fps: 30.02
+      message_count: 422
+    depth:
+      width: 848
+      height: 480
+      encoding: 16UC1
+      frame_id: camera_color_optical_frame
+      fps: 30.02
+      message_count: 422
+  geometry_validation:
+    status: UNVERIFIED
+    same_pixel_grid: null
+    target_pixel_grid: null
+    depth_z_definition: null
+    backprojection: null
+    optical_frame: null
+    sources: []
+  complete: true
+  reason: null
+  integrity:
+    status: PASS
+    reasons: []
+    declared_duration_s: 10.0
+    stable_start_bag_ns: 1793203824339965802
+    stable_end_bag_ns: 1793203834339965802
+    streams:
+      color:
+        first_bag_ns: 1793203821344399655
+        last_bag_ns: 1793203835395736046
+        available_after_warmup_s: 11.055770244
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+      depth:
+        first_bag_ns: 1793203821339965802
+        last_bag_ns: 1793203835392548516
+        available_after_warmup_s: 11.052582714
+        covered_duration_s: 10.0
+        missing_start_s: 0.0
+        missing_end_s: 0.0
+  recorder_node: rgbd_recorder_10494
+  recording_margin_s: 1.0
+  started_at: '2026-10-29T00:10:20+08:00'
+  finished_at: '2026-10-29T00:10:35+08:00'
+  camera_node_resolved: /camera/camera
+  dds_profile: /home/xiyang/up70/up70_vision/ros2_ws/src/vision_depth/config/fastdds_shm_only.xml
+  message_count:
+    /tf_static: 1
+    /tf: 0
+    /camera/depth/camera_info: 422
+    /camera/depth/image_raw: 422
+    /camera/color/camera_info: 422
+    /camera/color/image_raw: 422
+  actual_fps:
+    /tf_static: 0.07
+    /tf: 0.0
+    /camera/depth/camera_info: 30.02
+    /camera/depth/image_raw: 30.02
+    /camera/color/camera_info: 30.02
+    /camera/color/image_raw: 30.02
+  bag_duration_s: 14.057641459
+  bag_size_bytes: 859549463
+  snapshots: snapshots
+  geometry_evidence: snapshots/stream_probe.json
+environment:
+  ros_distro: jazzy
+  driver: orbbec_camera
+  driver_version: 2.9.3
+  host: xiyang-DRB-P
