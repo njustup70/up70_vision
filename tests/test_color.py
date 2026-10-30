@@ -135,3 +135,41 @@ def _run_standalone() -> int:
 
 if __name__ == "__main__":
     sys.exit(_run_standalone())
+
+
+def test_upper_part_bbox_takes_top_half():
+    """塔顶颜色看"上面那半砖"：upper_part_bbox 必须把框高砍半、y1 不动。"""
+    from vision.yolo.color_check import upper_part_bbox
+
+    x1, y1, x2, y2 = 100, 200, 300, 400
+    got = upper_part_bbox((x1, y1, x2, y2))
+    assert got == (100.0, 200.0, 300.0, 300.0), got          # 高 200 → 上半高 100
+    assert upper_part_bbox((x1, y1, x2, y2), 1.0) == (100.0, 200.0, 300.0, 400.0)
+
+    try:
+        upper_part_bbox((x1, y1, x2, y2), 1.5)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("fraction>1 应当报错")
+
+
+def test_top_colour_uses_upper_half():
+    """同一张"上红下蓝"的图：整框判不出单色，取上半块必须判成红色。"""
+    import numpy as np
+
+    from vision.yolo.color_check import judge_color, upper_part_bbox
+
+    # 构造 200x200 的 HSV 图：上半红(H=0)，下半蓝(H=120)，都是高饱和
+    hsv = np.zeros((200, 200, 3), np.uint8)
+    hsv[:100, :] = (0, 200, 200)      # 红
+    hsv[100:, :] = (120, 200, 200)    # 蓝
+    thresholds = {
+        "red": [(0, 120, 70, 10, 255, 255), (170, 120, 70, 179, 255, 255)],
+        "blue": [(105, 120, 70, 135, 255, 255)],
+    }
+    whole = judge_color(hsv, (20, 20, 180, 180), thresholds)
+    upper = judge_color(hsv, upper_part_bbox((20, 20, 180, 180)), thresholds)
+    assert upper.name == "red", (upper.name, upper.ratio)
+    # 整框时两色各半，红色命中率应明显低于只看上半块
+    assert whole.ratio < upper.ratio, (whole.ratio, upper.ratio)

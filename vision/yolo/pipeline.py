@@ -14,7 +14,7 @@
 from dataclasses import dataclass, field
 
 from ..logging import get_logger
-from .color_check import DEFAULT_MIN_VALID_PIXELS, judge_color
+from .color_check import DEFAULT_MIN_VALID_PIXELS, judge_color, upper_part_bbox
 from ..types import Detection, Frame, iou
 
 log = get_logger("pipeline")
@@ -144,8 +144,11 @@ def process_frame(frame: Frame,
         import cv2  # 局部 import：保持模块导入期不做重活
         hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
         for det in color_targets:
+            # 塔顶是 红蓝上下叠放 的半砖：整框判色会被两色稀释，改判上半块
+            region = (upper_part_bbox(det.bbox_xyxy)
+                      if str(getattr(det, "class_name", "")) == "top" else det.bbox_xyxy)
             verdict = judge_color(
-                hsv, det.bbox_xyxy, thresholds,
+                hsv, region, thresholds,
                 min_saturation=cfg.min_saturation,
                 min_value=cfg.min_value,
                 hit_ratio_min=cfg.hit_ratio_min,

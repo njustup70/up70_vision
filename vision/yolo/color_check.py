@@ -147,6 +147,23 @@ def color_ratios(hsv: np.ndarray,
     return ratios, n_valid
 
 
+def upper_part_bbox(bbox, fraction: float = 0.5):
+    """取框的上半部分（`fraction` 为高度比例），用于"塔顶颜色看上面那半砖"。
+
+    为什么需要：`top` 是 200 mm 半砖，红、蓝两块**上下叠放**；整框判色会因为两色各占
+    一半而判成"未命中"或随视角漂。取上部（默认上半）判色，才对应"塔顶是红的还是蓝的"。
+    向下兼容：`fraction=1.0` 就是原框。
+
+    :param bbox: `(x1, y1, x2, y2)` 像素，半开上界
+    :param fraction: 取框高的多少（0.5 = 上半）
+    :return: 新的 bbox，y2 上移到 `y1 + h*fraction`
+    """
+    x1, y1, x2, y2 = (float(v) for v in bbox)
+    if not (0.0 < fraction <= 1.0):
+        raise ValueError(f"fraction 必须在 (0, 1]：{fraction}")
+    return (x1, y1, x2, y1 + (y2 - y1) * fraction)
+
+
 def judge_color(hsv: np.ndarray,
                 bbox: BBox,
                 thresholds: dict,
