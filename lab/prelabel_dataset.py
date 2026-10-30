@@ -8,9 +8,8 @@
     PYTHONPATH=. python lab/prelabel_dataset.py --images data/yolo_real/g6_far \
         --labels data/yolo_real/g6_far_labels
 
-    # 存成训练目录结构（images/labels 同级的 txt）
-    PYTHONPATH=. python lab/prelabel_dataset.py --images data/yolo_real/g6_far \
-        --labels data/yolo_real/g6_far --suffix-labels
+    # 注意：--labels 一定要给**独立目录**，别和 --images 相同——
+    # 写进图片目录会让 jpg 和 txt 混在一起，之后建 images/labels 结构时容易漏挪。
 
 输出
     <labels>/<同名>.txt，每行 `cls cx cy w h`（归一化），class 0=block 1=top
@@ -41,6 +40,9 @@ def main(argv=None) -> int:
     if not files:
         print(f"❌ {args.images} 下没有图片")
         return 1
+    if os.path.abspath(args.labels) == os.path.abspath(args.images):
+        print("❌ --labels 不能和 --images 是同一个目录（txt 会和图片混在一起）", file=sys.stderr)
+        return 2
     os.makedirs(args.labels, exist_ok=True)
     det = YoloDetector(weights=args.model, conf=args.conf)
 
