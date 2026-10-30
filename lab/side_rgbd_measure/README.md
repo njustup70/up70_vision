@@ -26,6 +26,8 @@ OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
 
 框内的有效点不要求属于顶面。默认体素 4 mm、平面内点阈值 6 mm、200 次 RANSAC、种子 0、至少 120 个降采样点；最多 3 个候选。这是调试初值而非准确度门槛。结果保存每次参数；`--leaf-mm`、`--threshold-mm`、`--iterations`、`--seed`、`--min-points` 可调整。评估前冻结参数。
 
+离线默认 `--selection-policy strict`，可显式传 `--selection-policy dominant` 选择明显占优的平面；阈值和定义见[实时查看器说明](../../vision/depth/README.md#实时侧面查看器)，结果 `params` 会记录实际初值。两种策略均不自动选择多个检测框；显式 `--choices` 逐帧指定的平面覆盖自动选择，但仍为未验证候选。
+
 ## 模型与候选选择
 
 权重不入 Git。取得搭档的 ONNX 权重后，确认模型输入尺寸、BGR 输入预处理和输出兼容现有 YOLO 解码，再提供目标类别编号。若对方只有 `.pt`，可在已安装对应 ultralytics 的环境使用 `python lab/export_yolo.py --weights <file.pt>` 导出；某些模型结构或导出格式与当前解码器不兼容，必须用真实样本单独核查，不能把文件扩展名当兼容证明。
@@ -61,7 +63,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm \
 
 本轮未进行 YOLO 60 帧检查。先核实搭档的类别定义及训练标注，确认实际检测框对应目标单箱，再在具备 `[lab]` 依赖（含 rosbags）的环境增加 `--bag bags/raw_036 --frames 60`，并改用新输出目录。多框、多平面仍按下述规则逐帧选择，不自动裁成上方箱子，也不将高置信度当作选面正确。
 
-检测框图与平面叠加图均显示从 0 开始的框号、模型类名和置信度，例如 `0: top 0.60`；人工框显示 `0: manual`，不显示置信度。平面图另加 `plane=N` 对应候选号，标签不表示已复核正确。如果一帧有多个检测框，`frames/<pair>_boxes.png` 会保留所有框；有多个平面时分别保存 `<pair>_planeN.png` 和掩码。没有明确选择时状态为歧义，不自动选择最大框或最大平面。查看图后写入每帧选择，使用新输出目录重跑：
+检测框图与平面叠加图均显示从 0 开始的框号、模型类名和置信度，例如 `0: top 0.60`；人工框显示 `0: manual`，不显示置信度。平面图另加 `plane=N` 对应候选号，标签不表示已复核正确。如果一帧有多个检测框，`frames/<pair>_boxes.png` 会保留所有框；有多个平面时分别保存 `<pair>_planeN.png` 和掩码。默认 `strict` 不自动选择多个平面；`dominant` 仅在条件满足时自动选择。查看图后可写入每帧选择，使用新输出目录重跑：
 
 ```json
 {
