@@ -2,6 +2,8 @@
 
 此工具将人工框或 YOLO 框与对齐深度组合，列出平面候选，供人工复查和独立测量对照。候选是 `candidate_unverified`，不是物体中心、抓取目标或绝对精度通过。已有的顶面抓取与 ROS 接口不受影响。
 
+纯平面计算、像素校正和绘制已提取至 `vision.depth`，本离线入口及结果字段保留。需要在线逐框显示中心时使用 [实时侧面查看器](../../vision/depth/README.md#实时侧面查看器)；实时多框各自测量，离线工具仍保留多框需明确选择的诊断行为。
+
 ## 输入和环境
 
 在仓库根目录使用带项目依赖及 `[lab]` 可选依赖的 Python。输入为 `python -m lab.rgbd_check analyze` 产生的报告；要求采集模式 aligned、深度单位 mm、采集完整性及同步 PASS、两路 CameraInfo/尺寸/frame 相符。彩色 plumb_bob、对齐深度零畸变。几何与空间状态即使为 UNVERIFIED 也如实保留。
