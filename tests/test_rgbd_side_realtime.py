@@ -164,6 +164,32 @@ def test_ambiguous_no_detection_and_calibration_failure():
         SidePipeline(BoxesDetector([]))(job)
 
 
+def test_selected_nonzero_candidate_is_used_for_projection_render_and_snapshot(monkeypatch, tmp_path):
+    """选择非零候选时，投影、显示和快照都对应同一平面。"""
+    from vision_depth import side_pipeline
+    candidates = [
+        {'centroid_mm': [0., 0., 800.], 'inlier_ratio': .2, 'core_coverage': .1, 'residual_rms_mm': 1.},
+        {'centroid_mm': [60., 0., 600.], 'inlier_ratio': .8, 'core_coverage': .9, 'residual_rms_mm': 1.}]
+    measurement = {'status': 'candidate_unverified', 'reason': 'selected', 'selected_index': 1,
+                   'candidates': candidates, 'valid_depth_ratio': 1.}
+    masks = [np.zeros((120, 160), np.uint8), np.ones((120, 160), np.uint8)*255]
+    monkeypatch.setattr(side_pipeline, 'measure_planes', lambda *args: (measurement, masks))
+    result = SidePipeline(BoxesDetector([(0, 0, 160, 120)]))(make_job())
+    row = result['observations'][0]
+    assert row['centroid_px'] == pytest.approx([100., 60.])
+    lines = []
+    monkeypatch.setattr(side_pipeline, '_text', lambda canvas, line, y, color=None: lines.append(line))
+    shown, stale = render_result(result, 1.2, {})
+    assert not stale and np.any(np.all(shown[:120, :160] == [255, 0, 255], axis=2))
+    assert shown[60, 100].tolist() == [255, 0, 255]
+    assert any('Z=600.0' in line for line in lines)
+    assert any('P1 SELECTED' in line for line in lines)
+    saved = save_snapshot(tmp_path, result, shown, {})
+    data = json.loads((saved/'result.json').read_text())
+    assert data['observations'][0]['measurement']['selected_index'] == 1
+    assert data['observations'][0]['measurement']['candidates'][1]['centroid_mm'][2] == 600.
+
+
 def test_stale_hides_all_geometry_and_snapshot_keeps_pair(tmp_path):
     """过期撤去框、中心和坐标；快照仍可追溯原始图对且人工复核为 false。"""
     result = SidePipeline(BoxesDetector([(20, 20, 140, 100)]))(make_job())

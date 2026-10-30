@@ -47,6 +47,87 @@ def test_two_planes_and_no_points():
     assert empty['status'] == 'no_plane' and not masks
 
 
+def test_dominant_selects_main_plane_and_strict_preserves_ambiguity():
+    """清晰主体加少量背景可选主面，旧策略仍报告两个候选歧义。"""
+    depth = np.full((120, 160), 600, np.uint16)
+    depth[:, :20] = 800
+    strict, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120))
+    result, masks = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120),
+                                   params=PlaneParams(selection_policy='dominant'))
+    assert strict['status'] == 'ambiguous' and len(masks) == 2
+    assert result['status'] == 'candidate_unverified'
+    chosen = result['candidates'][result['selected_index']]
+    assert chosen['centroid_z_mm'] == pytest.approx(600, abs=1)
+    assert chosen['core_coverage'] >= .6 and chosen['inlier_ratio'] >= .6
+
+
+def test_dominant_rejects_similar_planes_sparse_and_edge_background():
+    """相近候选、缺深度或仅边缘主面不能误选为主体。"""
+    params = PlaneParams(selection_policy='dominant')
+    depth = np.full((120, 160), 500, np.uint16)
+    depth[:, 80:] = 800
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120), params=params)
+    assert result['status'] == 'ambiguous' and result['selected_index'] is None
+    depth[:] = 0
+    depth[40:80, 50:110] = 600
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120), params=params)
+    assert result['status'] == 'ambiguous' and result['reason'] == 'low_valid_ratio'
+    depth[:] = 0
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120), params=params)
+    assert result['status'] == 'no_plane' and result['selected_index'] is None
+    depth[:] = 800
+    depth[24:96, 32:128] = 500
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120), params=params)
+    assert result['status'] == 'ambiguous' and result['selected_index'] is None
+    assert result['reason'] == 'low_core_coverage'
+
+
+def test_dominant_can_select_nonzero_candidate(monkeypatch):
+    """当降采样使小平面先出现时，按原始内点占比选择后一个主体面。"""
+    import vision.depth.surface as surface
+    depth = np.full((120, 160), 600, np.uint16)
+    depth[:, :20] = 800
+    def fit_in_order(points, threshold, iterations, rng):
+        """固定先拟合远处窄条，以覆盖真实候选顺序不等于面积顺序的情况。"""
+        z = 800. if np.any(np.isclose(points[:, 2], 800.)) else 600.
+        return np.array([0., 0., -1.]), z, np.isclose(points[:, 2], z)
+    monkeypatch.setattr(surface, 'fit_plane_ransac', fit_in_order)
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120),
+                               params=PlaneParams(selection_policy='dominant'))
+    assert result['status'] == 'candidate_unverified'
+    assert result['selected_index'] == 1
+    assert result['candidates'][1]['centroid_z_mm'] == pytest.approx(600)
+
+
+def test_dominant_includes_exact_support_margin_boundary():
+    """主体占 60%、次候选占 40% 时应包含 20% 差值的浮点边界。"""
+    depth = np.full((120, 160), 800, np.uint16)
+    depth[:, :96] = 600
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120),
+                               params=PlaneParams(selection_policy='dominant'))
+    assert result['status'] == 'candidate_unverified'
+
+
+def test_core_coverage_denominator_includes_invalid_pixels():
+    """中央大孔洞不能因除以有效点数而得到虚高覆盖率。"""
+    depth = np.full((120, 160), 600, np.uint16)
+    depth[24:96, 32:90] = 0
+    result, _ = measure_planes(depth, make_intrinsics(), (0, 0, 160, 120),
+                               params=PlaneParams(selection_policy='dominant'))
+    assert result['valid_depth_ratio'] > .5
+    assert result['candidates'][0]['inlier_ratio'] == pytest.approx(1.)
+    assert result['candidates'][0]['core_coverage'] < .6
+    assert result['status'] == 'ambiguous' and result['reason'] == 'low_core_coverage'
+
+
+def test_selection_parameters_are_validated():
+    """无效策略或越界比例应在处理前拒绝。"""
+    for params in (PlaneParams(selection_policy='other'), PlaneParams(core_ratio=0),
+                   PlaneParams(min_core_coverage=1.1), PlaneParams(min_valid_ratio=float('nan'))):
+        with pytest.raises(ValueError):
+            params.validate()
+
+
 def test_line_degenerate_and_size_mismatch():
     """共线点无法决定平面，图与内参尺寸不匹配时拒绝。"""
     depth = np.zeros((120, 160), np.uint16)
@@ -108,6 +189,23 @@ def test_detector_empty_multiple_and_choice(tmp_path):
     assert json.loads((tmp_path/'chosen'/'results.json').read_text())['actual_count'] == 1
     with pytest.raises(FileExistsError):
         run_frames(summary, ci, di, frames, tmp_path/'chosen', box=boxes[0])
+
+
+def test_manual_plane_choice_overrides_dominant(tmp_path):
+    """人工逐帧指定平面应覆盖 dominant 自动选择，仍保持未验证。"""
+    k = [200, 0, 80, 0, 200, 60, 0, 0, 1]
+    ci, di = {'k': k, 'd': [0]*5}, {'k': k, 'frame_id': 'camera'}
+    depth = np.full((120, 160), 600, np.uint16)
+    depth[:, :20] = 800
+    frames = [({'pair_id': 'c1_d1'}, np.zeros((120, 160, 3), np.uint8), depth)]
+    summary = {'session': 'test', 'geometry': {'status': 'UNVERIFIED'}, 'spatial': {'status': 'UNVERIFIED'}}
+    params = PlaneParams(selection_policy='dominant')
+    result = run_frames(summary, ci, di, frames, tmp_path/'override', box=(0, 0, 160, 120),
+                        params=params, choices={'c1_d1': {'plane': 1}})
+    row = result['frames'][0]
+    assert row['status'] == 'candidate_unverified'
+    assert row['measurement']['selected_index'] == 1
+    assert 'user selected' in row['reason']
 
 
 def test_evaluation_counts_unlabeled_and_gates():

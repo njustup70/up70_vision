@@ -2,7 +2,7 @@
 
 用大白话说
     结果始终带着原始图对，窗口只在对应彩色图上画框和中心。
-    每个框独立失败，多平面不猜中心，过期时图像仍可看但测量叠字全部撤去。
+    每个框独立选面，过期时图像仍可看但测量叠字全部撤去。
 """
 import json
 import time
@@ -17,6 +17,10 @@ import numpy as np
 from vision.depth import Intrinsics
 from vision.depth.rgbd import ColorRectifier, validate_images
 from vision.depth.surface import PlaneParams, measure_planes, draw_detection_label, draw_review_box
+
+# BGR：选中面黄色，其余候选按当前帧内序号着色；编号不是跨帧跟踪 ID。
+_PLANE_COLORS = ((255, 160, 0), (255, 80, 180), (180, 180, 255))
+_SELECTED_COLOR = (0, 255, 255)
 
 
 class SidePipeline:
@@ -57,7 +61,7 @@ class SidePipeline:
                           'no_plane': 'NO_PLANE'}[result['status']]
                 row.update(status=status, reason=result['reason'], measurement=result, masks=masks)
                 if status == 'CANDIDATE':
-                    x, y, z = result['candidates'][0]['centroid_mm']
+                    x, y, z = result['candidates'][result['selected_index']]['centroid_mm']
                     if not np.isfinite([x, y, z]).all() or z <= 0:
                         raise ValueError('invalid centroid')
                     row['centroid_px'] = [k.fx*x/z+k.cx, k.fy*y/z+k.cy]
@@ -104,9 +108,11 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
     if not stale:
         for index, row in enumerate(observations):
             if overlay:
-                for mask in row['masks']:
+                selected = (row['measurement'] or {}).get('selected_index')
+                for plane_index, mask in enumerate(row['masks']):
+                    color = _SELECTED_COLOR if plane_index == selected else _PLANE_COLORS[plane_index % len(_PLANE_COLORS)]
                     image[mask > 0] = (image[mask > 0].astype(float)*0.65+
-                                       np.array([0, 255, 255])*0.35).astype(np.uint8)
+                                       np.array(color)*0.35).astype(np.uint8)
             detection = row['detection']
             draw_review_box(image, detection['bbox_xyxy'])
             draw_detection_label(image, detection, index)
@@ -127,7 +133,9 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
             caption = 'STALE | ' + caption
         cv2.putText(depth_image, caption, (8, 17), cv2.FONT_HERSHEY_SIMPLEX,
                     0.48, (255, 255, 255), 1, cv2.LINE_AA)
-    height = max(image.shape[0], 260+(0 if stale else len(observations)*108))
+    sizes = [96 + 24 * len((row['measurement'] or {}).get('candidates', []))
+             for row in observations]
+    height = max(image.shape[0], 270+(0 if stale else sum(sizes)))
     panel = np.full((height, 510, 3), 28, np.uint8)
     _text(panel, 'RGB-D SIDE | VISIBLE INLIER CENTROID', 24)
     _text(panel, 'STALE - measurements hidden' if stale else
@@ -143,20 +151,26 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
     _text(panel, 'Q/Esc: quit | M: mask | D: depth | S: snapshot', 218)
     _text(panel, 'Optical mm: X right, Y down, Z forward', 242)
     if not stale:
+        y = 270
         for index, row in enumerate(observations):
-            y = 270+index*108
             _text(panel, f"{index}: {row['detection']['class_name']} {row['detection']['score']:.2f} | {row['status']}", y)
             m = row['measurement']
             if row['centroid_px'] is not None:
-                c = m['candidates'][0]
+                c = m['candidates'][m['selected_index']]
                 x, yy, z = c['centroid_mm']
                 _text(panel, f'CENTROID X={x:.1f} Y={yy:.1f} Z={z:.1f}', y+24, (255, 150, 255))
                 _text(panel, f"RMS={c['residual_rms_mm']:.2f} mm VALID={m['valid_depth_ratio']:.1%}", y+48)
             elif m:
                 _text(panel, f"Planes={len(m['candidates'])} VALID={m['valid_depth_ratio']:.1%}", y+24)
-                _text(panel, 'No unique center', y+48, (0, 180, 255))
+                _text(panel, row['reason'][:60], y+48, (0, 180, 255))
             else:
                 _text(panel, row['reason'][:65], y+24)
+            if m:
+                for plane, candidate in enumerate(m['candidates']):
+                    label = 'SELECTED' if plane == m['selected_index'] else 'OTHER'
+                    color = _SELECTED_COLOR if plane == m['selected_index'] else _PLANE_COLORS[plane % len(_PLANE_COLORS)]
+                    _text(panel, f"P{plane} {label} support={candidate['inlier_ratio']:.1%} core={candidate['core_coverage']:.1%}", y+72+24*plane, color)
+            y += sizes[index]
     depth_width = depth_image.shape[1] if depth_image is not None else 0
     canvas = np.zeros((height, image.shape[1]+depth_width+panel.shape[1], 3), np.uint8)
     canvas[:image.shape[0], :image.shape[1]] = image

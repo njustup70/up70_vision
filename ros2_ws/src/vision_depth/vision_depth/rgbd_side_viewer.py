@@ -71,7 +71,10 @@ class RgbdSideViewer(Node):
                     'aligned_depth': True, 'depth_unit': 'mm', 'sync_tolerance_ms': 10.0,
                     'sync_wait_ms': 50.0, 'queue_capacity': 10, 'max_age_ms': 500.0,
                     'leaf_mm': 4.0, 'threshold_mm': 6.0, 'iterations': 200, 'seed': 0,
-                    'min_points': 120, 'output_dir': 'output/realtime_side', 'headless': False,
+                    'min_points': 120, 'selection_policy': 'dominant',
+                    'core_ratio': 0.6, 'min_valid_ratio': 0.5, 'min_support_ratio': 0.6,
+                    'min_core_coverage': 0.6, 'min_support_margin': 0.2,
+                    'output_dir': 'output/realtime_side', 'headless': False,
                     'max_runtime_s': 0.0}
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -83,7 +86,10 @@ class RgbdSideViewer(Node):
                     ('sync_tolerance_ms', 'sync_wait_ms', 'max_age_ms')) or
                 not np.isfinite(c['max_runtime_s']) or c['max_runtime_s'] < 0):
             raise ValueError('invalid timing parameters')
-        params = PlaneParams(c['leaf_mm'], c['threshold_mm'], c['iterations'], c['seed'], c['min_points'])
+        params = PlaneParams(c['leaf_mm'], c['threshold_mm'], c['iterations'], c['seed'], c['min_points'],
+                             selection_policy=c['selection_policy'], core_ratio=c['core_ratio'],
+                             min_valid_ratio=c['min_valid_ratio'], min_support_ratio=c['min_support_ratio'],
+                             min_core_coverage=c['min_core_coverage'], min_support_margin=c['min_support_margin'])
         params.validate()
         classes = list(c['target_classes'])
         if classes == [-1]:

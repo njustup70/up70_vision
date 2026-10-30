@@ -16,7 +16,7 @@ from .primitives import backproject, fit_plane_ransac, voxel_downsample
 
 @dataclass(frozen=True)
 class PlaneParams:
-    """拟合调试参数：体素与距离为毫米；次数、随机种子及点数均为整数。"""
+    """拟合与选面参数：距离为毫米，比例为 0–1；默认 strict 保留原有口径。"""
 
     leaf_mm: float = 4.0
     threshold_mm: float = 6.0
@@ -24,6 +24,12 @@ class PlaneParams:
     seed: int = 0
     min_points: int = 120
     max_planes: int = 3
+    selection_policy: str = 'strict'
+    core_ratio: float = 0.6
+    min_valid_ratio: float = 0.5
+    min_support_ratio: float = 0.6
+    min_core_coverage: float = 0.6
+    min_support_margin: float = 0.2
 
     def validate(self):
         """拒绝不合理参数，避免计算结果无法解释。"""
@@ -33,6 +39,13 @@ class PlaneParams:
             raise ValueError('invalid plane parameters')
         if self.seed < 0:
             raise ValueError('seed must be nonnegative')
+        if self.selection_policy not in ('strict', 'dominant'):
+            raise ValueError('selection_policy must be strict or dominant')
+        for name in ('core_ratio', 'min_valid_ratio', 'min_support_ratio',
+                     'min_core_coverage', 'min_support_margin'):
+            value = getattr(self, name)
+            if not np.isfinite(value) or not 0 <= value <= 1 or (name == 'core_ratio' and value == 0):
+                raise ValueError(f'{name} must be in [0, 1], core_ratio must be positive')
 
 
 def visible_extent(points, normal):
@@ -84,6 +97,13 @@ def measure_planes(depth, intrinsics, box, valid_color=None, params=None):
         valid_color = np.ones((h, w), dtype=bool)
     if valid_color.shape != (h, w):
         raise ValueError('valid color mask size mismatch')
+    # 中央矩形的分母包含无效像素；否则只剩少量深度时覆盖率会虚高。
+    inset = (1.0 - params.core_ratio) / 2.0
+    cx1 = x1 + int(np.floor((x2-x1) * inset))
+    cy1 = y1 + int(np.floor((y2-y1) * inset))
+    cx2 = x2 - int(np.floor((x2-x1) * inset))
+    cy2 = y2 - int(np.floor((y2-y1) * inset))
+    core_area = (cx2-cx1) * (cy2-cy1)
     roi = np.zeros((h, w), dtype=bool)
     roi[y1:y2, x1:x2] = True
     valid = roi & (depth > 0) & valid_color.astype(bool)
@@ -129,12 +149,29 @@ def measure_planes(depth, intrinsics, box, valid_color=None, params=None):
                            'centroid_z_mm': float(centroid[2]),
                            'inlier_count': len(pts), 'downsampled_inliers': int(inliers.sum()),
                            'inlier_ratio': float(len(pts) / len(points)),
+                           'core_coverage': float(np.count_nonzero(mask[cy1:cy2, cx1:cx2]) / core_area),
                            'residual_rms_mm': float(np.sqrt(np.mean(residual ** 2))),
                            'residual_p95_mm': float(np.percentile(residual, 95)),
                            'visible_extent_mm': visible_extent(pts, normal)})
         masks.append(mask)
         remaining = remaining[~local]
-    if len(masks) == 1:
+    if params.selection_policy == 'dominant' and masks:
+        ranked = sorted(result['candidates'], key=lambda c: (-c['inlier_ratio'], c['index']))
+        best = ranked[0]
+        runner = ranked[1]['inlier_ratio'] if len(ranked) > 1 else 0.0
+        checks = ((result['valid_depth_ratio'] >= params.min_valid_ratio, 'low_valid_ratio'),
+                  (best['inlier_ratio'] >= params.min_support_ratio, 'low_support_ratio'),
+                  (best['core_coverage'] >= params.min_core_coverage, 'low_core_coverage'),
+                  # 比例由整数计数相除；微小浮点误差不能把恰好 20% 的边界判成不通过。
+                  (best['inlier_ratio'] - runner + 1e-12 >= params.min_support_margin, 'low_support_margin'),
+                  (best['residual_rms_mm'] <= params.threshold_mm, 'high_residual_rms'))
+        reason = next((reason for okay, reason in checks if not okay), None)
+        if reason:
+            result.update(status='ambiguous', reason=reason)
+        else:
+            result.update(status='candidate_unverified', selected_index=best['index'],
+                          reason='dominant plane selected; side identity requires human review')
+    elif len(masks) == 1:
         result.update(status='candidate_unverified', reason='side identity requires human review',
                       selected_index=0)
     elif len(masks) > 1:

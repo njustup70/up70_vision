@@ -26,6 +26,13 @@ rgbd_side_viewer:
     iterations: 200
     seed: 0
     min_points: 120
+    # dominant 是工程初值；strict 保留仅唯一候选才自动选择的行为。
+    selection_policy: dominant
+    core_ratio: 0.6
+    min_valid_ratio: 0.5
+    min_support_ratio: 0.6
+    min_core_coverage: 0.6
+    min_support_margin: 0.2
     output_dir: output/realtime_side
     headless: false
     # 0.0 表示直到按 Q/Esc 退出；headless 验证可填 60.0。

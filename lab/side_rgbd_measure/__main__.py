@@ -34,6 +34,8 @@ def main(argv=None):
     parser.add_argument('--iterations', type=int, default=200)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--min-points', type=int, default=120)
+    parser.add_argument('--selection-policy', choices=('strict', 'dominant'), default='strict',
+                        help='平面选择策略；默认 strict 用于兼容旧报告')
     args = parser.parse_args(argv)
     try:
         if args.bbox and args.weights:
@@ -41,7 +43,8 @@ def main(argv=None):
         if args.out.exists():
             raise ValueError('output directory already exists')
         summary, ci, di, frames = load_frames(args.report, args.bag, args.frames)
-        params = PlaneParams(args.leaf_mm, args.threshold_mm, args.iterations, args.seed, args.min_points)
+        params = PlaneParams(args.leaf_mm, args.threshold_mm, args.iterations, args.seed, args.min_points,
+                             selection_policy=args.selection_policy)
         params.validate()
         choices = json.loads(args.choices.read_text(encoding='utf8')) if args.choices else {}
         if not isinstance(choices, dict):
