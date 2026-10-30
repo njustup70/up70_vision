@@ -158,7 +158,7 @@ def test_top_colour_uses_upper_half():
     """同一张"上红下蓝"的图：整框判不出单色，取上半块必须判成红色。"""
     import numpy as np
 
-    from vision.yolo.color_check import judge_color, upper_part_bbox
+    from vision.yolo.color_check import judge_color, judge_top_color, upper_part_bbox
 
     # 构造 200x200 的 HSV 图：上半红(H=0)，下半蓝(H=120)，都是高饱和
     hsv = np.zeros((200, 200, 3), np.uint8)
@@ -173,3 +173,32 @@ def test_top_colour_uses_upper_half():
     assert upper.name == "red", (upper.name, upper.ratio)
     # 整框时两色各半，红色命中率应明显低于只看上半块
     assert whole.ratio < upper.ratio, (whole.ratio, upper.ratio)
+
+
+def test_top_mixed_when_upper_half_unclear():
+    """塔顶歪放/只看到侧面时：上半块判不出单色，但整框红蓝都够 → 判 mixed。"""
+    import numpy as np
+
+    from vision.yolo.color_check import judge_top_color
+
+    thresholds = {
+        "red": [(0, 120, 70, 10, 255, 255), (170, 120, 70, 179, 255, 255)],
+        "blue": [(105, 120, 70, 135, 255, 255)],
+    }
+    # 左半红、右半蓝（侧面看两半砖并排）：上半块里只有半边红半边蓝，单色命中率不够
+    hsv = np.zeros((100, 100, 3), np.uint8)
+    hsv[:, :50] = (0, 200, 200)
+    hsv[:, 50:] = (120, 200, 200)
+    verdict = judge_top_color(hsv, (10, 10, 90, 90), thresholds, hit_ratio_min=0.9)
+    assert verdict.name == "mixed", (verdict.name, verdict.ratio, verdict.reason)
+
+
+def test_top_none_when_nothing_matches():
+    """框里既没有红也没有蓝（灰墙/过曝）→ None，不能瞎给颜色。"""
+    import numpy as np
+
+    from vision.yolo.color_check import judge_top_color
+
+    thresholds = {"red": [(0, 120, 70, 10, 255, 255)], "blue": [(105, 120, 70, 135, 255, 255)]}
+    hsv = np.full((100, 100, 3), (0, 10, 200), np.uint8)      # 低饱和灰
+    assert judge_top_color(hsv, (10, 10, 90, 90), thresholds).name is None

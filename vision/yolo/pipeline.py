@@ -14,7 +14,7 @@
 from dataclasses import dataclass, field
 
 from ..logging import get_logger
-from .color_check import DEFAULT_MIN_VALID_PIXELS, judge_color, upper_part_bbox
+from .color_check import DEFAULT_MIN_VALID_PIXELS, judge_color, judge_top_color
 from ..types import Detection, Frame, iou
 
 log = get_logger("pipeline")
@@ -145,15 +145,14 @@ def process_frame(frame: Frame,
         hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
         for det in color_targets:
             # 塔顶是 红蓝上下叠放 的半砖：整框判色会被两色稀释，改判上半块
-            region = (upper_part_bbox(det.bbox_xyxy)
-                      if str(getattr(det, "class_name", "")) == "top" else det.bbox_xyxy)
-            verdict = judge_color(
-                hsv, region, thresholds,
-                min_saturation=cfg.min_saturation,
-                min_value=cfg.min_value,
-                hit_ratio_min=cfg.hit_ratio_min,
-                ignore_border_px=cfg.ignore_border_px,
+            is_top = str(getattr(det, "class_name", "")) == "top"
+            kwargs = dict(
+                min_saturation=cfg.min_saturation, min_value=cfg.min_value,
+                hit_ratio_min=cfg.hit_ratio_min, ignore_border_px=cfg.ignore_border_px,
                 min_valid_pixels=cfg.min_valid_pixels)
+            # 塔顶红蓝上下叠放：先判上半块；判不出再看整框红蓝各占多少（mixed）
+            verdict = (judge_top_color(hsv, det.bbox_xyxy, thresholds, **kwargs)
+                       if is_top else judge_color(hsv, det.bbox_xyxy, thresholds, **kwargs))
             det.color = verdict.name
             det.color_ratio = verdict.ratio
             det.valid_pixels = verdict.valid_pixels

@@ -164,6 +164,41 @@ def upper_part_bbox(bbox, fraction: float = 0.5):
     return (x1, y1, x2, y1 + (y2 - y1) * fraction)
 
 
+#: 塔顶两种颜色各占多少才算"混色"（上下叠放时侧面看会各占一半）
+TOP_MIXED_MIN_RATIO = 0.20
+
+
+def judge_top_color(hsv, bbox, thresholds, upper_fraction: float = 0.5,
+                    mixed_min: float = TOP_MIXED_MIN_RATIO, **kwargs):
+    """判"塔顶"（红蓝上下叠放的半砖）的颜色。
+
+    三条路，按顺序：
+      1. **上半块判得出单色** → 就是塔顶颜色（多数情况）；
+      2. 上半块判不出（歪放/过曝/只看到侧面）、而**整框红蓝各占够多** → `mixed`；
+      3. 都不满足 → `None`（看不清就报不确定）。
+
+    :param hsv: 整帧 HSV 图
+    :param bbox: `(x1,y1,x2,y2)` 像素
+    :param thresholds: 颜色阈值表（`load_thresholds` 的返回）
+    :param upper_fraction: 取上面多少（0.5 = 上半）
+    :param mixed_min: 红、蓝占比都 ≥ 它才算混色
+    :param kwargs: 透传给 `judge_color`（min_saturation / hit_ratio_min 等）
+    :return: `ColorVerdict`；`name` 可能是 `"red"` / `"blue"` / `"mixed"` / `None`
+    """
+    upper = judge_color(hsv, upper_part_bbox(bbox, upper_fraction), thresholds, **kwargs)
+    if upper.name is not None:
+        return upper
+
+    whole = judge_color(hsv, bbox, thresholds, **kwargs)
+    red = float(whole.ratios.get("red", 0.0)) if getattr(whole, "ratios", None) else 0.0
+    blue = float(whole.ratios.get("blue", 0.0)) if getattr(whole, "ratios", None) else 0.0
+    if red >= mixed_min and blue >= mixed_min:
+        return whole.__class__(name="mixed", ratio=max(red, blue),
+                               valid_pixels=whole.valid_pixels, ratios=whole.ratios,
+                               reason=f"红蓝各占 {red:.2f}/{blue:.2f}")
+    return whole
+
+
 def judge_color(hsv: np.ndarray,
                 bbox: BBox,
                 thresholds: dict,
