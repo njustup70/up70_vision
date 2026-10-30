@@ -49,6 +49,10 @@ python -m vision run --set detector.name=yolo --set input.source=replay --set in
 # 造合成的 YOLO 训练集（350 mm 方块 / 200 mm 半红半蓝塔顶，自动标注）
 python lab/gen_yolo_dataset.py --out data/yolo_synth --num 300
 
+# 补实拍数据：开窗口给人摆位，每 1 秒存一张（远景/遮挡/空场景负样本都用它）
+python lab/capture_dataset.py --tag g6_far --exposure-us 20000 --interval 1.0
+python lab/capture_dataset.py --tag neg --exposure-us 10000 --frames 30   # 拍 30 张自动停
+
 # 常用自检：ArUco 图组 9/9、位姿逐图、相机标定
 python lab/check_aruco.py
 python -m lab.pose_check --dir <图组目录>          # 或 --sweep 做七组精度扫描
