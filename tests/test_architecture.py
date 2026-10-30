@@ -151,6 +151,13 @@ def test_vision_never_imports_ros():
             )
 
 
+def test_ros_never_imports_lab():
+    """实时 ROS 外壳不能导入离线工具；共享计算必须放在 vision。"""
+    for path in (ROOT / 'ros2_ws/src/vision_depth').rglob('*.py'):
+        for target in _imports_of(path):
+            assert not _matches(target, 'lab'), f'{path} 不该依赖 lab'
+
+
 def main() -> int:
     """把上面几条逐个跑一遍，方便在没有 pytest 的镜像里直接执行。"""
     checks = [
@@ -159,6 +166,7 @@ def main() -> int:
         ("根级 types 是叶子", test_root_types_is_a_leaf),
         ("vision 不 import lab", test_vision_never_imports_lab),
         ("vision 不 import ROS", test_vision_never_imports_ros),
+        ("ROS 不 import lab", test_ros_never_imports_lab),
     ]
     failures = []
     for label, check in checks:
