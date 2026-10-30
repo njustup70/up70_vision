@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from vision.depth import Intrinsics
+from vision.depth.surface import draw_review_box, draw_detection_label, plane_overlay
 from .geometry import PlaneParams, measure_planes
 from .input import rectified_color_and_mask
 
@@ -22,57 +23,6 @@ def _save_image(path, image):
     """保存图像，避免 OpenCV 静默写入失败。"""
     if not cv2.imwrite(str(path), image):
         raise OSError(f'cannot write image: {path}')
-
-
-def draw_review_box(image, box):
-    """黑色描边加粗绿框，确保缩小显示时仍能与黄色平面区分。"""
-    x1, y1, x2, y2 = box
-    cv2.rectangle(image, (x1, y1), (x2-1, y2-1), (0, 0, 0), 8)
-    cv2.rectangle(image, (x1, y1), (x2-1, y2-1), (0, 255, 0), 4)
-
-
-def draw_detection_label(image, detection, index, plane_index=None):
-    """将框号、模型类名和置信度写在黑底上，供检测图与平面图对应复查。
-
-    用大白话说
-        框号对应 choices 中的 detection；类名照模型输出，不替用户判断选面正确。
-        人工框显示 manual，不伪造置信度。靠近图边时将标签移回图内。
-
-    :param image: 原地绘制的 BGR 图；仅改变可视化像素。
-    :param detection: 含 bbox_xyxy、class_name、score 的检测记录。
-    :param index: 从 0 开始的检测框号。
-    :param plane_index: 平面候选号；None 表示仅标检测框。
-    :return: None；不修改检测记录或测量数据。
-    """
-    name = str(detection['class_name']).encode('ascii', errors='replace').decode('ascii')
-    label = f"{index}: {name}"
-    if detection['score'] is not None:
-        label += f" {detection['score']:.2f}"
-    if plane_index is not None:
-        label += f" | plane={plane_index}"
-    font, scale, thickness, padding = cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1, 4
-    h, w = image.shape[:2]
-    (tw, th), baseline = cv2.getTextSize(label, font, scale, thickness)
-    if tw + 2 * padding > w:
-        scale *= max(1, w - 2 * padding) / max(1, tw)
-        (tw, th), baseline = cv2.getTextSize(label, font, scale, thickness)
-    label_height = th + baseline + 2 * padding
-    x1, y1, _, _ = detection['bbox_xyxy']
-    left = max(0, min(x1, w - tw - 2 * padding))
-    top = max(0, min(y1 - label_height, h - label_height))
-    cv2.rectangle(image, (left, top), (left + tw + 2 * padding - 1,
-                                     top + label_height - 1), (0, 0, 0), -1)
-    cv2.putText(image, label, (left + padding, top + padding + th),
-                font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
-
-
-def plane_overlay(image, mask, box):
-    """低透明度黄色表示拟合点；框最后绘制，不被覆盖色淹没。"""
-    overlay = image.copy()
-    overlay[mask > 0] = (overlay[mask > 0].astype(np.float32) * 0.65 +
-                         np.array([0, 255, 255]) * 0.35).astype(np.uint8)
-    draw_review_box(overlay, box)
-    return overlay
 
 
 def _summarize(rows):

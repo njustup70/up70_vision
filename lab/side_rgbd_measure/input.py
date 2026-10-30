@@ -6,25 +6,12 @@
 """
 from pathlib import Path
 
-import cv2
 import numpy as np
 
-from lab.manual_rgbd_fusion import load_report, rectify_color
+from lab.manual_rgbd_fusion import load_report
+from vision.depth.rgbd import rectified_color_and_mask
 from lab.rgbd_check.bag import load_images, scan
 from lab.rgbd_check.pairing import pair_frames
-
-
-def rectified_color_and_mask(color, ci, di):
-    """将彩色映射到深度网格；插值涉及图外像素时该位置不参与测量。"""
-    rectified = rectify_color(color, ci, di)
-    h, w = color.shape[:2]
-    kc = np.asarray(ci['k'], dtype=np.float64).reshape(3, 3)
-    kd = np.asarray(di['k'], dtype=np.float64).reshape(3, 3)
-    mx, my = cv2.initUndistortRectifyMap(kc, np.asarray(ci['d'], dtype=np.float64),
-                                         None, kd, (w, h), cv2.CV_32FC1)
-    valid = cv2.remap(np.full((h, w), 255, np.uint8), mx, my, cv2.INTER_LINEAR,
-                      borderMode=cv2.BORDER_CONSTANT, borderValue=0) == 255
-    return rectified, valid
 
 
 def load_frames(report, bag=None, count=1):
