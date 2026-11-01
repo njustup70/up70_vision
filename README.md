@@ -113,7 +113,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
    `knowledge/models/*.onnx`、`configs/camera_calibration*.yaml` 都被 gitignore。
    新 clone 要位姿就先自己标定，要用 YOLO 就先 `python lab/export_yolo.py` 导出权重。
 10. **镜像里没有 pytest**：`tests/` 每个文件都能 `python tests/test_x.py` 直接跑。
-11. **`live` 只跑 ArUco**：判色/YOLO 出的是矩形框，走 `python -m vision run`；入口会直接提示，不会静默错。
+11. **`live` 现在支持三种检测器**：ArUco 画四边形+位姿轴；判色/YOLO 画框并显示
+    `类别/颜色 置信度`（`top` 按上半块判色）。落盘目录也分开：ArUco 在 `output/aruco/`，
+    判色/YOLO 在 `output/live_det/`。
 
 ---
 
