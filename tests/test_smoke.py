@@ -140,12 +140,16 @@ def test_yolo_weights_path_points_into_knowledge_models():
     assert "knowledge/models" in weights, weights
 
 
-def test_live_rejects_non_aruco_detector():
-    """实时入口只跑 ArUco：别的检测器要以退出码 2 + 人话提示拒绝，不能抛 traceback。"""
+def test_live_supports_non_aruco_detector():
+    """实时入口现在也跑判色/YOLO（2026-10-30）：画框 + 类别 + HSV 判色，正常退出。
+
+    以前这里断言"拒绝非 ArUco"，因为循环里硬取 marker_id 会 traceback；
+    改成两条循环后，判色/YOLO 应当正常跑完（退出码 0）。
+    """
     code = run_aruco_live(["--headless", "--limit", "1",
                            "--set", "detector.name=blob",
                            "--set", "input.source=synthetic"])
-    assert code == 2, f"应当拒绝，实际退出码 {code}"
+    assert code == 0, f"判色实时循环应正常结束，实际退出码 {code}"
 
 
 def test_live_hud_reports_pose_status():
