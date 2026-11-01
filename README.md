@@ -42,6 +42,11 @@ python -m vision live --set detector.name=aruco --set input.source=camera --set 
 python -m vision live --set detector.name=aruco --set input.source=camera \
   --set pose.enabled=true --set pose.marker_size_mm=82.5
 
+# 实时 YOLO（2 类：block/top）+ HSV 判色；窗口卡就加 --max-fps 4~6
+python -m vision live --set detector.name=yolo \
+  --set detector.yolo.weights=knowledge/models/yolov8n_mix4.onnx \
+  --set input.source=camera --set input.camera.exposure_us=20000 --max-fps 5
+
 # 批处理（读完再汇总）：判色 18 块 / ArUco / YOLO
 python -m vision run --set input.source=synthetic
 python -m vision run --set detector.name=yolo --set input.source=replay --set input.replay.path=<图片目录>
@@ -111,11 +116,15 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
    用硬板/手机屏幕，四边都贴住。
 9. **生成物不进版本库**：`output/`（运行产物）、`data/`（数据集）、`runs/`（训练产物）、
    `knowledge/models/*.onnx`、`configs/camera_calibration*.yaml` 都被 gitignore。
-   新 clone 要位姿就先自己标定，要用 YOLO 就先 `python lab/export_yolo.py` 导出权重。
+   新 clone 要位姿就先自己标定，要用 YOLO 就先 `python lab/export_yolo.py --weights <best.pt> --imgsz 480`
+   导出权重（480 实测与 640 精度持平、耗时约减半）。
 10. **镜像里没有 pytest**：`tests/` 每个文件都能 `python tests/test_x.py` 直接跑。
 11. **`live` 现在支持三种检测器**：ArUco 画四边形+位姿轴；判色/YOLO 画框并显示
-    `类别/颜色 置信度`（`top` 按上半块判色）。落盘目录也分开：ArUco 在 `output/aruco/`，
-    判色/YOLO 在 `output/live_det/`。
+    `类别/颜色 置信度`（`top` 按上半块判色，框固定品红，所以红塔顶也会是品红框）。
+    落盘目录也分开：ArUco 在 `output/aruco/`，判色/YOLO 在 `output/live_det/`。
+12. **窗口卡退先降 `--max-fps`**：YOLO 在 CPU 上单帧约 40 ms（640 输入），相机 20 fps 追着跑会把 CPU
+    吃满、窗口事件循环抢不到时间片，表现就是"未响应/点一下就没"。`--max-fps 4~6` 对 ArUco 与
+    判色/YOLO 两条实时循环都生效；还想更快就导 480 的 ONNX（见坑 9），CPU 能空出一半。
 
 ---
 
@@ -124,7 +133,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 - 位姿已过**真机验收**：位移差分误差 ≤0.2%（200/400 mm），倾角 30°/50°/60° 误差 ≤1.2°；
   但仍只有**单码相对位姿**，多码融合 / 场地坐标没做。绝对距离要比卷尺读数大 ≈12 mm（镜头前端面 ≠ 光心，属基准差）。
 - ROS 2 只接了**深度侧**（`ros2_ws/src/vision_depth`）；2D 侧未接（不打算让 `vision/` 依赖 rclpy）。
-- YOLO 目前是 COCO 预训练权重 + 合成数据训练的 2 类模型（`block`/`top`），**真图训练仍卡在物块与标注**。
+- YOLO 是**真图训练的 2 类模型**（`block`/`top`，mix4）：248 张真图（人工修正标注）为主、混入合成图，
+  真图 test P 0.971 / R 0.939 / mAP@0.5 0.970。剩余错误集中在画面边缘截断、远景叠放和环境误检；
+  test 只有 36 张，指标波动别当精确值。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
 - 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
 
 ---
