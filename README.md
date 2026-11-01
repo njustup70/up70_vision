@@ -135,8 +135,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 - ROS 2 只接了**深度侧**（`ros2_ws/src/vision_depth`）；2D 侧未接（不打算让 `vision/` 依赖 rclpy）。
 - YOLO 是**真图训练的 2 类模型**（`block`/`top`）。v2 同分布指标 P 0.971 / R 0.939 / mAP@0.5 0.970，
   但 test 里有相邻帧跨 train（max 0.971），**不能当泛化指标**。
-  **v3 整组留出重训后的诚实基线：P 0.813 / R 0.824 / mAP@0.5 0.850**（test = g3tilt + g4stack，52 图/173 框）；
-  主要错误是斜视 top↔block（类别错 18）与叠放合并（14）。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
+  **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 旋转增广 `v3_aug2` 0.885**
+  （test = g3tilt + g4stack，52 图/173 框；P 0.912 / R 0.806，类别错 18→6）。
+  剩余问题：FP 3→13、叠放合并 15 基本没动。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
   详见 `knowledge/docs/YOLO训练与评测记录.md`、`knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md`。
 - 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
 
