@@ -62,11 +62,18 @@ def main() -> int:
     ap.add_argument("--images", default="data/yolo_real")
     ap.add_argument("--prefill", default="output/auto_labels")
     ap.add_argument("--out", default="output/labels_manual")
+    ap.add_argument("--only", default=None,
+                    help="只处理文件名包含这些子串的图，逗号分隔（用于集中复核可疑样本）")
+    ap.add_argument("--start", default=None,
+                    help="从文件名包含该子串的图开始（配合 --only 可跳过前面的图）")
     args = ap.parse_args()
 
     files = sorted(glob.glob(os.path.join(args.images, "**", "*.jpg"), recursive=True))
+    if args.only:
+        keys = [k.strip() for k in args.only.split(",") if k.strip()]
+        files = [p for p in files if any(k in os.path.basename(p) for k in keys)]
     if not files:
-        print(f"❌ {args.images} 下没有 jpg")
+        print(f"❌ {args.images} 下没有匹配的 jpg（--only={args.only}）")
         return 1
 
     # 鼠标回调要用的共享状态：Qt 后端必须先 imshow 过再 setMouseCallback，
@@ -102,6 +109,9 @@ def main() -> int:
     cv2.setMouseCallback(WIN, on_mouse)
 
     idx = 0
+    if args.start:
+        idx = next((i for i, p in enumerate(files)
+                    if args.start in os.path.basename(p)), 0)
     while True:
         path = files[idx]
         img = cv2.imread(path)
