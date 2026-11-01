@@ -28,8 +28,14 @@
 import argparse
 import glob
 import os
+import sys
+from pathlib import Path
 
 import cv2
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 #: 与训练一致的两类：0=block（350 方块）、1=top（200 半红半蓝塔顶）。
 #: 键用 1/2 只是方便按键盘，存盘时减 1 还原成 YOLO 的 0/1。
@@ -37,7 +43,8 @@ NAMES = {1: "block", 2: "top"}
 COLORS = {1: (0, 165, 255), 2: (0, 200, 0)}
 #: 窗口名必须是纯 ASCII：OpenCV 的 Qt 后端用非 ASCII 名字建窗后，
 #: setMouseCallback 会找不到窗口句柄，报 "NULL window handler"。
-WIN = "up70 label tool  |  LMB drag = new box, RMB = delete, 1/2/3 = class, n = next, q = quit"
+WIN = "up70 label tool  |  LMB drag = new box, RMB = delete, 1/2 = class, t = preds, n = next, q = quit"
+
 
 
 def load_labels(path: str) -> list[tuple[int, float, float, float, float]]:
@@ -57,6 +64,15 @@ def save_labels(path: str, boxes) -> None:
             fh.write(f"{cls} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
 
 
+def box_iou(a, b) -> float:
+    """两个 (x1,y1,x2,y2) 的交并比，用于给预测框上色（匹配/类别错/无 GT）。"""
+    iw = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    ih = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = iw * ih
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--images", default="data/yolo_real")
@@ -66,6 +82,10 @@ def main() -> int:
                     help="只处理文件名包含这些子串的图，逗号分隔（用于集中复核可疑样本）")
     ap.add_argument("--start", default=None,
                     help="从文件名包含该子串的图开始（配合 --only 可跳过前面的图）")
+    ap.add_argument("--weights", default=None,
+                    help="可选 ONNX 权重；给了就在窗口里叠加模型预测（与标签对比）")
+    ap.add_argument("--pred-conf", dest="pred_conf", type=float, default=0.25,
+                    help="叠加预测的置信度下限（默认 0.25；调低看漏检）")
     args = ap.parse_args()
 
     files = sorted(glob.glob(os.path.join(args.images, "**", "*.jpg"), recursive=True))
@@ -76,9 +96,15 @@ def main() -> int:
         print(f"❌ {args.images} 下没有匹配的 jpg（--only={args.only}）")
         return 1
 
+    detector = None
+    if args.weights:
+        from vision.yolo.detector import YoloDetector
+        detector = YoloDetector(weights=args.weights, conf=args.pred_conf)
+
     # 鼠标回调要用的共享状态：Qt 后端必须先 imshow 过再 setMouseCallback，
     # 否则报 "NULL window handler"。所以这里先建窗口、显示一帧，再挂回调。
-    state = {"boxes": [], "cls": 1, "drag": None, "shape": (1, 1, 3)}
+    state = {"boxes": [], "cls": 1, "drag": None, "shape": (1, 1, 3),
+             "preds": [], "show_preds": True}
 
     def on_mouse(event, x, y, flags, param):
         boxes = state["boxes"]
@@ -126,9 +152,30 @@ def main() -> int:
             state["boxes"] = load_labels(pre)
         else:
             state["boxes"] = []
+        # 预测只算一次（切图/重绘不重复推理）；颜色在重绘时按当前 GT 重新算
+        state["preds"] = detector.detect(img) if detector is not None else []
 
         while True:
             vis = img.copy()
+            if state["show_preds"]:
+                for d in state["preds"]:
+                    x1, y1, x2, y2 = (int(v) for v in d.bbox_xyxy)
+                    best_iou, best_cls = 0.0, None
+                    for cls, cx, cy, bw, bh in state["boxes"]:
+                        gx1, gy1 = (cx - bw / 2) * w, (cy - bh / 2) * h
+                        gx2, gy2 = (cx + bw / 2) * w, (cy + bh / 2) * h
+                        value = box_iou((x1, y1, x2, y2), (gx1, gy1, gx2, gy2))
+                        if value > best_iou:
+                            best_iou, best_cls = value, cls
+                    if best_iou < 0.5:
+                        color = (0, 0, 255)          # 红：无对应 GT（FP / 漏标）
+                    elif NAMES[best_cls + 1] == d.class_name:
+                        color = (0, 220, 0)          # 绿：IoU 够且类别一致
+                    else:
+                        color = (0, 165, 255)        # 橙：IoU 够但类别错
+                    cv2.rectangle(vis, (x1, y1), (x2, y2), color, 1)
+                    cv2.putText(vis, f"P {d.class_name} {d.score:.2f}", (x1 + 2, y2 - 4),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
             for cls, cx, cy, bw, bh in state["boxes"]:
                 x1, y1 = int((cx - bw / 2) * w), int((cy - bh / 2) * h)
                 x2, y2 = int((cx + bw / 2) * w), int((cy + bh / 2) * h)
@@ -138,9 +185,13 @@ def main() -> int:
             if state["drag"]:
                 x0, y0, x1, y1 = state["drag"]
                 cv2.rectangle(vis, (x0, y0), (x1, y1), COLORS[state["cls"] + 1], 1)
-            cv2.putText(vis, f"[{idx + 1}/{len(files)}] class: {NAMES[state['cls'] + 1]}  boxes: {len(state['boxes'])}",
+            cv2.putText(vis, f"[{idx + 1}/{len(files)}] class: {NAMES[state['cls'] + 1]}  "
+                             f"boxes: {len(state['boxes'])}  preds: {len(state['preds'])}"
+                             f"{'  (t: hide)' if state['show_preds'] else '  (t: show)'}",
                         (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            cv2.putText(vis, os.path.basename(path), (8, 52), cv2.FONT_HERSHEY_SIMPLEX,
+            cv2.putText(vis, "P green=match  orange=class wrong  red=no GT",
+                        (8, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(vis, os.path.basename(path), (8, 76), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5, (0, 255, 255), 1)
             cv2.imshow(WIN, vis)
             key = cv2.waitKey(20) & 0xFF
@@ -151,6 +202,8 @@ def main() -> int:
                 return 0
             if key in (ord("1"), ord("2")):
                 state["cls"] = key - ord("1")
+            elif key == ord("t"):
+                state["show_preds"] = not state["show_preds"]
             elif key == ord("u") and state["boxes"]:
                 state["boxes"].pop()
             elif key == ord("s"):
