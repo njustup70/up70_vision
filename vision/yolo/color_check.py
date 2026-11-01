@@ -142,7 +142,9 @@ def color_ratios(hsv: np.ndarray,
 
     ratios = {}
     for name, segments in thresholds.items():
-        hits = int(np.count_nonzero(mask_for_segments(roi, segments) > 0))
+        # 命中必须同时是"有效像素"：否则颜色掩膜比有效像素更宽时（如蓝 V>=30 而
+        # 有效像素 V>=40），命中数会大于分母，比例可能 >1，判色结果不可信。
+        hits = int(np.count_nonzero((mask_for_segments(roi, segments) > 0) & valid))
         ratios[name] = hits / float(n_valid)
     return ratios, n_valid
 

@@ -193,6 +193,22 @@ def test_top_mixed_when_upper_half_unclear():
     assert verdict.name == "mixed", (verdict.name, verdict.ratio, verdict.reason)
 
 
+def test_colour_ratio_never_exceeds_one_when_mask_wider_than_valid():
+    """颜色掩膜比有效像素宽时（蓝 V>=30、有效 V>=40），命中必须先与有效像素取交集。"""
+    import numpy as np
+
+    from vision.yolo.color_check import color_ratios
+
+    hsv = np.zeros((20, 20, 3), np.uint8)
+    hsv[:, :] = (120, 200, 35)        # 暗蓝：S 够、V=35 不够"有效像素"
+    hsv[0, 0] = (120, 200, 100)       # 只留 1 个有效像素
+    thresholds = {"blue": [(105, 65, 30, 135, 255, 255)]}
+    ratios, n_valid = color_ratios(hsv, (0, 0, 20, 20), thresholds,
+                                   min_saturation=40, min_value=40)
+    assert n_valid == 1, n_valid
+    assert ratios["blue"] <= 1.0, ratios      # 旧实现会得到 ~400
+
+
 def test_top_colour_is_upper_brick_not_majority_area():
     """红砖在上面就是 top red，哪怕红色面积更小（不能按整框占比选颜色）。"""
     import numpy as np
