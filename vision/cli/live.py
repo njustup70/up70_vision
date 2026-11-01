@@ -193,15 +193,19 @@ def run_detection_live(args, cfg, thresholds, detector) -> int:
             counts = {}
             if dets:
                 hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
+                # 判色门槛显式传给两条判色路径：top 走 judge_top_color 时也要用同一套阈值，
+                # 否则 block 与 top 各用一套默认值，--set color.* 对 top 不生效。
+                color_kwargs = dict(
+                    min_saturation=cfg.color.min_saturation,
+                    min_value=cfg.color.min_value,
+                    hit_ratio_min=cfg.color.hit_ratio_min,
+                    ignore_border_px=cfg.color.ignore_border_px,
+                    min_valid_pixels=cfg.color.min_valid_pixels)
                 for det in dets:
                     is_top = str(det.class_name) == "top"
-                    verdict = (judge_top_color(hsv, det.bbox_xyxy, thresholds) if is_top
-                               else judge_color(hsv, det.bbox_xyxy, thresholds,
-                                                min_saturation=cfg.color.min_saturation,
-                                                min_value=cfg.color.min_value,
-                                                hit_ratio_min=cfg.color.hit_ratio_min,
-                                                ignore_border_px=cfg.color.ignore_border_px,
-                                                min_valid_pixels=cfg.color.min_valid_pixels))
+                    verdict = (judge_top_color(hsv, det.bbox_xyxy, thresholds, **color_kwargs)
+                               if is_top
+                               else judge_color(hsv, det.bbox_xyxy, thresholds, **color_kwargs))
                     det.color = verdict.name
                     det.color_ratio = verdict.ratio
                     key = f"{det.class_name}/{verdict.name or '?'}"
@@ -439,6 +443,8 @@ def run_aruco_live(argv=None) -> int:
     pose_history = deque(maxlen=POSE_MEDIAN_WINDOW)   # HUD 防抖窗口（非歧义帧）
     size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
+    max_fps = float(getattr(args, "max_fps", 0.0) or 0.0)
+    min_dt = (1.0 / max_fps) if max_fps > 0 else 0.0   # 0 = 不限帧
     t_start = time.monotonic()            # 循环起点，终端摘要的 t= 与最终平均帧率都以它为基准
     t_prev = t_start                      # 上一帧时刻：每帧更新，用于算 dt
     last_print = 0.0                      # 上一次打终端摘要的时刻（节流用；0 表示还没打过）
@@ -570,6 +576,13 @@ def run_aruco_live(argv=None) -> int:
                 if args.limit and frames >= args.limit:  # 相机是无限流，靠它自己停
                     print(f"退出：--limit {args.limit} 帧已跑满")
                     break
+
+                if min_dt:
+                    # --max-fps 对 ArUco 循环同样生效：高帧率下窗口事件循环抢不到时间片，
+                    # 表现为"窗口卡死/点一下就退"。把多余时间睡掉，CPU 与 GUI 都有余量。
+                    spare = min_dt - (time.monotonic() - now)
+                    if spare > 0:
+                        time.sleep(spare)
         except KeyboardInterrupt:
             # Ctrl+C 不是错误：打印一行后走 finally，退出码按"已处理帧数"决定
             print("\n退出：收到 Ctrl+C")

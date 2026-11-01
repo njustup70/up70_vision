@@ -26,7 +26,7 @@ try:
     from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
-    from vision.yolo.draw import detection_label
+    from vision.yolo.draw import detection_label, box_color, draw_detections, COLOR_DRAW_BGR
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from vision.config.schema import ConfigError, from_dict
@@ -34,7 +34,7 @@ except ModuleNotFoundError:
     from vision.yolo.detector import (YoloDetector, decode_predictions,
                                                  letterbox, nms, unletterbox)
     from vision.types import Detection
-    from vision.yolo.draw import detection_label
+    from vision.yolo.draw import detection_label, box_color, draw_detections, COLOR_DRAW_BGR
 
 
 # ---------------------------------------------------------------- 假网络
@@ -221,6 +221,32 @@ def test_label_stays_unknown_when_nothing_is_known():
     det = Detection(bbox_xyxy=(0, 0, 10, 10))
     name, metric = detection_label(det)
     assert name == "unknown" and metric == 0.0, (name, metric)
+
+
+# ---------------------------------------------------------------- 框色
+def test_top_box_is_magenta_regardless_of_judged_colour():
+    """塔顶框按类名固定品红：同一类不能有时红、有时蓝（2026-10-29 的约定）。"""
+    top_red = Detection(bbox_xyxy=(0, 0, 20, 20), class_name="top", color="red")
+    top_blue = Detection(bbox_xyxy=(0, 0, 20, 20), class_name="top", color="blue")
+    assert box_color(top_red) == (255, 0, 255), box_color(top_red)
+    assert box_color(top_blue) == (255, 0, 255), box_color(top_blue)
+
+
+def test_block_and_blob_still_use_judged_colour():
+    block = Detection(bbox_xyxy=(0, 0, 20, 20), class_name="block", color="blue")
+    blob = Detection(bbox_xyxy=(0, 0, 20, 20), class_name="unknown", color="red")
+    assert box_color(block) == COLOR_DRAW_BGR["blue"], box_color(block)
+    assert box_color(blob) == COLOR_DRAW_BGR["red"], box_color(blob)
+
+
+def test_draw_detections_wires_box_colour():
+    """画框要真的用 box_color：只在 box_color 里改、draw 仍按 color 上色是无效修复。"""
+    canvas = np.zeros((40, 40, 3), dtype=np.uint8)
+    det = Detection(bbox_xyxy=(5, 5, 30, 30), class_name="top", color="red", score=0.9)
+    out = draw_detections(canvas, [det], show_center=False, show_label=False)
+    assert tuple(int(v) for v in out[5, 10]) == (255, 0, 255), out[5, 10]
+    assert tuple(int(v) for v in out[5, 5]) == (255, 0, 255), out[5, 5]
+
 
 
 # ---------------------------------------------------------------- 注册与配置
