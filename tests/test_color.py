@@ -193,6 +193,24 @@ def test_top_mixed_when_upper_half_unclear():
     assert verdict.name == "mixed", (verdict.name, verdict.ratio, verdict.reason)
 
 
+def test_top_colour_is_upper_brick_not_majority_area():
+    """红砖在上面就是 top red，哪怕红色面积更小（不能按整框占比选颜色）。"""
+    import numpy as np
+
+    from vision.yolo.color_check import judge_top_color
+
+    thresholds = {
+        "red": [(0, 120, 70, 10, 255, 255), (170, 120, 70, 179, 255, 255)],
+        "blue": [(105, 120, 70, 135, 255, 255)],
+    }
+    hsv = np.zeros((100, 100, 3), np.uint8)
+    hsv[:30, :] = (0, 200, 200)       # 红砖在上，只占 30%
+    hsv[30:, :] = (120, 200, 200)     # 蓝砖在下，占 70%
+    # 上半块红 60% < 0.9 -> 上半块判不出；按"谁在上面"必须判红
+    verdict = judge_top_color(hsv, (0, 0, 100, 100), thresholds, hit_ratio_min=0.9)
+    assert verdict.name == "red", (verdict.name, verdict.ratio, verdict.reason)
+
+
 def test_top_none_when_nothing_matches():
     """框里既没有红也没有蓝（灰墙/过曝）→ None，不能瞎给颜色。"""
     import numpy as np

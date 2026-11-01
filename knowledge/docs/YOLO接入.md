@@ -132,7 +132,9 @@ python -m vision live --set detector.name=yolo \
   把颜色塞进类别会让数据翻倍，还会因为光照/白平衡漂移而失效。
 - **颜色由 HSV 判**（`configs/color_thresholds.yaml`）：
   - `block` 判整框；
-  - `top` 判**上半块**（`judge_top_color`）；上半块判不出时，若整框红蓝各 ≥20% 记为 `mixed`。
+  - `top` **先判上半块**；上半块判不出时，按红蓝像素的**行中位数**判“谁在上面”
+    （红砖在上 = `red`，不按哪种颜色面积大）；红蓝左右并排/相机横滚时没有上下关系，
+    记为 `mixed` 或 `?`。
 - 画框颜色：`top` 固定品红（避免"同一类有时红有时蓝"看起来像 bug），`block` 按判出的红/蓝；
   标签里仍然写 `top/red`，两个信息不冲突。
 
