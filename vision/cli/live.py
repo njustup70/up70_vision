@@ -170,6 +170,8 @@ def run_detection_live(args, cfg, thresholds, detector) -> int:
             return 2
 
     save_every = max(1, int(args.save_every))
+    max_fps = float(getattr(args, "max_fps", 0.0) or 0.0)
+    min_dt = (1.0 / max_fps) if max_fps > 0 else 0.0
     frames = with_targets = saved = 0
     dts = deque(maxlen=LIVE_FPS_WINDOW)
     t_start = last_print = t_prev = time.monotonic()
@@ -234,6 +236,11 @@ def run_detection_live(args, cfg, thresholds, detector) -> int:
 
             if args.limit and frames >= args.limit:
                 break
+            if min_dt:
+                # 限帧：把多余时间睡掉，让 GUI 事件循环有机会刷新（否则窗口表现为卡死）
+                spare = min_dt - (time.monotonic() - now)
+                if spare > 0:
+                    time.sleep(spare)
     except KeyboardInterrupt:
         print("\n退出：收到 Ctrl+C")
     finally:

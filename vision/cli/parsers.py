@@ -146,4 +146,9 @@ def build_live_parser() -> argparse.ArgumentParser:
     #   写盘本身有 IO 开销，所以不逐帧写。下限由 `max(1, ...)` 兜住（0/负数都按 1 处理）。
     ap.add_argument("--save-every", dest="save_every", type=int, default=30,
                     help="headless 时每 N 帧落一张图（默认 30；至少 1）")
+    # --max-fps：限制**处理**帧率（不是相机帧率）。YOLO 在 CPU 上单帧约 40 ms，
+    #   相机 20 fps 追着跑会把 CPU 吃满、窗口事件循环得不到调度，表现就是"窗口卡死"；
+    #   设成 5~10 既够看实时，又能给 GUI 留出余量。
+    ap.add_argument("--max-fps", dest="max_fps", type=float, default=0.0,
+                    help="限制处理帧率（0=不限）；窗口卡顿时设 5~10")
     return ap
