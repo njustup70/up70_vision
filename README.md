@@ -137,6 +137,7 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
   真图 test P 0.971 / R 0.939 / mAP@0.5 0.970——但这是**同场次同分布**指标，test 里有相邻帧跨 train，
   去重后 F1 约 0.90~0.93，**别当泛化指标**（见 `knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md`）。
   剩余错误集中在画面边缘截断、远景叠放和环境误检。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
+  **v3 划分已重建**（整组留出，test g3+g4，跨集相似度 0.661），旧 mix4 需用 v3 重训后才能报泛化指标。
 - 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
 
 ---

@@ -85,19 +85,55 @@ test g6far_frame_0021  <->  train g6far_frame_0020   Δ帧 +1  相似 0.905
 - 数据量允许时做 **leave-one-group-out**：每次留一个采集组，训练 3~6 个模型，报均值±方差。
   CPU 上 40 epoch 约 25~40 分钟/次，至少留 `g4stack`（叠放）和 `g6far`（远景）各做一次。
 
-### 2.3 重建数据集的最小动作
+### 2.3 v3 已重建（2026-11-01）
+
+用 `lab/rebuild_split.py` 按**整组留出**重建了 `data/yolo_real_v3`：
+
+| 划分 | 采集组 | 图 | 框 | block/top |
+|---|---|---|---|---|
+| train | g1front + g2top + g6far | 181 | 789 | 366 / 423 |
+| val | g5dist | 15 | 52 | 29 / 23 |
+| test | g3tilt + g4stack | 52 | 173 | 94 / 79 |
+
+选择理由：
+
+- test 用 **g3tilt + g4stack**：v2 上这两组 R 只有 0.75 / 0.78，是最能暴露问题的两组；
+- val 用 **g5dist**：距离梯度，适合调 conf，且与 test 不重叠；
+- g6far 放 train：它是唯一的大规模远景组（646 框），留作 test 会让训练集只剩 368 框；
+- **代价**：v3 的 test 不测远景泛化。远景另建一折：
 
 ```bash
-# 1) 先审计现有划分，确认泄漏对（会返回退出码 1）
+# 远景留出折（train=g1~g4，val=g5，test=g6far）
+PYTHONPATH=. python lab/rebuild_split.py --out data/yolo_real_v3_far \
+  --train-groups g1front,g2top,g3tilt,g4stack --val-groups g5dist --test-groups g6far
+```
+
+审计结果（`lab/audit_split.py`）：
+
+```text
+val  vs train  最大相似度 0.506   ≥0.90 的 0 张
+test vs train  最大相似度 0.661   ≥0.90 的 0 张
+相邻帧跨集 0 对
+✅ 审计通过
+```
+
+对比 v2：test max 0.971、8 对相邻帧跨集；v3 的跨集相似度已经降到 0.66，**train/val/test 没有任何一组重叠**。
+
+### 2.4 重建命令
+
+```bash
+# 1) 审计现有划分，确认泄漏对（有泄漏时退出码 1）
 PYTHONPATH=. python lab/audit_split.py --data data/yolo_real_v2
 
-# 2) 按场次/时间块重建（建议新目录，别覆盖 v2，便于同口径对比）
-#    split_dataset.py 目前是"组内分层"，重建时至少把 --sim 提到 0.95，
-#    并按帧号连续块分配；更稳的是直接按采集场次手工指定 train/val/test。
+# 2) 按整组留出重建（默认就是上面的 v3；不覆盖 v2）
+PYTHONPATH=. python lab/rebuild_split.py
+
+# 3) 重建后自动审计；通过后再训练
 ```
 
 > 重建后必须重新训练一次，才能得到"诚实基线"；不要拿旧 mix4 在新 test 上直接报数——
-> 旧 mix4 已经见过 v2 的 train，而新 test 若仍来自同一批采集，仍然不干净。
+> 旧 mix4 已经见过 g3/g4 的图（它们原本在 v2 的 train 里），在新 test 上评估等于作弊。
+> 旧 v2 test 只保留作"同口径回归"，不再作为对外指标。
 
 ---
 
@@ -215,7 +251,7 @@ size_mm ≈ bbox_h_px * Z / fy               # 小孔近似
 ## 五、建议的执行顺序
 
 1. 跑 `lab/audit_split.py`，把当前泄漏对记录进 PR/文档（本次已完成）；
-2. 按场次重建 `yolo_real_v3`（先不训练，只验证"跨集最大相似度 <0.90、无相邻帧跨集"）；
+2. ✅ 已重建 `yolo_real_v3`（整组留出，审计通过：test max 0.661、0 对相邻帧跨集）；
 3. 补单色 top / 蓝上红下 / 边缘截断 / 空场负样本，清 6 个双色 block；
 4. 用 v3 重训一次，得到诚实基线（预计 F1 会从 0.96 掉到 0.88~0.91，这是好事）；
 5. 实现方案 D（两色 → top）+ 方案 E（多帧颜色融合）+ 方案 A（塔内相对尺寸）；
