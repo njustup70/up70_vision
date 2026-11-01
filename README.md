@@ -151,8 +151,8 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 - ROS 2 融合外壳复用 YOLO 与深度算法；独立 2D 库本身不依赖 ROS。当前未发布已验证的机械臂抓取指令。
 - YOLO 是**真图训练的 2 类模型**（`block`/`top`）。v2 同分布指标 P 0.971 / R 0.939 / mAP@0.5 0.970，
   但 test 里有相邻帧跨 train（max 0.971），**不能当泛化指标**。
-  **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 增广 0.885 → v4（加新场次 62 张）0.903**
-  （test = g3tilt + g4stack，52 图/173 框；v4 P 0.929 / R 0.819）。
+  **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 增广 0.885 → v4（加新场次 62 张）0.905**
+  （test = g3tilt + g4stack，52 图/173 框；v4 P 0.937 / R 0.825）。
   剩余问题：斜视召回偏低、叠放合并 15。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
   详见 `knowledge/docs/YOLO训练与评测记录.md`、`knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md`。
 - 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
