@@ -166,94 +166,93 @@ def upper_part_bbox(bbox, fraction: float = 0.5):
     return (x1, y1, x2, y1 + (y2 - y1) * fraction)
 
 
-#: 塔顶两种颜色各占多少才算"混色"（上下叠放时侧面看会各占一半）
+#: 塔顶两种颜色各占多少才算"混色"（保留常量，供旧调用/文档引用）
 TOP_MIXED_MIN_RATIO = 0.20
 
-#: 上下两块颜色像素的"行中位数"差至少占框高的多少，才算上下叠放
-#: 太小时红蓝可能在左右方向并排（相机横滚/侧视），不能按"上方"判
-TOP_VERTICAL_MIN_SEP = 0.12
+#: 红蓝像素的行/列中位数差至少占框高/框宽的多少，才算"上下"或"左右"排列
+TOP_AXIS_MIN_SEP = 0.12
 
 
-def _vertical_top_color(hsv, bbox, thresholds, min_sep: float, **kwargs):
-    """按"谁在上面"判塔顶颜色（固定/正装相机的兜底）。
+def _top_orientation(hsv, bbox, thresholds, min_sep: float):
+    """判断塔顶是"竖放"还是"横放"。
 
-    不比较红蓝面积，而是比较两种颜色像素的**行中位数**：
-    红色像素整体更靠上 → `red`，蓝色更靠上 → `blue`。
-    如果两种颜色在中位数上几乎同高（左右并排/相机横滚），返回 None，
-    交给调用方按 `mixed`/`None` 处理。
+    - 竖放：红蓝上下排列（红在上 = red，蓝在上 = blue）；
+    - 横放：红蓝左右排列（没有"哪块在上"，返回 mixed）；
+    - 单色/斜放/看不清：orientation 为 single/ambiguous。
 
-    只在"上半块判不出"时调用，不会覆盖已有的清晰单色结果。
+    只看红蓝像素的行/列中位数，不看面积。相机默认正装（图像上方=物理上方）。
     """
     red_segments = thresholds.get("red")
     blue_segments = thresholds.get("blue")
     if not red_segments or not blue_segments:
-        return None
+        return "none", None
     height, width = hsv.shape[:2]
     x1, y1, x2, y2 = clip_bbox(bbox, width, height)
     if x2 - x1 < 8 or y2 - y1 < 8:
-        return None
+        return "none", None
     roi = hsv[y1:y2, x1:x2]
     red_mask = mask_for_segments(roi, red_segments) > 0
     blue_mask = mask_for_segments(roi, blue_segments) > 0
     red_px = int(np.count_nonzero(red_mask))
     blue_px = int(np.count_nonzero(blue_mask))
     if red_px + blue_px < 4:
-        return None
-    # 只有一种颜色：不在这里下结论，留给 judge_color/整框逻辑
-    if blue_px < 0.05 * red_px or red_px < 0.05 * blue_px:
-        return None
-    red_row = float(np.median(np.nonzero(red_mask)[0]))
-    blue_row = float(np.median(np.nonzero(blue_mask)[0]))
-    box_h = y2 - y1
-    if abs(red_row - blue_row) < float(min_sep) * box_h:
-        return None                      # 左右并排/横滚：没有"上/下"
-    name = "red" if red_row < blue_row else "blue"
-    ratio_kwargs = {key: kwargs[key] for key in
-                    ("min_saturation", "min_value", "ignore_border_px")
-                    if key in kwargs}
-    ratios, n_valid = color_ratios(hsv, bbox, thresholds, **ratio_kwargs)
-    return ColorVerdict(name=name, ratio=float(ratios.get(name, 0.0)),
-                        valid_pixels=int(n_valid), ratios=ratios,
-                        reason=f"vertical red_row={red_row:.0f} blue_row={blue_row:.0f}")
+        return "none", None
+    if blue_px < 0.05 * red_px:
+        return "single", "red"
+    if red_px < 0.05 * blue_px:
+        return "single", "blue"
+
+    red_rows = np.nonzero(red_mask)[0]
+    blue_rows = np.nonzero(blue_mask)[0]
+    red_cols = np.nonzero(red_mask)[1]
+    blue_cols = np.nonzero(blue_mask)[1]
+    d_row = abs(float(np.median(red_rows)) - float(np.median(blue_rows))) / float(y2 - y1)
+    d_col = abs(float(np.median(red_cols)) - float(np.median(blue_cols))) / float(x2 - x1)
+    if d_row >= min_sep and d_row >= 1.2 * d_col:
+        upper = "red" if np.median(red_rows) < np.median(blue_rows) else "blue"
+        return "vertical", upper
+    if d_col >= min_sep and d_col >= 1.2 * d_row:
+        return "horizontal", None
+    return "ambiguous", None
 
 
 def judge_top_color(hsv, bbox, thresholds, upper_fraction: float = 0.5,
                     mixed_min: float = TOP_MIXED_MIN_RATIO,
-                    vertical_min_sep: float = TOP_VERTICAL_MIN_SEP, **kwargs):
-    """判"塔顶"（红蓝上下叠放的半砖）的颜色。
+                    axis_min_sep: float = TOP_AXIS_MIN_SEP, **kwargs):
+    """判"塔顶"（红蓝半砖）的颜色/摆放方向。
 
-    四条路，按顺序：
-      1. **上半块判得出单色** → 就是塔顶颜色（多数情况）；
-      2. 上半块判不出、但红蓝有明显上下关系 → 取**上方**那块的颜色
-         （红在半砖上面就是 `red`，不看哪种颜色面积大）；
-      3. 上下关系也不明显、而整框红蓝各占够多 → `mixed`（左右并排/横滚时诚实报混色）；
-      4. 都不满足 → `None`（看不清就报不确定）。
+    先判方向，再判颜色：
+      1. **竖放**（红蓝上下）：取上面那块的颜色 → `red` / `blue`；
+      2. **横放**（红蓝左右并排）：没有"哪块在上" → `mixed`；
+      3. 单色：返回该颜色（方向无法区分，reason=single）；
+      4. 斜放/看不清 → `None`。
 
-    :param hsv: 整帧 HSV 图
-    :param bbox: `(x1,y1,x2,y2)` 像素
-    :param thresholds: 颜色阈值表（`load_thresholds` 的返回）
-    :param upper_fraction: 取上面多少（0.5 = 上半）
-    :param mixed_min: 红、蓝占比都 ≥ 它才算混色
-    :param vertical_min_sep: 红蓝行中位数差至少占框高的比例（默认 0.12）
-    :param kwargs: 透传给 `judge_color`（min_saturation / hit_ratio_min 等）
+    :param upper_fraction: 保留参数（兼容旧调用），当前不参与判定
+    :param mixed_min: 保留参数（兼容旧调用），当前不参与判定
+    :param axis_min_sep: 行/列中位数差至少占框高/框宽的比例
+    :param kwargs: 透传给 `color_ratios`（min_saturation / min_value / ignore_border_px）
     :return: `ColorVerdict`；`name` 可能是 `"red"` / `"blue"` / `"mixed"` / `None`
     """
-    upper = judge_color(hsv, upper_part_bbox(bbox, upper_fraction), thresholds, **kwargs)
-    if upper.name is not None:
-        return upper
-
-    vertical = _vertical_top_color(hsv, bbox, thresholds, vertical_min_sep, **kwargs)
-    if vertical is not None:
-        return vertical
-
-    whole = judge_color(hsv, bbox, thresholds, **kwargs)
-    red = float(whole.ratios.get("red", 0.0)) if getattr(whole, "ratios", None) else 0.0
-    blue = float(whole.ratios.get("blue", 0.0)) if getattr(whole, "ratios", None) else 0.0
-    if red >= mixed_min and blue >= mixed_min:
-        return whole.__class__(name="mixed", ratio=max(red, blue),
-                               valid_pixels=whole.valid_pixels, ratios=whole.ratios,
-                               reason=f"红蓝各占 {red:.2f}/{blue:.2f}")
-    return whole
+    orientation, payload = _top_orientation(hsv, bbox, thresholds, axis_min_sep)
+    ratio_kwargs = {key: kwargs[key] for key in
+                    ("min_saturation", "min_value", "ignore_border_px")
+                    if key in kwargs}
+    ratios, n_valid = color_ratios(hsv, bbox, thresholds, **ratio_kwargs)
+    if orientation == "none":
+        return ColorVerdict(None, 0.0, int(n_valid), ratios, reason="no_colour")
+    if orientation == "single":
+        name = payload
+        return ColorVerdict(name, float(ratios.get(name, 0.0)), int(n_valid), ratios,
+                            reason="single_colour")
+    if orientation == "horizontal":
+        return ColorVerdict("mixed", float(max(ratios.get("red", 0.0),
+                                               ratios.get("blue", 0.0))),
+                            int(n_valid), ratios, reason="horizontal")
+    if orientation == "vertical":
+        name = payload
+        return ColorVerdict(name, float(ratios.get(name, 0.0)), int(n_valid), ratios,
+                            reason="vertical")
+    return ColorVerdict(None, 0.0, int(n_valid), ratios, reason="ambiguous_orientation")
 
 
 def judge_color(hsv: np.ndarray,

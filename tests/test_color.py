@@ -209,6 +209,24 @@ def test_colour_ratio_never_exceeds_one_when_mask_wider_than_valid():
     assert ratios["blue"] <= 1.0, ratios      # 旧实现会得到 ~400
 
 
+def test_horizontal_top_is_mixed_even_with_default_hit_ratio():
+    """左右并排（横放）不能判成 red/blue；默认 hit_ratio=0.5 也必须报 mixed。"""
+    import numpy as np
+
+    from vision.yolo.color_check import judge_top_color
+
+    thresholds = {
+        "red": [(0, 120, 70, 10, 255, 255), (170, 120, 70, 179, 255, 255)],
+        "blue": [(105, 65, 40, 135, 255, 255)],
+    }
+    hsv = np.zeros((100, 100, 3), np.uint8)
+    hsv[:, :50] = (0, 200, 200)       # 左红
+    hsv[:, 50:] = (120, 200, 200)     # 右蓝
+    verdict = judge_top_color(hsv, (0, 0, 100, 100), thresholds)
+    assert verdict.name == "mixed", (verdict.name, verdict.ratio, verdict.reason)
+    assert verdict.reason == "horizontal", verdict.reason
+
+
 def test_top_colour_is_upper_brick_not_majority_area():
     """红砖在上面就是 top red，哪怕红色面积更小（不能按整框占比选颜色）。"""
     import numpy as np
