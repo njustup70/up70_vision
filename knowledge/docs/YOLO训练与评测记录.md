@@ -349,3 +349,6 @@ PYTHONPATH=. ~/.venvs/vision/bin/python -m vision run \
 标注规则：**按物理物体标**（单色侧视的 top 也标 top，不按颜色）；海报/背景不标；负样本留空。
 拍完：`lab/audit_split.py` → 按场次重建 v4 → 从 COCO 重训 → val + g3tilt 先看，test 最后只测一次。
 
+> 单色 top 的类别歧义是 **2D 已知限制**：补 D 批数据只能提升召回，不能保证；
+> 最终用深度 `size = bbox_h * depth / fy` 裁决。见 `YOLO2D数据泄漏与尺寸歧义.md` 3.5。
+
