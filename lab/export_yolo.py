@@ -14,7 +14,7 @@
     ~/.venvs/yolo/bin/python lab/export_yolo.py --weights yolo11s.pt --imgsz 480 --out knowledge/models
 
 导出后怎么用
-    # 注意：判色族/YOLO 走**批处理入口**；live 是 ArUco 专用（要画四边形和位姿轴）
+    # 批处理可使用 run；实时检测另见 README 的 live 命令。
     python -m vision run --set detector.name=yolo \
         --set input.source=replay --set input.replay.path=tests/assets/aruco/scenes
 """
@@ -32,8 +32,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 import json
 import os
-import sys
-from pathlib import Path
 
 # 仓库根：lab/export_yolo.py 往上两层（lab -> 根）。
 # 用 __file__ 而不是 cwd：默认输出目录固定在仓库的 knowledge/models/，从哪调用都一样。

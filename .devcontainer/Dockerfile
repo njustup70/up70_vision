@@ -52,7 +52,7 @@ RUN if ls /tmp/mvs-pkgs/*.deb > /dev/null 2>&1; then \
  && rm -rf /tmp/mvs-pkgs
 
 # MVS 的运行时环境变量。MVS 的安装脚本会写进 ~/.bashrc，但非交互式 shell 不读它，
-# 所以显式写进镜像 ENV（src/up70_vision/io/camera.py 里也做了 setdefault 兜底）。
+# 所以显式写进镜像 ENV（vision/sources/camera.py 里也做了 setdefault 兜底）。
 ENV MVCAM_SDK_PATH=/opt/MVS \
     MVCAM_COMMON_RUNENV=/opt/MVS/lib \
     MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \
@@ -60,9 +60,9 @@ ENV MVCAM_SDK_PATH=/opt/MVS \
     LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32
 
 # ---- 2. 应用与依赖层 ----
-# 源码放到固定路径 /opt/up70_vision。compose 与 devcontainer 都把宿主仓库
-# bind mount 到这个路径，所以改宿主机代码在容器里立即生效，不必重建镜像。
-# -e 可编辑安装：import up70_vision 拿到的是挂载进来的源码，不是构建时那份拷贝。
+# 镜像内源码在 /opt/up70_vision；compose/devcontainer 使用挂载路径 /opt/vision，
+# 挂载时改宿主机代码立即生效。依赖变化仍需重建镜像。
+# -e 可编辑安装：import vision 拿到的是挂载进来的源码，不是构建时那份拷贝。
 # --no-cache-dir：不把 pip 下载缓存留在镜像层里。
 WORKDIR /opt/up70_vision
 COPY . .
@@ -86,4 +86,4 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # 默认跑环境自检：docker run 不带 command 时就知道环境是否正常
-CMD ["python", "scripts/check_env.py"]
+CMD ["python", "-m", "vision", "doctor"]

@@ -53,7 +53,7 @@ data/*
 .ai-memory/
 .codebuddy/
 
-# 文档构建产物：knowledge/docs/ 里的教程 html 由 `python -m up70_vision.tools.gen_html` 生成，
+# 文档构建产物：knowledge/docs/ 里的教程 html 由 `python lab/gen_html.py` 生成，
 # 只在本地看或对外发布时用，不进版本库（否则 md 与 html 会变成两个版本）
 knowledge/docs/*.html
 
@@ -62,7 +62,7 @@ knowledge/docs/*.html
 .vscode/*
 !.vscode/settings.json.example
 
-# 相机标定结果：每台相机/每个场地一份，由 scripts/calibrate_camera.py 生成
+# 相机标定结果：每台相机/每个场地一份，由 lab/calibrate_camera.py 生成
 configs/camera_calibration*.yaml
 
 # 录制的 bag：体积大（深度 848x480@30fps 约 27 MB/s，35 秒就是 930 MB），不进版本库；
