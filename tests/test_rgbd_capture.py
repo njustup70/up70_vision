@@ -43,8 +43,13 @@ def test_native_bag_coverage_checks_actual_written_times(tmp_path):
                 rosbag2_py.ConverterOptions('', ''))
     topics = {'color': '/c', 'depth': '/d'}
     for name in topics.values():
-        writer.create_topic(rosbag2_py.TopicMetadata(id=0, name=name, type='sensor_msgs/msg/Image',
-                                                    serialization_format='cdr'))
+        # Humble 没有 id 参数，Jazzy 要求 id；两者生成同一测试话题。
+        fields = dict(name=name, type='sensor_msgs/msg/Image', serialization_format='cdr')
+        try:
+            metadata = rosbag2_py.TopicMetadata(**fields)
+        except TypeError:
+            metadata = rosbag2_py.TopicMetadata(id=0, **fields)
+        writer.create_topic(metadata)
     for name, times in [('/c',[0,10**9,6*10**9]),('/d',[0,10**9,4*10**9])]:
         for t in times:
             writer.write(name, b'\x00\x01\x00\x00', t)

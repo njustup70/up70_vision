@@ -106,6 +106,8 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 
 ### 环境与启动
 
+比赛目标的 Humble 容器与设备入口见 [Humble 容器说明](../../.devcontainer/README-humble.md)；下列是历史 Jazzy 环境示例，不代表 Humble 真机已通过。
+
 使用能导入 ROS 2 Jazzy、项目 `vision` 包、NumPy 和 OpenCV >=4.10 的同一个 Python。系统 OpenCV 4.6 不满足项目要求；本轮隔离验证采用 OpenCV 4.11。现有 2D Docker 镜像没有 ROS，不直接用它运行此查看器。
 
 首次准备环境示例（在仓库根执行，虚拟环境在用户目录）：

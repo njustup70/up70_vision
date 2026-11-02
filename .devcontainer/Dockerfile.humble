@@ -1,0 +1,56 @@
+# 比赛目标：Ubuntu 22.04 / ROS 2 Humble，三种 target 共用 Python 和视觉依赖。
+FROM ros:humble-ros-base@sha256:1813d3c85d7f96ff7d3012d865204583255740182db5d0065f8f8cd029a83138 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip python3-colcon-common-extensions python3-rosdep \
+    libgl1 libglib2.0-0 libsm6 libice6 \
+    ros-humble-vision-msgs ros-humble-tf2-ros ros-humble-rviz2 \
+    ros-humble-rosbag2-storage-mcap \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/vision
+COPY pyproject.toml README.md requirements.txt ./
+COPY vision/ vision/
+COPY lab/ lab/
+COPY configs/ configs/
+COPY knowledge/ knowledge/
+COPY ros2_ws/src/ ros2_ws/src/
+# NumPy 1.x 与 Humble 的系统 ROS Python 扩展保持兼容；所有入口均使用系统 Python 3.10。
+RUN python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" 'pip==24.0' \
+    && python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" \
+       'numpy==1.26.4' 'opencv-python==4.11.0.86'
+RUN python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" -e '.[lab]' pytest \
+    && . /opt/ros/humble/setup.sh \
+    && colcon --log-base /tmp/up70-colcon-log build \
+       --base-paths /opt/vision/ros2_ws/src \
+       --build-base /tmp/up70-colcon-build --install-base /opt/up70-ros/install \
+    && rm -rf /tmp/up70-colcon-build /tmp/up70-colcon-log
+
+COPY tests/ tests/
+COPY .devcontainer/humble-entrypoint.sh /usr/local/bin/up70-humble-entrypoint
+ENTRYPOINT ["/usr/local/bin/up70-humble-entrypoint"]
+CMD ["python3", "-m", "vision", "doctor"]
+
+# 海康 SDK 只进入海康镜像；缺少安装包时明确报错，避免误以为相机可用。
+FROM base AS hik
+COPY .devcontainer/pkgs/ /tmp/mvs-pkgs/
+RUN set -eu; set -- /tmp/mvs-pkgs/*.deb; \
+    if [ ! -f "$1" ] || [ "$#" -ne 1 ]; then \
+      echo '需要在 .devcontainer/pkgs/ 放入且仅放一个 MVS deb' >&2; exit 1; fi; \
+    apt-get update && apt-get install -y --no-install-recommends libusb-1.0-0 "$1" \
+    && rm -rf /var/lib/apt/lists/* /tmp/mvs-pkgs
+ENV MVCAM_SDK_PATH=/opt/MVS \
+    MVCAM_COMMON_RUNENV=/opt/MVS/lib \
+    MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \
+    ALLUSERSPROFILE=/opt/MVS/MVFG \
+    LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32
+
+# 拒绝静默使用非 2.9.3 版本；版本源若变更应先核对后再更新。
+FROM base AS gemini
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends 'ros-humble-orbbec-camera=2.9.3-*' \
+    && rm -rf /var/lib/apt/lists/*

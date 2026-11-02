@@ -6,6 +6,8 @@
 
 ## RGB-D 融合：运行入口
 
+比赛目标 ROS 2 Humble 的独立 Docker 环境及海康/Gemini 使用方法见 [Humble 容器说明](.devcontainer/README-humble.md)；真机与跨机验证状态以该说明和深度进度为准。
+
 当前已验证运行环境是本机 ROS 2 Jazzy、Orbbec ROS wrapper/SDK 2.9.3 和 OpenCV ≥4.10。先从搭档处取得 `yolov8n_mix4.onnx` 与同名 `.names.json` 放入 `knowledge/models/`：两者不随 Git 分发，模型为 CPU 推理，类别是 `block`、`top`。设备准备、依赖、配置和限制见 [联调说明](knowledge/docs/整机联调说明.md)。
 
 从仓库根目录运行，确保 ROS、Orbbec 驱动和带项目依赖的 Python 环境已就绪：
