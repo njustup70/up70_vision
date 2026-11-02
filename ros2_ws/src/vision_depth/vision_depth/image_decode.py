@@ -20,4 +20,3 @@ def image_array(msg, depth=False):
         return raw.view('>u2' if msg.is_bigendian else '<u2').reshape(h, w).astype(np.uint16)
     color = raw.reshape(h, w, 3)
     return color[:, :, ::-1].copy() if enc == 'rgb8' else color.copy()
-

@@ -37,4 +37,3 @@ def load_report(path: Path):
         if (info.get('width'), info.get('height')) != (w, h):
             raise ValueError('图像与 CameraInfo 尺寸不一致')
     return summary, selected, color, depth, color_info, depth_info
-
