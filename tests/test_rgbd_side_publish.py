@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 pytest.importorskip('rclpy')
@@ -36,10 +37,26 @@ class Node:
         return pub
 
 
-def observation(xyz, name='block', status='CANDIDATE'):
+def observation(xyz, name='block', status='CANDIDATE', normal=(0, 0, -1)):
     """创建一个选面结果。"""
     return {'status': status, 'detection': {'class_name': name, 'score': 0.75},
-            'measurement': {'selected_index': 0, 'candidates': [{'centroid_mm': xyz}]}}
+            'measurement': {'selected_index': 0, 'candidates': [{'centroid_mm': xyz, 'normal': normal}]}}
+
+
+def rotated_z(q):
+    """按 ROS 四元数约定恢复局部 +Z 的光学系方向。"""
+    return (2*(q.x*q.z + q.w*q.y), 2*(q.y*q.z - q.w*q.x),
+            1 - 2*(q.x*q.x + q.y*q.y))
+
+
+@pytest.mark.parametrize('normal', [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
+                                    (0, 0, 1), (0, 0, -1), (1, 2, -3)])
+def test_quaternion_all_axis_directions(normal):
+    """几何转换对正反三个轴和斜向均能还原局部 +Z。"""
+    from vision_depth.geometry import quaternion_from_z_axis
+    x, y, z, w = quaternion_from_z_axis(normal)
+    expected = np.array(normal) / np.linalg.norm(normal)
+    assert rotated_z(SimpleNamespace(x=x, y=y, z=z, w=w)) == pytest.approx(expected, abs=1e-6)
 
 
 def result(rows, received=10.0):
@@ -62,12 +79,73 @@ def test_multibox_fields_and_markers():
         assert det.header == array.header and det.id == ''
         assert det.results[0].hypothesis.class_id == name
         assert det.results[0].hypothesis.score == 0.75
-        assert pose.orientation.w == det.bbox.center.orientation.w == 1.0
+        assert rotated_z(pose.orientation) == pytest.approx((0, 0, -1), abs=1e-6)
+        assert det.bbox.center.orientation.w == 1.0
         assert det.bbox.size.x == det.bbox.size.y == det.bbox.size.z == 0
     markers = publisher.markers.messages[-1].markers
-    assert len(markers) == 5 and markers[0].action == markers[0].DELETEALL
+    assert len(markers) == 7 and markers[0].action == markers[0].DELETEALL
     assert markers[1].pose.position.z == .5 and markers[1].lifetime.nanosec == 500_000_000
-    assert 'CANDIDATE top' in markers[4].text
+    assert 'CANDIDATE|top|p=' in markers[5].text
+    assert 'n=(0.000,0.000,-1.000)' in markers[5].text
+    assert not any(char.isspace() for char in markers[5].text)
+    for index, det in enumerate(array.detections):
+        arrow = markers[3+3*index]
+        start, end = arrow.points
+        pos = det.results[0].pose.pose.position
+        assert (start.x, start.y, start.z) == pytest.approx((pos.x, pos.y, pos.z))
+        assert tuple((b-a)/.1 for a, b in zip((start.x, start.y, start.z),
+                                             (end.x, end.y, end.z))) == pytest.approx(
+                                                 rotated_z(det.results[0].pose.pose.orientation), abs=1e-6)
+    assert len({m.id for m in markers[1:]}) == 6
+
+
+def test_rviz_label_compacts_whitespace_in_class_name():
+    """类别名包含空白时，标签仍使用紧凑分隔符且话题类别不变。"""
+    publisher = CandidatePublisher(Node(), 500)
+    publisher.publish(result([observation([1, 2, 300], name='box  top')]), 10)
+    assert publisher.detections.messages[-1].detections[0].results[0].hypothesis.class_id == 'box  top'
+    label = publisher.markers.messages[-1].markers[2].text
+    assert '|box_top|' in label and not any(char.isspace() for char in label)
+
+
+@pytest.mark.parametrize('normal', [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
+                                    (0, 0, 1), (0, 0, -1), (1, 2, -3)])
+def test_normal_quaternion_direction(normal):
+    """正反轴向与斜向法向按相机方向翻转，四元数正确恢复方向。"""
+    publisher = CandidatePublisher(Node(), 500)
+    point = (100, 200, 300)
+    publisher.publish(result([observation(point, normal=normal)]), 10)
+    actual = rotated_z(publisher.detections.messages[-1].detections[0].results[0].pose.pose.orientation)
+    length = math.hypot(*normal)
+    expected = [n / length for n in normal]
+    if sum(n*p for n, p in zip(expected, point)) > 0:
+        expected = [-n for n in expected]
+    assert actual == pytest.approx(expected, abs=1e-6)
+
+
+@pytest.mark.parametrize('normal', [None, (0, 0, 0), (0, 0, 1e-9),
+                                    (math.nan, 0, 1), (math.inf, 0, 1), (1, 2)])
+def test_invalid_normal_drops_only_its_candidate(normal):
+    """非法法向不发布，其余候选和对应箭头不受影响。"""
+    publisher = CandidatePublisher(Node(), 500)
+    publisher.publish(result([observation([1, 2, 300], normal=normal),
+                              observation([1, 2, 400], name='top')]), 10)
+    assert len(publisher.detections.messages[-1].detections) == 1
+    assert publisher.detections.messages[-1].detections[0].results[0].hypothesis.class_id == 'top'
+    assert len(publisher.markers.messages[-1].markers) == 4
+    assert publisher.counts['invalid_normal'] == 1
+
+
+def test_missing_normal_replaces_previous_candidate_with_empty_result():
+    """法向字段缺失时撤销前一帧的候选和箭头，不伪造单位姿态。"""
+    publisher = CandidatePublisher(Node(), 500)
+    publisher.publish(result([observation([1, 2, 300])]), 10)
+    missing = observation([1, 2, 300])
+    del missing['measurement']['candidates'][0]['normal']
+    publisher.publish(result([missing], 10.1), 10.1)
+    assert not publisher.detections.messages[-1].detections
+    assert [m.action for m in publisher.markers.messages[-1].markers] == [3]
+    assert not publisher.active and publisher.counts['invalid_normal'] == 1
 
 
 def test_empty_invalid_expiry_and_recovery():

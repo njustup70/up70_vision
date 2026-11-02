@@ -9,10 +9,32 @@ from copy import deepcopy
 import math
 
 from builtin_interfaces.msg import Duration
+from geometry_msgs.msg import Point
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import Header
 from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker, MarkerArray
+
+from .geometry import quaternion_from_z_axis
+
+
+def _camera_facing_normal(value, point):
+    """返回朝向光心的单位法向；缺失、非有限或退化时返回 None。"""
+    try:
+        if len(value) != 3:
+            return None
+        normal = [float(v) for v in value]
+        if not all(math.isfinite(v) for v in normal):
+            return None
+        length = math.hypot(*normal)
+        if not math.isfinite(length) or length <= 1e-9:
+            return None
+        normal = [v / length for v in normal]
+        if sum(a * b for a, b in zip(normal, point)) > 0:
+            normal = [-v for v in normal]
+        return normal
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 class CandidatePublisher:
@@ -54,23 +76,30 @@ class CandidatePublisher:
             measurement = row['measurement']
             if not measurement or measurement['selected_index'] is None:
                 continue
-            xyz = measurement['candidates'][measurement['selected_index']]['centroid_mm']
+            candidate = measurement['candidates'][measurement['selected_index']]
+            xyz = candidate['centroid_mm']
             if len(xyz) != 3 or not all(math.isfinite(v) for v in xyz) or xyz[2] <= 0:
                 continue
             point = [float(v) / 1000.0 for v in xyz]
+            normal = _camera_facing_normal(candidate.get('normal'), point)
+            if normal is None:
+                self.counts['invalid_normal'] += 1
+                continue
             detection = Detection3D()
             detection.header = header
             hypothesis = ObjectHypothesisWithPose()
             hypothesis.hypothesis.class_id = row['detection']['class_name']
             hypothesis.hypothesis.score = float(row['detection']['score'])
             hypothesis.pose.pose.position.x, hypothesis.pose.pose.position.y, hypothesis.pose.pose.position.z = point
-            hypothesis.pose.pose.orientation.w = 1.0
+            q = hypothesis.pose.pose.orientation
+            q.x, q.y, q.z, q.w = quaternion_from_z_axis(normal)
             detection.results.append(hypothesis)
             detection.bbox.center.position.x, detection.bbox.center.position.y, detection.bbox.center.position.z = point
             detection.bbox.center.orientation.w = 1.0
             array.detections.append(detection)
             index = len(array.detections) - 1
-            marker_array.markers.extend(self._candidate_markers(header, index, point, row['detection']['class_name']))
+            marker_array.markers.extend(self._candidate_markers(header, index, point, normal,
+                                                                row['detection']['class_name']))
         self.detections.publish(array)
         self.markers.publish(marker_array)
         self.header = deepcopy(header)
@@ -105,15 +134,15 @@ class CandidatePublisher:
         marker.action = Marker.DELETEALL
         return marker
 
-    def _candidate_markers(self, header, index, point, class_name):
-        """创建球与文字；生命周期提供进程意外退出后的回收。"""
+    def _candidate_markers(self, header, index, point, normal, class_name):
+        """创建球、文字和朝相机箭头；生命周期提供异常退出后的回收。"""
         lifetime_ns = max(1, round(self.max_age * 1_000_000_000))
         result = []
-        for offset, kind in enumerate((Marker.SPHERE, Marker.TEXT_VIEW_FACING)):
+        for offset, kind in enumerate((Marker.SPHERE, Marker.TEXT_VIEW_FACING, Marker.ARROW)):
             marker = Marker()
             marker.header = header
             marker.ns = 'rgbd_side_candidate'
-            marker.id = 2 * index + offset
+            marker.id = 3 * index + offset
             marker.type = kind
             marker.action = Marker.ADD
             marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = point
@@ -124,9 +153,21 @@ class CandidatePublisher:
             marker.color.r, marker.color.g, marker.color.b = 1.0, 0.8, 0.0
             if kind == Marker.SPHERE:
                 marker.scale.x = marker.scale.y = marker.scale.z = 0.025
-            else:
+            elif kind == Marker.TEXT_VIEW_FACING:
                 marker.pose.position.y -= 0.035
                 marker.scale.z = 0.035
-                marker.text = f'CANDIDATE {class_name} {point[0]:.3f}, {point[1]:.3f}, {point[2]:.3f} m'
+                # RViz 字体的空格可能被渲染成异常宽的间距，用分隔符保证标签紧凑。
+                label = '_'.join(str(class_name).split())
+                marker.text = (f'CANDIDATE|{label}|p=({point[0]:.3f},{point[1]:.3f},{point[2]:.3f})m|'
+                               f'n=({normal[0]:.3f},{normal[1]:.3f},{normal[2]:.3f})')
+            else:
+                # points 已处于光学坐标系；pose 保持原点，避免重心被加两次。
+                marker.pose.position.x = marker.pose.position.y = marker.pose.position.z = 0.0
+                marker.color.r, marker.color.g, marker.color.b = 0.0, 1.0, 1.0
+                marker.scale.x, marker.scale.y, marker.scale.z = 0.008, 0.016, 0.02
+                marker.points = [Point(x=point[0], y=point[1], z=point[2]),
+                                 Point(x=point[0] + 0.1*normal[0],
+                                       y=point[1] + 0.1*normal[1],
+                                       z=point[2] + 0.1*normal[2])]
             result.append(marker)
         return result
