@@ -43,6 +43,7 @@ def generate_launch_description():
         DeclareLaunchArgument('camera_config', default_value=str(share/'config/rgbd_capture.yaml')),
         DeclareLaunchArgument('weights', default_value=''),
         DeclareLaunchArgument('headless', default_value=''),
+        DeclareLaunchArgument('rviz', default_value='false'),
         DeclareLaunchArgument('max_runtime_s', default_value=''),
         SetEnvironmentVariable('FASTRTPS_DEFAULT_PROFILES_FILE', str(share/'config/fastdds_shm_only.xml')),
         SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp'),
@@ -53,4 +54,7 @@ def generate_launch_description():
             launch_arguments={'mode': 'aligned', 'config_file': LaunchConfiguration('camera_config')}.items())],
             scoped=True, condition=IfCondition(LaunchConfiguration('start_camera'))),
         OpaqueFunction(function=_viewer),
+        Node(package='rviz2', executable='rviz2', name='rgbd_side_rviz',
+             arguments=['-d', str(share/'config/rgbd_side.rviz')],
+             condition=IfCondition(LaunchConfiguration('rviz')), output='screen'),
     ])

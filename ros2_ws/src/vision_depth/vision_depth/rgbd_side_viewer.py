@@ -23,6 +23,7 @@ from vision.depth.surface import PlaneParams
 from vision.yolo import YoloDetector
 from .side_pipeline import SidePipeline, info_dict, render_result, save_snapshot
 from .side_sync import LatestWorker, RgbdSynchronizer
+from .side_publish import CandidatePublisher
 
 
 def checked_detector(weights, imgsz, conf, iou, classes, names, max_detections):
@@ -59,7 +60,7 @@ def _percentiles(values):
 
 
 class RgbdSideViewer(Node):
-    """仅窗口测量：消息缓存与 GUI 在主线程，单工作线程执行检测和几何。"""
+    """候选测量与发布：消息缓存和 GUI 在主线程，单工作线程执行检测和几何。"""
 
     def __init__(self):
         """读取参数，验证模型和 aligned 输入声明，再建立订阅。"""
@@ -109,6 +110,7 @@ class RgbdSideViewer(Node):
         self.arrivals = {'color': deque(maxlen=120), 'depth': deque(maxlen=120)}
         self.worker = LatestWorker(SidePipeline(detector, params))
         self.last_result = None
+        self.publisher = CandidatePublisher(self, c['max_age_ms'])
         self.epoch_seen = self.sync.epoch
         self.stale_seen = False
         self.counts = Counter()
@@ -183,6 +185,7 @@ class RgbdSideViewer(Node):
         """提交最近图对并取走最新结果，返回当前可显示结果与错误文本。"""
         now = time.monotonic()
         if self.sync.epoch != self.epoch_seen:
+            self.publisher.clear()
             self.worker.invalidate()
             self.last_result = None
             self.epoch_seen = self.sync.epoch
@@ -195,26 +198,30 @@ class RgbdSideViewer(Node):
             self.last_result = ready['value']
             self.stale_seen = False
             if ready['error']:
+                self.publisher.clear()
                 self.problems['pipeline'] = ready['error']
             else:
                 self.problems.pop('pipeline', None)
                 value = ready['value']
+                self.publisher.publish(value, now)
                 self.ages.append((now-value['received'])*1000)
                 self.inference_ms.append(value['timing_ms']['inference'])
                 self.geometry_ms.append(value['timing_ms']['geometry'])
                 for row in value['observations']:
                     self.counts[row['status']] += 1
+        self.publisher.expire(now)
         return self.last_result, '; '.join(self.problems.values()) or 'WAIT_SYNC / CAMERA_INFO'
 
     def close(self):
         """终止后台并写性能摘要；历史只保留最近 2000 个样本，非精度验收报告。"""
+        self.publisher.clear()
         self.worker.close()
         now = time.monotonic()
         counts, durations = self.worker.stats()
         summary = {'runtime_s': now-self.started, 'model': self.model, 'config': self.config,
                    'worker_stopped': not self.worker.thread.is_alive(),
                    'sync_counts': dict(self.sync.counts), 'worker_counts': counts,
-                   'status_counts': dict(self.counts), 'stats': self.stats(now),
+                   'status_counts': dict(self.counts), 'publish_counts': dict(self.publisher.counts), 'stats': self.stats(now),
                    'history_limit': 2000, 'compute_ms': _percentiles(durations),
                    'receive_age_first_display_ms': _percentiles(list(self.ages)),
                    'inference_ms': _percentiles(list(self.inference_ms)),

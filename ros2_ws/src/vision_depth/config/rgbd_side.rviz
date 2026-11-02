@@ -1,0 +1,38 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: camera_color_optical_frame
+  Displays:
+    - Class: rviz_default_plugins/MarkerArray
+      Name: RGB-D Candidates
+      Enabled: true
+      Topic:
+        Value: /rgbd_side/markers
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
+    - Class: rviz_default_plugins/Axes
+      Name: Optical Frame
+      Enabled: true
+      Length: 0.2
+      Radius: 0.01
+      Reference Frame: camera_color_optical_frame
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.6
+Window Geometry:
+  Width: 1000
+  Height: 700
