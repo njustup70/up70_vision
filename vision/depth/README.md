@@ -85,7 +85,7 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 `spatial_edges.csv`、`overlays/`、`annotations.json`），本阶段默认不入库。
 注意：本阶段的「对齐深度」不接入 `fuse_node`——纯深度基线先用 raw 话题。
 
-算法先在 `lab/proto_depth.py` 里跑通并调好参数，再提炼到这里（ROS2 接入方案 10.2 的四步落地）。`lab/` 那个脚本保留作为离线调试工具，读 npy/bag 看中间结果；ROS 侧的 `fuse_node` 调的是这里。
+`lab/proto_depth.py` 保留历史纯深度算法、参数和命令，供离线复现与对照；其结果不等同于当前算法。当前运行链及 ROS `fuse_node` 使用 `vision.depth`。
 
 进度、实测数字、未完成项与踩过的坑见 [`docs/progress.md`](docs/progress.md)。改参数或做精度测试前先看一遍，尤其是「未完成与下一步」和「踩过的坑」两节。
 
@@ -102,7 +102,7 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 
 活文档，2026-10-30。窗口显示 YOLO 框内的平面候选及**可见平面内点重心**，发布可见面重心候选话题和 RViz 标记，不发布机械臂抓取指令。默认 `dominant` 策略可从多平面选明显主体；条件不足时显示 AMBIGUOUS，没有中心点。选出平面也仅为 CANDIDATE，不保证它属于一个箱子的侧面。
 
-实时外壳只保留三个模块：`rgbd_side_viewer.py` 管节点与主线程窗口，`side_pipeline.py` 管图对解码、测量、绘制和快照，`side_sync.py` 管配对与单槽后台任务。共享平面计算及其诊断绘制放在 `surface.py`，像素网格校正单独放在 `rgbd.py`；离线工具复用它们，不复制算法或依赖 ROS。
+实时外壳包括 `rgbd_side_viewer.py`（节点与主线程窗口）、`side_pipeline.py`（图对解码、测量、绘制和快照）、`side_sync.py`（配对与单槽后台任务）和 `side_publish.py`（候选与标记发布）。共享平面计算及其诊断绘制放在 `surface.py`，像素网格校正单独放在 `rgbd.py`；离线工具复用它们，不复制算法或依赖 ROS。
 
 ### 环境与启动
 

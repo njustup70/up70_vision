@@ -1,18 +1,33 @@
-# up70-vision
+# UP70 视觉
 
-UP70 战队视觉组仓库：把 2D 视觉链路跑通——**图像输入 → 目标检出 → 位姿 → 绘制与落盘**，
-为机械臂与 ROS 2 打底。
+本仓库提供 **YOLO + RGB-D 可见平面候选**作为当前整机联调入口，同时保留海康相机的 ArUco、YOLO、HSV 判色与离线验证工具。
 
-三条 2D 能力：**ArUco**（检测 → 位姿 → 实时循环，主力）、**YOLO**（可选，ONNX + `cv2.dnn`，不需要 torch）、
-**判色**（HSV，YOLO 不可用时的轻量方案）。输入源三选一：`camera`（海康 MV-CU013-A0UC，MVS SDK）/
-`replay`（图片或视频）/ `synthetic`（自造图，**没有相机也能跑全流程**）。
+当前融合流程为：Orbbec Gemini 336L 彩深图 → 时间配对和网格校正 → YOLO 检测框 → 框内平面拟合 → ROS 2 候选话题和 RViz。输出是**可见平面内点重心及朝相机的法向候选**，还不是机械臂基座坐标或已验证抓取点。空间对齐、绝对定位精度和连续稳定性尚未完成验收；详见 [整机联调说明](knowledge/docs/整机联调说明.md)。
 
-3D 抓取（深度相机）另有一条线：算法在 `vision/depth/`，ROS 2 外壳在 `ros2_ws/src/vision_depth/`，
-由深度侧同学维护；本 README 的坑与命令主要针对 2D。
+## RGB-D 融合：运行入口
+
+当前已验证运行环境是本机 ROS 2 Jazzy、Orbbec ROS wrapper/SDK 2.9.3 和 OpenCV ≥4.10。先从搭档处取得 `yolov8n_mix4.onnx` 与同名 `.names.json` 放入 `knowledge/models/`：两者不随 Git 分发，模型为 CPU 推理，类别是 `block`、`top`。设备准备、依赖、配置和限制见 [联调说明](knowledge/docs/整机联调说明.md)。
+
+从仓库根目录运行，确保 ROS、Orbbec 驱动和带项目依赖的 Python 环境已就绪：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/.venvs/up70-rgbd/bin/activate  # 示例；使用自己的 ROS 兼容 Python 环境
+cd ros2_ws
+python -m colcon build --packages-select vision_depth --symlink-install
+source install/setup.bash
+cd ..
+export ROS_DOMAIN_ID=97  # 示例；同一联调组保持一致
+ros2 launch vision_depth rgbd_side_viewer.launch.py rviz:=true
+```
+
+相机启动后，`/rgbd_side/candidates` 发布候选重心、类别和法向姿态，`/rgbd_side/markers` 供 RViz 显示。话题单位、时间戳、有效期与四元数含义见 [接口契约](vision/docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
+
+**当前 launch 强制使用 Fast DDS 仅共享内存配置，只适用于同机通信。** 其他机器无法直接发现或订阅该配置下的节点；跨机部署方案尚未确定。只想使用已有相机或回放时，传 `start_camera:=false`，并提供匹配的对齐彩深图和 CameraInfo。
 
 ---
 
-## 快速开始（容器，不用在本机装依赖）
+## 2D 与通用工具：容器快速开始
 
 ```bash
 # 只需一次：构建镜像（约 2~3 分钟）
@@ -29,7 +44,7 @@ docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -
 
 ---
 
-## 怎么用
+## 2D 命令与离线工具
 
 **只有 6 条主入口**：`python -m vision [run|live|doctor|demo|hsv-tuner|clean]`
 （不带参数会打印这张表）。其余一次性工具在 `lab/`，直接 `python lab/xxx.py`。
@@ -40,7 +55,7 @@ python -m vision live --set detector.name=aruco --set input.source=camera --set 
 
 # 加位姿：画面多三根坐标轴；窗口 HUD 第 4 行直接显示 d/tilt/yaw（终端也同步打）
 python -m vision live --set detector.name=aruco --set input.source=camera \
-  --set pose.enabled=true --set pose.marker_size_mm=82.5
+  --set pose.enabled=true --set pose.marker_size_mm=84
 
 # 实时 YOLO（2 类：block/top）+ HSV 判色；窗口卡就加 --max-fps 4~6
 python -m vision live --set detector.name=yolo \
@@ -69,6 +84,8 @@ python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 参数都在 `configs/default.yaml`（判色阈值在 `configs/color_thresholds.yaml`），
 `--set 点分路径=值` 临时覆盖，只能改已存在的字段，写错启动即报错。
 
+上面的 2D 通用容器不包含 ROS 2，不能直接运行 RGB-D 融合入口。
+
 ![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](knowledge/images/live_pose_demo.jpg)
 
 ---
@@ -87,9 +104,9 @@ vision/        运行时代码（要 import / 要测 / 有架构约束）
 ├── yolo/        功能包：detector / candidates / color_check / pipeline / draw
 └── depth/       深度相机算法（纯 Python，可 pytest；ROS 外壳在 ros2_ws/）
 
-ros2_ws/       ROS 2 工作空间（只有深度侧的 vision_depth 包，2D 不进 ROS）
+ros2_ws/       ROS 2 工作空间（包含 RGB-D 融合与纯深度适配）
 lab/           一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束，可互相 import）
-configs/       场地参数；knowledge/ docs·calibration·models·images；tests/ 回归 121 项 + 夹具
+configs/       场地参数；knowledge/ docs·calibration·models·images；tests/ 回归测试与夹具
 ```
 
 依赖方向是硬约束：**功能包互不 import，功能包不碰 cli/config，`vision/` 不 import `lab/`**
@@ -116,9 +133,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
    用硬板/手机屏幕，四边都贴住。
 9. **生成物不进版本库**：`output/`（运行产物）、`data/`（数据集）、`runs/`（训练产物）、
    `knowledge/models/*.onnx`、`configs/camera_calibration*.yaml` 都被 gitignore。
-   新 clone 要位姿就先自己标定，要用 YOLO 就先 `python lab/export_yolo.py --weights <best.pt> --imgsz 480`
-   导出权重（480 实测与 640 精度持平、耗时约减半）。
-10. **镜像里没有 pytest**：`tests/` 每个文件都能 `python tests/test_x.py` 直接跑。
+   新 clone 要位姿就先自己标定。2D 模型可按训练记录导出；RGB-D 当前默认使用搭档提供的 640 输入 mix4，
+   不要把其他尺寸或预训练权重当成同一模型。
+10. **镜像里没有 pytest**：完整回归应使用安装了 pytest 的隔离副本；避免在原工作区运行会重建 `output/` 的测试。
 11. **`live` 现在支持三种检测器**：ArUco 画四边形+位姿轴；判色/YOLO 画框并显示
     `类别/颜色 置信度`（`top` 按上半块判色，框固定品红，所以红塔顶也会是品红框）。
     落盘目录也分开：ArUco 在 `output/aruco/`，判色/YOLO 在 `output/live_det/`。
@@ -130,9 +147,8 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 
 ## 已知限制
 
-- 位姿已过**真机验收**：位移差分误差 ≤0.2%（200/400 mm），倾角 30°/50°/60° 误差 ≤1.2°；
-  但仍只有**单码相对位姿**，多码融合 / 场地坐标没做。绝对距离要比卷尺读数大 ≈12 mm（镜头前端面 ≠ 光心，属基准差）。
-- ROS 2 只接了**深度侧**（`ros2_ws/src/vision_depth`）；2D 侧未接（不打算让 `vision/` 依赖 rclpy）。
+- 2D 位姿历史样本的位移差分误差 ≤0.2%（200/400 mm）；30°、50° 软纸样本平面度存疑。仍只有单码相对位姿，绝对距离比较受测量基准影响；具体条件见真机记录。
+- ROS 2 融合外壳复用 YOLO 与深度算法；独立 2D 库本身不依赖 ROS。当前未发布已验证的机械臂抓取指令。
 - YOLO 是**真图训练的 2 类模型**（`block`/`top`）。v2 同分布指标 P 0.971 / R 0.939 / mAP@0.5 0.970，
   但 test 里有相邻帧跨 train（max 0.971），**不能当泛化指标**。
   **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 旋转增广 `v3_aug2` 0.885**

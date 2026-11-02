@@ -637,7 +637,7 @@ def main() -> int:
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)
         np.save(args.save, depth)
-        print(f"合成深度图已存: {args.save}（可再用 lab/proto_depth.py 调参）")
+        print(f"合成深度图已存: {args.save}（可用 lab/proto_depth.py 做历史原型对照，结果不等同现行算法）")
 
     if args.json_out:
         payload = {
