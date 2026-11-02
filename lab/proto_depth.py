@@ -1,4 +1,6 @@
-"""B1-B3 原型：反投影 -> 体素降采样 -> RANSAC 去桌面 -> 聚类。
+"""历史纯深度 B1-B3 算法原型：保留作为对照，当前运行链使用 vision.depth。
+
+此原型与现行算法的参数和结果不等价；以下命令仅用于复现历史对照。
 
 跑法（容器内，用 S4/S5 的合成数据）
     docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
@@ -9,9 +11,8 @@
 
 为什么先在 lab/ 写
     ROS2 接入方案 10.2 的四步落地：原型在 lab/ 跑通 -> 参数稳定 -> 提炼进
-    vision/depth/ -> fuse_node 改 import。参数（leaf_size、distance_threshold、
-    cluster_tolerance）现在全靠实测调，直接写进正式模块会在签名未定型时
-    反复返工。
+    vision/depth/ -> fuse_node 改 import。此处保留当时的参数与实现，
+    供复现和比较，不随现行算法同步演进。
 
 三步各自在做什么
     B1 降采样：点云降到十分之一，RANSAC 的耗时直接跟着降。leaf 取 3~5mm，

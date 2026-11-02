@@ -257,3 +257,9 @@ class FrameSource(ABC):
 现有订阅方必须同步更新；合入前按团队规范评审。
 标记有有限生命周期。它们只是未验证候选，不是物体几何中心或抓取指令；空间对齐及绝对精度
 尚未验收。此新话题契约进入团队集成前按协作规范评审。
+
+### ROS 图像解码与离线报告读取（2026-11-02）
+
+ROS 包内 `vision_depth.image_decode.image_array` 读取 `16UC1`/`mono16` 毫米深度和 `bgr8`/`rgb8` 彩色，处理行填充与深度字节序，拒绝非法尺寸、行跨度和数据不足。纯深度节点解码失败仍记录并跳帧；查看器对不支持的编码仍返回空值，对损坏数据抛错；融合链仍按原错误处理。旧 `fuse_node.image_to_depth_array`、`side_pipeline.image_array` 和查看器转换函数保留。相机 QoS 共享 `vision_depth.sensor_qos.sensor_qos`，各订阅与发布队列深度不变。
+
+离线报告公共读取入口为 `lab.rgbd_check.report_reader.load_report`，原 `lab.manual_rgbd_fusion.load_report` 兼容；字段、校验及输出不变。没有变更公开话题或消息字段。

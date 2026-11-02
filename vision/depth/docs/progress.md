@@ -4,9 +4,13 @@
 >
 > 最后更新：2026-11-02
 >
-> 本次侧面原型分支：`feat/单箱侧面RGBD测量`，从更新后的 main `b3bf520` 创建。
+> 侧面原型最初在 `feat/单箱侧面RGBD测量` 开发，已通过 #26 进入 main；当前状态以本文件的新记录为准。
 
 ## 一、一句话现状
+
+**2026-11-02 整机联调入口整理：** 从 main `f1c6920` 新建 `feat/集成前整理`，仓库首页前置 RGB-D 融合入口，新增 [整机联调说明](../../../knowledge/docs/整机联调说明.md) 和 [整理记录](../../../knowledge/docs/仓库整理记录-20261102.md)，保留 2D、纯深度、离线工具与实验元数据。整理没有修改话题契约、算法参数或既有验收结论；同机 SHM、未验收的空间/精度/稳定性及跨机待联调状态均保留。
+
+**2026-11-02 深度侧代码整理：** ROS 包共享图像解码和相机 QoS；旧函数入口保留。离线报告读取迁至 `lab.rgbd_check.report_reader`，人工框旧导入兼容，单箱工具不再依赖人工框原型；彩色校正不变。`lab/proto_depth.py` 保留历史算法与命令作对照，结果不等同当前 `vision.depth`。隔离副本全套 283 passed、1 skipped，ROS 构建通过；`raw_023` 回放 423 对、141 次处理、282 个候选、0 后台错误，结束后观察到空数组及清除标记，抽一对两个候选的坐标、法向及箭头与独立重算一致（1e-6）。本次为软件与回放检查，不改变空间对齐、绝对精度或连续稳定性验收状态。详情见 [整理记录](../../../knowledge/docs/仓库整理记录-20261102.md)。
 
 **2026-11-02 RViz 候选标签间距修正：** 用户截图显示候选文字中的空格被拉成很宽的间距，标签两端截断。RViz 文本改为无空格的 `CANDIDATE|类别|p=(x,y,z)m|n=(nx,ny,nz)`，类别内空白转换为下划线；数值和候选消息不变。发布测试 25 passed，重启查看器后已从实际 `/rgbd_side/markers` 订阅读到紧凑标签；用户复核确认标签紧凑完整，文字和箭头均能看清；这只验证本次显示效果。查看器和 RViz 使用已有相机进程启动，记录 `output/realtime_side/label_fix_20261102/launch.log`。
 
@@ -546,7 +550,7 @@ python -m lab.rgbd_check grid-check output/rgbd/raw_030 output/rgbd/raw_031 \
 # 合成深度（单目标，默认 600mm / 25° / 50mm 方块）
 python lab/gen_synthetic_depth.py --out data/syn/single_01
 
-# 离线原型：B1-B5 全链路，打中间结果
+# 历史纯深度原型：复现旧算法中间结果；不等同当前 vision.depth
 python lab/proto_depth.py data/syn/single_01
 
 # M3 误差评估（五个场景）
