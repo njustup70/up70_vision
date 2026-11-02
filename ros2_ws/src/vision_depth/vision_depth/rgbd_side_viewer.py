@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from .sensor_qos import sensor_qos
 from sensor_msgs.msg import CameraInfo, Image
 
 from vision.depth.surface import PlaneParams
@@ -123,9 +123,9 @@ class RgbdSideViewer(Node):
         self.subscriptions_ = []
         for role in ('color', 'depth'):
             self.subscriptions_.append(self.create_subscription(
-                Image, c[f'{role}_topic'], self._image_callback(role), qos_profile_sensor_data))
+                Image, c[f'{role}_topic'], self._image_callback(role), sensor_qos(5)))
             self.subscriptions_.append(self.create_subscription(
-                CameraInfo, c[f'{role}_info_topic'], self._info_callback(role), qos_profile_sensor_data))
+                CameraInfo, c[f'{role}_info_topic'], self._info_callback(role), sensor_qos(5)))
         self.get_logger().info(f'ready: {self.run_dir}; candidate centers are not validated object centers')
 
     def _image_callback(self, role):

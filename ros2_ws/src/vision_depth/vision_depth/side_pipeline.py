@@ -15,6 +15,8 @@ import cv2
 import numpy as np
 
 from vision.depth import Intrinsics
+from .image_decode import image_array as decode_image
+
 from vision.depth.rgbd import ColorRectifier, validate_images
 from vision.depth.surface import PlaneParams, measure_planes, draw_detection_label, draw_review_box
 
@@ -181,22 +183,8 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
 
 
 def image_array(msg, depth=False):
-    """按编码、step 和字节序解码；返回独立 BGR 或 uint16 毫米数组。"""
-    enc = str(msg.encoding)
-    if depth and enc not in ('16UC1', 'mono16'):
-        raise ValueError('depth encoding must be 16UC1/mono16 in mm')
-    if not depth and enc not in ('bgr8', 'rgb8'):
-        raise ValueError('color encoding must be bgr8/rgb8')
-    h, w, step = int(msg.height), int(msg.width), int(msg.step)
-    bpp = 2 if depth else 3
-    if h <= 0 or w <= 0 or step < w*bpp or len(msg.data) < h*step:
-        raise ValueError('invalid image dimensions, step, or data length')
-    rows = np.frombuffer(bytes(msg.data), np.uint8, count=h*step).reshape(h, step)
-    raw = np.ascontiguousarray(rows[:, :w*bpp])
-    if depth:
-        return raw.view('>u2' if msg.is_bigendian else '<u2').reshape(h, w).astype(np.uint16)
-    color = raw.reshape(h, w, 3)
-    return color[:, :, ::-1].copy() if enc == 'rgb8' else color.copy()
+    """兼容原入口，转交共享图像解码器。"""
+    return decode_image(msg, depth=depth)
 
 
 def info_dict(msg):

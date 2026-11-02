@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lab.manual_rgbd_fusion import load_report
+from lab.rgbd_check.report_reader import load_report
 from vision.depth.rgbd import rectified_color_and_mask
 from lab.rgbd_check.bag import load_images, scan
 from lab.rgbd_check.pairing import pair_frames

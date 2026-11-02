@@ -29,24 +29,22 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image
-from vision_depth.fuse_node import sensor_qos
+from .sensor_qos import sensor_qos
+from .image_decode import image_array
 
 
 def _to_depth_mm(msg: Image) -> np.ndarray | None:
-    """16UC1 深度图 -> (H, W) 毫米数组。"""
+    """不支持的编码返回 None；格式损坏仍抛出 ValueError。"""
     if msg.encoding not in ("16UC1", "mono16"):
         return None
-    return np.frombuffer(msg.data, dtype=np.uint16).reshape(msg.height, msg.width)
+    return image_array(msg, depth=True)
 
 
 def _to_bgr(msg: Image) -> np.ndarray | None:
-    """彩色图 -> (H, W, 3) BGR 数组。"""
-    arr = np.frombuffer(msg.data, dtype=np.uint8)
-    if msg.encoding == "bgr8":
-        return arr.reshape(msg.height, msg.width, 3)
-    if msg.encoding == "rgb8":
-        return arr.reshape(msg.height, msg.width, 3)[:, :, ::-1]
-    return None
+    """不支持的编码返回 None；格式损坏仍抛出 ValueError。"""
+    if msg.encoding not in ("bgr8", "rgb8"):
+        return None
+    return image_array(msg)
 
 
 def _colorize(depth_mm: np.ndarray, max_mm: int) -> np.ndarray:

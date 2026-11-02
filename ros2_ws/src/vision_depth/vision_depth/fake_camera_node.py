@@ -38,7 +38,8 @@ from pathlib import Path
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+
+from .sensor_qos import sensor_qos
 
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
@@ -48,20 +49,6 @@ from .geometry import quaternion_from_z_axis
 # 与 lab/gen_synthetic_depth.py 保持一致的噪声模型
 NOISE_COEF = 3.98e-6
 NOISE_EXP = 1.74
-
-
-def sensor_qos(depth: int = 5) -> QoSProfile:
-    """相机数据专用 QoS：best_effort + 只留最近几帧。
-
-    与真相机节点保持一致。用 reliable 时，回调慢于发布频率会堆积，
-    表现为「帧率越来越低」，很容易被误判成驱动问题。
-    """
-    return QoSProfile(
-        reliability=QoSReliabilityPolicy.BEST_EFFORT,
-        durability=QoSDurabilityPolicy.VOLATILE,
-        history=QoSHistoryPolicy.KEEP_LAST,
-        depth=depth,
-    )
 
 
 class FakeCameraNode(Node):

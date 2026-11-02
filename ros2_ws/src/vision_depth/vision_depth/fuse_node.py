@@ -37,7 +37,9 @@ from copy import deepcopy
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+
+from .sensor_qos import sensor_qos
+from .image_decode import image_array
 
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import CameraInfo, Image
@@ -52,39 +54,9 @@ from .geometry import optical_output_frame, quaternion_from_z_axis
 ARROW_LENGTH_MM = 50.0
 
 
-def sensor_qos(depth: int = 5) -> QoSProfile:
-    """相机数据专用 QoS：best_effort + 只留最近几帧。
-
-    用 reliable 的话，一旦回调处理慢于发布频率，队列会堆满并反过来拖慢发布端，
-    表现是「频率越来越低」，很容易被误判成相机或驱动的问题。
-    """
-    return QoSProfile(
-        reliability=QoSReliabilityPolicy.BEST_EFFORT,
-        durability=QoSDurabilityPolicy.VOLATILE,
-        history=QoSHistoryPolicy.KEEP_LAST,
-        depth=depth,
-    )
-
-
 def image_to_depth_array(msg: Image) -> np.ndarray:
-    """sensor_msgs/Image(16UC1) -> (H, W) uint16 毫米数组。
-
-    step 不一定等于 width*2：驱动可能按行对齐补 padding。直接按 width*2 铺开，
-    有 padding 时图像会斜着错位，而且错位后「看起来还有内容」，极难发现。
-    """
-    if msg.encoding not in ("16UC1", "mono16"):
-        raise ValueError(f"深度编码是 {msg.encoding!r}，只处理 16UC1（毫米）")
-
-    height, width, step = int(msg.height), int(msg.width), int(msg.step)
-    raw = bytes(msg.data)
-    row_bytes = width * 2
-
-    if step == row_bytes:
-        flat = np.frombuffer(raw, dtype=np.uint16)
-    else:
-        rows = np.frombuffer(raw, dtype=np.uint8).reshape(height, step)[:, :row_bytes]
-        flat = np.ascontiguousarray(rows).view(np.uint16)
-    return flat.reshape(height, width)
+    """兼容原入口，将毫米深度图交给共享解码器。"""
+    return image_array(msg, depth=True)
 
 
 class FuseNode(Node):
