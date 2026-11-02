@@ -87,7 +87,7 @@ python -m vision run --set detector.name=yolo \
 
 | 键 | 人话 | 默认 |
 |---|---|---|
-| `weights` | ONNX 权重路径（相对仓库根） | `knowledge/models/yolov8n.onnx`（COCO 导出，需换成 mix4） |
+| `weights` | ONNX 权重路径（相对仓库根） | `knowledge/models/yolov8n_mix4.onnx`（搭档两类模型；COCO 基线为 yolov8n.onnx） |
 | `conf` | 置信度门槛。调低 → 框变多、误检也变多 | 0.45 |
 | `iou` | NMS 去重门槛 | 0.45（实测 0.30~0.55 对结果几乎无影响） |
 | `imgsz` | 模型输入边长，**必须与导出时一致** | 640 |

@@ -3,9 +3,13 @@
 这个目录放**模型文件**，内容全部被 `.gitignore` 忽略（`*.onnx` / `*.pt`），
 所以仓库里只有这份说明，克隆下来是空的。
 
+## 当前项目默认模型（2026-11-02）
+
+YOLO 和 RGB-D 侧面查看器默认使用 `yolov8n_mix4.onnx` 及同名 `yolov8n_mix4.names.json`：类别 `0=block`、`1=top`，输入 640。文件保存在本机，均被 Git 忽略；新副本需要自行取得搭档提供的配套文件。`yolov8n_mix2` 保留，可通过 `detector.yolo.weights` 或查看器 launch 的 `weights` 显式切回。类别名称和置信度不能证明单箱框或物理面的正确性。
+
 ## 需要什么
 
-`detectors/yolo.py` 只认 **ONNX**（用 `cv2.dnn` 推理，容器里不需要 torch）：
+`vision/yolo/detector.py` 只认 **ONNX**（用 `cv2.dnn` 推理，容器里不需要 torch）：
 
 ```
 knowledge/models/yolov8n.onnx        12.9 MB   模型本体
@@ -30,7 +34,7 @@ sidecar 一起写进本目录，并打印运行时该用的 `--set` 参数。
 PYTHONPATH=src ~/.venvs/yolo/bin/python -m vision export-yolo --weights yolo11s.pt --imgsz 640
 ```
 
-导完把 `configs/default.yaml` 的 `detector.yolo.weights` 指过去即可。
+导出其他模型后，可把 `configs/default.yaml` 的 `detector.yolo.weights` 指过去。
 
 ## 实测参考（这台机器，纯 CPU）
 

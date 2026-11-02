@@ -17,6 +17,7 @@ setup(
         # Fast DDS 的仅 SHM 配置：大图走 UDP 分片会丢帧，本机采集两端都在同机，
         # 只走共享内存最稳。见 config/fastdds_shm_only.xml 里的说明。
         (os.path.join("share", package_name, "config"), glob("config/*.xml")),
+        (os.path.join("share", package_name, "config"), glob("config/*.rviz")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -29,6 +30,7 @@ setup(
         "console_scripts": [
             "fuse_node = vision_depth.fuse_node:main",
             "depth_viewer = vision_depth.depth_viewer:main",
+            "rgbd_side_viewer = vision_depth.rgbd_side_viewer:main",
             "fake_camera_node = vision_depth.fake_camera_node:main",
             # RGB-D 采集入口：录「预热 + 稳定段」并写 meta/快照，见计划书 7.1
             "rgbd_capture = vision_depth.rgbd_capture:main",
