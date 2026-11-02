@@ -66,6 +66,8 @@ LIVE_FPS_WINDOW = 30
 # **不跟随 cfg.output.dir**：实时入口的输出是"过程采样"（每 N 帧一张），
 # 与批处理的结果目录（含 results.json / csv，会被同名文件覆盖）分开，避免互相踩。
 LIVE_OUT_SUBDIR = os.path.join("output", "aruco")
+#: 判色/YOLO 实时循环的落盘目录（与 ArUco 的图分开，免得混在一起）
+LIVE_DET_SUBDIR = os.path.join("output", "live_det")
 
 # 人话：码上画的那三根轴，长度取码边长的多少倍。
 # 技术：0.6 倍是实测出来的折中——比 0.5 更容易看出倾斜（透视缩短更明显），
@@ -135,6 +137,131 @@ def pose_status_line(enabled: bool, n_poses: int, failures: int) -> str | None:
     if n_poses:
         return None                      # 有解时每个码单独一行，由调用方追加
     return f"pose: no solution (fail {failures})"
+
+
+def run_detection_live(args, cfg, thresholds, detector) -> int:
+    """判色 / YOLO 的实时循环：画框 + 类别 + HSV 判色 + HUD。
+
+    与 ArUco 循环的区别
+      · 画的是 `Detection` 矩形框（`draw_detections`），不是四边形/位姿轴；
+      · 颜色由 HSV 判（`judge_color`；`top` 走 `judge_top_color`，看上半块）；
+      · 落盘目录是 `output/live_det/`，与 ArUco 的 `output/aruco/` 分开。
+
+    :param args: 命令行参数（headless / save_every / limit）
+    :param cfg: 生效配置
+    :param thresholds: 颜色阈值表（`load_thresholds` 的结果）
+    :param detector: 已建好的检测器
+    :return: 进程退出码
+    """
+    from ..yolo.color_check import judge_color, judge_top_color
+    from ..yolo.draw import draw_detections, put_text
+
+    source = build_source(cfg.input.source,
+                          camera_params=dict(vars(cfg.input.camera)),
+                          replay_params=dict(vars(cfg.input.replay)),
+                          synthetic_params=dict(vars(cfg.input.synthetic)),
+                          colors=list(thresholds))
+    if not args.headless:
+        try:
+            cv2.namedWindow(LIVE_WINDOW, cv2.WINDOW_NORMAL)
+        except cv2.error as exc:
+            source.close()
+            print(f"❌ 无法创建窗口（容器里没有 X server？加 --headless）：{exc}", file=sys.stderr)
+            return 2
+
+    save_every = max(1, int(args.save_every))
+    max_fps = float(getattr(args, "max_fps", 0.0) or 0.0)
+    min_dt = (1.0 / max_fps) if max_fps > 0 else 0.0
+    frames = with_targets = saved = 0
+    dts = deque(maxlen=LIVE_FPS_WINDOW)
+    t_start = last_print = t_prev = time.monotonic()
+    try:
+        for frame in source:
+            now = time.monotonic()
+            if now > t_prev:
+                dts.append(now - t_prev)      # 相邻帧间隔，滑动平均算 fps
+            t_prev = now
+            frames += 1
+            fps = (len(dts) / sum(dts)) if dts and sum(dts) > 0 else 0.0
+
+            dets = detector.detect(frame.image_bgr)
+            if dets:
+                with_targets += 1
+
+            # 先判色再画：`draw_detections` 是按 `det.color` 给框上色的，
+            # 顺序反了框会全是灰色（unknown）。
+            counts = {}
+            if dets:
+                hsv = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2HSV)
+                # 判色门槛显式传给两条判色路径：top 走 judge_top_color 时也要用同一套阈值，
+                # 否则 block 与 top 各用一套默认值，--set color.* 对 top 不生效。
+                color_kwargs = dict(
+                    min_saturation=cfg.color.min_saturation,
+                    min_value=cfg.color.min_value,
+                    hit_ratio_min=cfg.color.hit_ratio_min,
+                    ignore_border_px=cfg.color.ignore_border_px,
+                    min_valid_pixels=cfg.color.min_valid_pixels)
+                for det in dets:
+                    is_top = str(det.class_name) == "top"
+                    verdict = (judge_top_color(hsv, det.bbox_xyxy, thresholds, **color_kwargs)
+                               if is_top
+                               else judge_color(hsv, det.bbox_xyxy, thresholds, **color_kwargs))
+                    det.color = verdict.name
+                    det.color_ratio = verdict.ratio
+                    key = f"{det.class_name}/{verdict.name or '?'}"
+                    counts[key] = counts.get(key, 0) + 1
+
+            canvas = draw_detections(frame.image_bgr, dets)
+            for det in dets:
+                x1, y1, _, _ = (int(v) for v in det.bbox_xyxy)
+                put_text(canvas, f"{det.class_name}/{det.color or '?'} {det.score:.2f}",
+                         (x1 + 3, max(16, y1 - 6)), 0.55, (0, 255, 255), 2, outline=True)
+
+            hud = [f"{frame.source} #{frame.index}",
+                   f"dets={len(dets)} fps={fps:.1f}"]
+            if counts:
+                hud.append(" ".join(f"{k}:{v}" for k, v in sorted(counts.items())))
+            draw_hud(canvas, hud)
+
+            if args.headless:
+                if frame.index % save_every == 0:
+                    write_image(os.path.join(LIVE_DET_SUBDIR, f"frame_{frame.index:06d}.png"), canvas)
+                    saved += 1
+            else:
+                cv2.imshow(LIVE_WINDOW, canvas)
+                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                    break
+
+            if now - last_print >= LIVE_PRINT_INTERVAL_S:
+                last_print = now
+                print(f"t={now - t_start:5.2f}s | frames={frames} | fps={fps:5.1f} | "
+                      f"dets={len(dets)} " + " ".join(f"{k}:{v}" for k, v in sorted(counts.items())),
+                      flush=True)
+
+            if args.limit and frames >= args.limit:
+                break
+            if min_dt:
+                # 限帧：把多余时间睡掉，让 GUI 事件循环有机会刷新（否则窗口表现为卡死）
+                spare = min_dt - (time.monotonic() - now)
+                if spare > 0:
+                    time.sleep(spare)
+    except KeyboardInterrupt:
+        print("\n退出：收到 Ctrl+C")
+    finally:
+        source.close()
+        if not args.headless:
+            cv2.destroyAllWindows()
+
+    elapsed = max(1e-6, time.monotonic() - t_start)
+    print("=" * 62)
+    print(f"  帧数        : {frames}（有目标 {with_targets} / 无目标 {frames - with_targets}）")
+    print(f"  平均帧率    : {frames / elapsed:.1f} fps")
+    print(f"  检测器      : {cfg.detector.name}")
+    if args.headless:
+        print(f"  落盘        : {LIVE_DET_SUBDIR}/ 每 {save_every} 帧一张，共 {saved} 张")
+    print("=" * 62)
+    print("✅ 运行成功" if frames else "⚠️  没有处理任何帧")
+    return 0 if frames else 1
 
 
 def run_aruco_live(argv=None) -> int:
@@ -250,14 +377,10 @@ def run_aruco_live(argv=None) -> int:
         print(f"❌ 检测器不可用：{exc}", file=sys.stderr)
         return 2
 
-    # 本入口专用于 ArUco（要画四边形/中心/id、可选算位姿）。
-    # 判色族与 YOLO 返回的是 Detection，没有 marker_id，硬跑下去只会在第一帧
-    # 抛一句 `'Detection' object has no attribute 'marker_id'`，所以在这里直接说清楚。
+    # ArUco 要画四边形/中心/id、可选算位姿；判色与 YOLO 返回的是 Detection（矩形框），
+    # 画法、HUD、颜色来源都不一样，所以走两条循环。公共部分（配置、阈值表、落盘、退出）共用。
     if str(cfg.detector.name).lower() not in ("aruco", "stub_aruco", "stub"):
-        print(f"❌ 本入口只跑 ArUco 检测器（当前 detector.name={cfg.detector.name!r}）；"
-              f"要用判色/YOLO 检测器请走批处理入口：python -m vision run "
-              f"--set detector.name={cfg.detector.name}", file=sys.stderr)
-        return 2
+        return run_detection_live(args, cfg, thresholds, detector)
 
     # ---- 6.5 位姿：只在 pose.enabled 时建（默认关闭，老用户零感知）----
     # 人话：要用位姿就得先拿到"这台相机的内参"，没有就算不出毫米。
@@ -320,6 +443,8 @@ def run_aruco_live(argv=None) -> int:
     pose_history = deque(maxlen=POSE_MEDIAN_WINDOW)   # HUD 防抖窗口（非歧义帧）
     size_checked = False  # 内参尺寸与帧尺寸是否已比对过（只提醒一次，别刷屏）
     dts = deque(maxlen=LIVE_FPS_WINDOW)   # 最近 N 帧的帧间隔（秒），fps 的滑动平均窗口
+    max_fps = float(getattr(args, "max_fps", 0.0) or 0.0)
+    min_dt = (1.0 / max_fps) if max_fps > 0 else 0.0   # 0 = 不限帧
     t_start = time.monotonic()            # 循环起点，终端摘要的 t= 与最终平均帧率都以它为基准
     t_prev = t_start                      # 上一帧时刻：每帧更新，用于算 dt
     last_print = 0.0                      # 上一次打终端摘要的时刻（节流用；0 表示还没打过）
@@ -451,6 +576,13 @@ def run_aruco_live(argv=None) -> int:
                 if args.limit and frames >= args.limit:  # 相机是无限流，靠它自己停
                     print(f"退出：--limit {args.limit} 帧已跑满")
                     break
+
+                if min_dt:
+                    # --max-fps 对 ArUco 循环同样生效：高帧率下窗口事件循环抢不到时间片，
+                    # 表现为"窗口卡死/点一下就退"。把多余时间睡掉，CPU 与 GUI 都有余量。
+                    spare = min_dt - (time.monotonic() - now)
+                    if spare > 0:
+                        time.sleep(spare)
         except KeyboardInterrupt:
             # Ctrl+C 不是错误：打印一行后走 finally，退出码按"已处理帧数"决定
             print("\n退出：收到 Ctrl+C")

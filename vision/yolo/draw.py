@@ -23,6 +23,7 @@ COLOR_DRAW_BGR = {
     "cyan": (255, 255, 0),
     "blue": (255, 128, 0),
     "magenta": (255, 0, 255),
+    "mixed": (0, 200, 255),      # 塔顶红蓝各半：橙黄，避免误读成单一队色
     "unknown": (160, 160, 160),
 }
 
@@ -89,7 +90,9 @@ def draw_detections(frame_bgr: np.ndarray,
     canvas = frame_bgr.copy()
     for det in detections:
         x1, y1, x2, y2 = (int(v) for v in det.bbox_xyxy)
-        cv2.rectangle(canvas, (x1, y1), (x2 - 1, y2 - 1), color_for(det.color), thickness)
+        # 用 box_color：判色族按颜色、YOLO 的 top 按类名固定品红。
+        # 只按 det.color 画会让同一个 top 类在红/蓝之间跳，看起来像判色出错。
+        cv2.rectangle(canvas, (x1, y1), (x2 - 1, y2 - 1), box_color(det), thickness)
         if show_center:
             cx, cy = det.center
             cv2.drawMarker(canvas, (int(cx), int(cy)), (0, 0, 255), cv2.MARKER_CROSS, 14, 2)
