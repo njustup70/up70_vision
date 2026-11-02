@@ -224,13 +224,14 @@ def test_depth_visualization_keeps_invalid_black_and_can_be_hidden():
     assert np.all(both[40:50, 160+80:160+90] == 0)
 
 
-def test_real_model_output_if_ros_and_weights_available():
+@pytest.mark.parametrize('model_name', ['yolov8n_mix2', 'yolov8n_mix4'])
+def test_real_model_output_if_ros_and_weights_available(model_name):
     """可用 ROS 和本地模型时验证真实 ONNX 输出；否则明确跳过。"""
-    if not (ROOT/'knowledge/models/yolov8n_mix2.onnx').is_file():
+    if not (ROOT/f'knowledge/models/{model_name}.onnx').is_file():
         pytest.skip('local partner model not present')
     pytest.importorskip('rclpy')
     from vision_depth.rgbd_side_viewer import checked_detector
-    detector, metadata = checked_detector(str(ROOT/'knowledge/models/yolov8n_mix2.onnx'),
+    detector, metadata = checked_detector(str(ROOT/f'knowledge/models/{model_name}.onnx'),
                                            640, .45, .45, [], [], 32)
     assert list(metadata['output_shape']) == [1, 6, 8400]
     assert detector.detect(np.zeros((120, 160, 3), np.uint8)) == []

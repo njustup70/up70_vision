@@ -37,7 +37,7 @@ from ..types import Detection
 PAD_VALUE = 114
 
 #: 默认权重路径（相对仓库根；由配置层的 `detector.yolo.weights` 覆盖）
-DEFAULT_WEIGHTS = "knowledge/models/yolov8n.onnx"
+DEFAULT_WEIGHTS = "knowledge/models/yolov8n_mix4.onnx"
 
 
 def letterbox(image_bgr: np.ndarray, size: int,

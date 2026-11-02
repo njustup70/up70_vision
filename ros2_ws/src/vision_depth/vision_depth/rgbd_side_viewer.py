@@ -66,7 +66,7 @@ class RgbdSideViewer(Node):
         super().__init__('rgbd_side_viewer')
         defaults = {'color_topic': '/camera/color/image_raw', 'depth_topic': '/camera/depth/image_raw',
                     'color_info_topic': '/camera/color/camera_info', 'depth_info_topic': '/camera/depth/camera_info',
-                    'weights': 'knowledge/models/yolov8n_mix2.onnx', 'imgsz': 640, 'conf': 0.45,
+                    'weights': 'knowledge/models/yolov8n_mix4.onnx', 'imgsz': 640, 'conf': 0.45,
                     'iou': 0.45, 'max_detections': 32, 'target_classes': [-1], 'class_names': [''],
                     'aligned_depth': True, 'depth_unit': 'mm', 'sync_tolerance_ms': 10.0,
                     'sync_wait_ms': 50.0, 'queue_capacity': 10, 'max_age_ms': 500.0,

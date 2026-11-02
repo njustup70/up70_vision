@@ -6,7 +6,7 @@ rgbd_side_viewer:
     depth_topic: /camera/depth/image_raw
     color_info_topic: /camera/color/camera_info
     depth_info_topic: /camera/depth/camera_info
-    weights: knowledge/models/yolov8n_mix2.onnx
+    weights: knowledge/models/yolov8n_mix4.onnx
     imgsz: 640
     conf: 0.45
     iou: 0.45
