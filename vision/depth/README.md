@@ -120,10 +120,10 @@ python -m colcon build --packages-select vision_depth --symlink-install
 source install/setup.bash
 cd ..
 ros2 launch vision_depth rgbd_side_viewer.launch.py \
-  weights:=$PWD/knowledge/models/yolov8n_mix2.onnx
+  weights:=$PWD/knowledge/models/yolov8n_mix4.onnx
 ```
 
-后续终端仍需 source ROS、该虚拟环境和 `ros2_ws/install/setup.bash`，从仓库根启动。`ros2 run` 可执行文件的 Python 应与构建环境一致。权重和同名 `.names.json` 留在本地，不入 Git；没有文件就报错，不自动下载其他模型。默认加载本机的 mix2：0=block、1=top，640 输入，置信度 0.45，NMS IoU 0.45，保留全部类别。模型类名不证明平面的物理含义。
+后续终端仍需 source ROS、该虚拟环境和 `ros2_ws/install/setup.bash`，从仓库根启动。`ros2 run` 可执行文件的 Python 应与构建环境一致。权重和同名 `.names.json` 留在本地，不入 Git；没有文件就报错，不自动下载其他模型。默认加载本机的 mix4：0=block、1=top，640 输入，置信度 0.45，NMS IoU 0.45，保留全部类别。模型类名不证明平面的物理含义。
 
 launch 默认包含现有 aligned 相机启动：848×480@30、帧同步、SW D2C 到 COLOR、毫米深度、仅 SHM，**不会启动录包器**。已有相机占用时用 `start_camera:=false`，并保证该相机确实发布对齐深度。查看器不能仅凭话题名证明驱动开启了 D2C 或毫米换算。
 

@@ -8,6 +8,8 @@
 
 ## 一、一句话现状
 
+**2026-11-02 搭档第二版权重接入：** `yolov8n_mix4.onnx` 及同名类名表放入本机 `knowledge/models/`，YOLO 和实时侧面查看器默认改用 mix4，mix2 保留可指定回退；模型文件均不入 Git。640 输入，输出 `(1,6,8400)`，类名 `0=block、1=top`，SHA-256 `f5f43f20445efac80da541806424240aadc6b1c2ab13042d4660e31ca3814794`。对已有 raw_023 和 raw_036 各一张 RGB 图以相同阈值比较：raw_023 两模型均出两个 block 框；raw_036 两模型均将上下两个箱面合为一框，mix2 为 top、mix4 为 block。未逐帧人工标注或做精度统计，不能由此认定质量提升。比较图在 `output/side/mix4_smoke_20261102/`。 相关测试 45 passed；使用虚拟环境 Python 构建 ROS 包通过，raw_023 的 domain 118 无窗口回放 12.04 秒，配对 357 对、处理 134 项、后台错误 0，确认默认加载 mix4；报告 `output/realtime_side/run_20261102_094536_e9e964d0/summary.json`。首次调用系统 colcon 生成了系统 Python 入口且因 OpenCV 4.6 加载失败，已用虚拟环境 `python -m colcon` 重新构建并复测通过。
+
 **2026-10-30 主平面选择与诊断：** `PlaneParams` 新增 `strict` / `dominant`；库及离线默认 `strict`，实时查看器默认 `dominant`。后者按框内有效率、内点占比、中央覆盖率、主次差和 RMS 依次筛选，中央分母含无效像素；拒绝原因、候选比例和选中编号保留在结果及窗口。人工逐帧选择优先，重心与绘制按 `selected_index` 读取；仍是可见内点重心和未验证候选，不增加抓取接口或 Z 补偿。具体工程初值、配置及口径见 [深度 README](../README.md#实时侧面查看器)。
 
 四个原包各均匀抽取 60 对、同一真实 mix2 模型和框比较：`raw_022` 的 strict/dominant 歧义为 58/0（60 框），`raw_023` 为 60/0（120 框），`raw_036` 为 34/10（84 框，10 个因中央覆盖不足拒绝）；`raw_037` 60 对均无检测框。分母为框而非帧；本轮没有逐帧人工复核，不能把输出率作为选面正确率，raw_036 的合框问题仍存在。几何/空间及绝对精度仍 UNVERIFIED。完整参数、逐帧结果、拒绝原因与耗时见 `output/side/dominant_comparison_20261030/report.md`；其中 `raw_023_preview.png` 是离线渲染示例，帧率与接收年龄不是现场测量。

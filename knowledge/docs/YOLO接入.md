@@ -66,7 +66,7 @@ output/demo/summary.json        汇总统计
 
 | 键 | 人话 | 默认 |
 |---|---|---|
-| `weights` | ONNX 权重路径（相对仓库根） | `knowledge/models/yolov8n.onnx` |
+| `weights` | ONNX 权重路径（相对仓库根） | `knowledge/models/yolov8n_mix4.onnx` |
 | `conf` | 置信度门槛。调低 → 框变多、误检也变多 | 0.25 |
 | `iou` | 去重门槛。两个框重合度超过它就只留分数高的 | 0.45 |
 | `imgsz` | 模型输入边长，必须和导出时一致 | 640 |
