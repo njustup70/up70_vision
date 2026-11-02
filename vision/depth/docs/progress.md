@@ -2,11 +2,17 @@
 
 > 只覆盖深度相机这条线。2D（ArUco / YOLO / 判色 / 海康相机）见 `knowledge/docs/progress.md`。
 >
-> 最后更新：2026-10-30
+> 最后更新：2026-11-02
 >
 > 本次侧面原型分支：`feat/单箱侧面RGBD测量`，从更新后的 main `b3bf520` 创建。
 
 ## 一、一句话现状
+
+**2026-11-02 RGB-D 可见面候选话题：** 实时查看器新增 `/rgbd_side/candidates` 和 `/rgbd_side/markers`，使用配对深度采集时间与光学 frame、位置米，按已有接收后年龄撤销过期结果；仅发布 `CANDIDATE`，不声称物体中心或吸附点。接口字段、时效和限制见 [接口契约](../../docs/interface.md#rgb-d-可见平面候选输出2026-11-02)，启动及 RViz 见 [深度 README](../README.md#候选话题与-rviz)。
+
+验证：ROS 包构建通过；相关测试 28 passed，隔离副本全套 239 passed、1 skipped（缺独立 yolov8n.onnx）。raw_023 实际回放：423 对、144 次结果发布、288 个候选、0 后台错误；回放停止后接收端收到空数组和 DELETEALL。按同一深度时间戳从 bag 取图独立重算，两框坐标与订阅值在 1e-9 m 容差内一致；RViz 进程启动成功，尚未独立确认窗口中的可视效果。证据 `output/realtime_side/candidate_validation_20261102/`，运行摘要 `output/realtime_side/run_20261102_101346_311e3329/summary.json`。
+
+真机诊断：排除先前遗留驱动占用后，以 mix4、848×480、软件降噪和运行时补洞开启运行约 74 s；发布 1294 个结果，其中 2 次含候选，出现 105 次几何重置、13 次 stale，订阅时间 2.77–65.09 s，最大结果间隔约 3.81 s；不能宣称连续稳定通过或原因已查明。驱动日志有启动时缺 compressedDepth 插件，退出码 -2 来自定时 SIGINT；未发现本轮温度通信错误。收集阶段没有人工布置或复核目标，不作识别/空间/绝对精度结论。记录和滤波服务响应在相同证据目录，运行摘要 `output/realtime_side/run_20261102_101522_96f65da3/summary.json`。
 
 **2026-11-02 搭档第二版权重接入：** `yolov8n_mix4.onnx` 及同名类名表放入本机 `knowledge/models/`，YOLO 和实时侧面查看器默认改用 mix4，mix2 保留可指定回退；模型文件均不入 Git。640 输入，输出 `(1,6,8400)`，类名 `0=block、1=top`，SHA-256 `f5f43f20445efac80da541806424240aadc6b1c2ab13042d4660e31ca3814794`。对已有 raw_023 和 raw_036 各一张 RGB 图以相同阈值比较：raw_023 两模型均出两个 block 框；raw_036 两模型均将上下两个箱面合为一框，mix2 为 top、mix4 为 block。未逐帧人工标注或做精度统计，不能由此认定质量提升。比较图在 `output/side/mix4_smoke_20261102/`。 相关测试 45 passed；使用虚拟环境 Python 构建 ROS 包通过，raw_023 的 domain 118 无窗口回放 12.04 秒，配对 357 对、处理 134 项、后台错误 0，确认默认加载 mix4；报告 `output/realtime_side/run_20261102_094536_e9e964d0/summary.json`。首次调用系统 colcon 生成了系统 Python 入口且因 OpenCV 4.6 加载失败，已用虚拟环境 `python -m colcon` 重新构建并复测通过。
 

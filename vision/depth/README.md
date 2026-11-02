@@ -100,7 +100,7 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 
 ## 实时侧面查看器
 
-活文档，2026-10-30。窗口显示 YOLO 框内的平面候选及**可见平面内点重心**，不发布机械臂测量或抓取话题。默认 `dominant` 策略可从多平面选明显主体；条件不足时显示 AMBIGUOUS，没有中心点。选出平面也仅为 CANDIDATE，不保证它属于一个箱子的侧面。
+活文档，2026-10-30。窗口显示 YOLO 框内的平面候选及**可见平面内点重心**，发布可见面重心候选话题和 RViz 标记，不发布机械臂抓取指令。默认 `dominant` 策略可从多平面选明显主体；条件不足时显示 AMBIGUOUS，没有中心点。选出平面也仅为 CANDIDATE，不保证它属于一个箱子的侧面。
 
 实时外壳只保留三个模块：`rgbd_side_viewer.py` 管节点与主线程窗口，`side_pipeline.py` 管图对解码、测量、绘制和快照，`side_sync.py` 管配对与单槽后台任务。共享平面计算及其诊断绘制放在 `surface.py`，像素网格校正单独放在 `rgbd.py`；离线工具复用它们，不复制算法或依赖 ROS。
 
@@ -139,6 +139,28 @@ ros2 launch vision_depth rgbd_side_viewer.launch.py \
 参数来源为 `config/rgbd_side_viewer.yaml`；显式 launch 参数覆盖 YAML，未指定时保留 YAML。`config_file` 指向查看器配置，`camera_config` 指向既有相机配置。改源码配置后重新构建，确保安装副本同步。
 
 `selection_policy` 可设为 `dominant` 或 `strict`。后者保持仅一个候选才自动选面的原行为；离线工具和库默认 `strict`。`dominant` 初值依次要求：框内有效占比 ≥0.5、主候选相对有效点占比 ≥0.6、覆盖中央区域 ≥0.6、主次占比差 ≥0.2、平面 RMS 不超过 `threshold_mm`。中央区域的宽高各为框的 `core_ratio=0.6`，覆盖分母包括无效像素；候选按原始内点占比排序，平局按候选号。各值均为工程初值，保存在配置与快照中，不是准确率或验收门槛。
+
+### 候选话题与 RViz
+
+启动时增加 `rviz:=true` 可同时打开 RViz（默认关闭）；也支持 `headless:=true rviz:=true`。
+确保相机、查看器、订阅终端和 RViz 的 `ROS_DOMAIN_ID`、RMW 与 SHM 配置相同：
+
+```bash
+export ROS_DOMAIN_ID=97
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE=$PWD/ros2_ws/src/vision_depth/config/fastdds_shm_only.xml
+ros2 launch vision_depth rgbd_side_viewer.launch.py rviz:=true
+# 另一终端 source 相同 ROS、虚拟环境及工作空间后：
+ros2 topic echo /rgbd_side/candidates
+ros2 topic hz /rgbd_side/candidates
+ros2 topic echo /rgbd_side/markers
+```
+
+RViz 默认 Fixed Frame 是 `camera_color_optical_frame`；不同输入须改成深度图实际 frame。
+圆点和文字是每框选中的可见平面重心候选，多框分别显示；类别及分数来自 YOLO。话题使用米、
+配对深度采集时间，未做 TF 转换；ID 为空，姿态/协方差/零尺寸 bbox 均不能当真实物体属性。
+过期或无有效候选会发送空数组和清除标记；订阅者也要处理断流。完整字段和 QoS 见
+[接口契约](../docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。候选不代表顶面、抓取点或精度验收通过。
 
 ### 同步、时效与失败状态
 
