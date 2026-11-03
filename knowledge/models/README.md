@@ -3,9 +3,26 @@
 这个目录放**模型文件**，内容全部被 `.gitignore` 忽略（`*.onnx` / `*.pt`），
 所以仓库里只有这份说明，克隆下来是空的。
 
-## 当前项目默认模型（2026-11-02）
+## 当前模型（2026-11-01）
 
-YOLO 和 RGB-D 侧面查看器默认使用 `yolov8n_mix4.onnx` 及同名 `yolov8n_mix4.names.json`：类别 `0=block`、`1=top`，输入 640。文件保存在本机，均被 Git 忽略；新副本需要自行取得搭档提供的配套文件。`yolov8n_mix2` 保留，可通过 `detector.yolo.weights` 或查看器 launch 的 `weights` 显式切回。类别名称和置信度不能证明单箱框或物理面的正确性。
+权重都不进 Git；换机器要单独拷 **`.onnx` + 同名 `.names.json`**，并记录 SHA-256。
+
+| 模型 | 用途 | 说明 |
+|---|---|---|
+| `yolov8n_mix4.onnx` | RGB-D 侧面查看器默认 | 类别 `0=block`、`1=top`，640；搭档已验证的整机入口，先不要擅自替换 |
+| `yolov8n_v4.onnx` | **2D 当前最好** | 在 mix4 基础上加 g7 新场次；v3 test mAP50 0.905 / P0.937 / R0.825；接 RGB-D 前需和深度侧联调 |
+| `yolov8n_v3_aug2.onnx` | 2D 回退 | 90° 增广版，mAP50 0.891 |
+| `yolov8n_mix2.onnx` | 历史对照 | 只在复现旧结果时用 |
+
+v4 文件 hash（本机）：
+
+```text
+fc3e423d32d307e91d626a079874302b499c6d15066cee62a81df3a1855a5410  yolov8n_v4.onnx
+81b473df621397bd67d4e2fe880dd0234d43cd42cc84443f4ddc873caee3621c  yolov8n_v4.names.json
+```
+
+`vision/yolo/detector.py` 只吃 ONNX；即使 RGB-D 由深度侧启动，也是复用同一个 `YoloDetector`。
+换模型时要同时改 `detector.yolo.weights` 或 `ros2_ws/src/vision_depth/config/rgbd_side_viewer.yaml` 的 `weights`。类别名称和置信度不能证明单箱框、颜色或物理面的正确性。
 
 ## 需要什么
 
