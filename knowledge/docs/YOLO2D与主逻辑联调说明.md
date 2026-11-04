@@ -29,11 +29,11 @@
 
 | 位置 | Python | OpenCV | NumPy | PyYAML | 模型 |
 |---|---|---|---|---|---|
-| 镜像 `up70-vision:dev`（2026-11-04 重建） | 3.10.12 | 4.11.0 | 1.26.4 | 6.0.2 | ✅ 已内置 |
+| 统一镜像 `up70-vision:humble`（#29） | 3.10.12 | 4.11.0 | 1.26.4 | 6.0.x | ⚠️ 取决于构建机（见 2.5） |
 | 开发 venv `~/.venvs/up70-2d` | 3.10.12 | 4.11.0 | 1.26.4 | 6.0.2 | ✅ 本地有 |
 | 系统 `python3` | 3.10.12 | **4.5.4** | 1.21.5 | 5.4.1 | ⚠️ 不达标，别用 |
 
-三者的 OpenCV / NumPy / PyYAML 现在**完全一致**，由 `requirements.lock` 保证：
+镜像由 Dockerfile 显式钉住 NumPy / OpenCV，本机 venv 由 `requirements.lock` 钉住，两边版本一致：
 
 ```
 numpy==1.26.4
@@ -84,7 +84,7 @@ knowledge/models/yolov8n_mix4.names.json  类名表     sha256 81b473df621397bd6
 
 | 坑 | 原来的症状 | 现在 |
 |---|---|---|
-| 镜像里没有模型 | `.dockerignore` 排除 `*.onnx` / `*.names.json`，镜像内一跑就 `FileNotFoundError` | 已加 `!` 例外，**只放行默认模型 + 480 降级版**（整个目录会白带 5 个历史权重、98 MB）；Dockerfile 另加构建期校验——默认权重没进镜像就直接构建失败。`docker run --network none` 已实测离线推理通过；compose 开发时仍用宿主挂载 |
+| 镜像带不带模型 | `.dockerignore` 排除 `*.onnx` / `*.names.json`，镜像里没有模型时一跑就 `FileNotFoundError` | 已加 `!` 例外，**只放行默认模型 + 480 降级版**（整个目录会白带 5 个历史权重、98 MB）。但 #29 之后镜像是全队共用的 `up70-vision:humble`，`COPY knowledge/` 复制的是**构建机上有的文件**：有就带上、没有也照常构建成功，所以**不能假设镜像一定有模型**。开发走 compose 挂载宿主目录；部署时 `-v <models>:/opt/vision/knowledge/models:ro` 挂一份最稳 |
 | 环境里缺 `configs/` | 只 `pip install` 或换目录运行，找不到 `color_thresholds.yaml` → `color` 全是 `null`，**不报错** | `vision.api.detect` 现在会打 **WARNING**；调用方显式传 `config`，或在仓库根运行 |
 | 版本漂移 | 本机同时存在 cv2 4.5.4 / 4.11 / 4.14 / 5.0，结果随解码差异漂移 | 新增 `requirements.lock`；Dockerfile 用 `-c requirements.lock` 约束。（未合并的 `feat/Humble容器支持` 分支也是同款钉法：NumPy 1.26.4 + OpenCV 4.11.0.86） |
 | 本机 shell 被 ROS 污染 | `pytest` 导入 ROS 的 `launch` 报 `No module named 'lark'` | 运行前 `env -u PYTHONPATH`；2D 侧本身不依赖 ROS |

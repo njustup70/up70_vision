@@ -24,7 +24,7 @@ fc3e423d32d307e91d626a079874302b499c6d15066cee62a81df3a1855a5410  yolov8n_v4.onn
 `vision/yolo/detector.py` 只吃 ONNX；即使 RGB-D 由深度侧启动，也是复用同一个 `YoloDetector`。
 换模型时要同时改 `detector.yolo.weights` 或 `ros2_ws/src/vision_depth/config/rgbd_side_viewer.yaml` 的 `weights`。类别名称和置信度不能证明单箱框、颜色或物理面的正确性。
 
-> **镜像相关（2026-11-04）**：`.dockerignore` 已为默认模型与 480 降级版开了例外，Dockerfile 也有构建期校验，所以镜像内自带这两组权重，不再只依赖宿主机挂载。环境准备方式见 [YOLO 2D 与主逻辑联调说明](../docs/YOLO2D与主逻辑联调说明.md) 第 2 节。
+> **镜像相关（2026-11-04）**：`.dockerignore` 已为默认模型与 480 降级版开了例外，`COPY knowledge/` 会把**构建机上有的**这两组权重带进镜像；构建机上没有模型时镜像照常构建成功，只是运行到 YOLO 会报 `FileNotFoundError`。所以部署时不要假设镜像自带模型，用 `-v <models>:/opt/vision/knowledge/models:ro` 挂载最稳。环境准备方式见 [YOLO 2D 与主逻辑联调说明](../docs/YOLO2D与主逻辑联调说明.md) 第 2 节。
 
 ## 需要什么
 
