@@ -15,6 +15,8 @@ import cv2
 import numpy as np
 
 from vision.depth import Intrinsics
+from vision.types import Frame
+from vision.yolo.pipeline import ColorConfig, process_frame
 from .image_decode import image_array as decode_image
 
 from vision.depth.rgbd import ColorRectifier, validate_images
@@ -28,12 +30,21 @@ _SELECTED_COLOR = (0, 255, 255)
 class SidePipeline:
     """持有单个检测器和校正映射缓存，只在一个工作线程中调用。"""
 
-    def __init__(self, detector, params=None):
-        """detector 遵循 detect(image_bgr) 接口，params 为毫米平面参数。"""
+    def __init__(self, detector, params=None, thresholds=None, color_cfg=None):
+        """初始化几何与判色；阈值由上层读取，不在工作线程中访问文件。
+
+        :param detector: 遵循 detect(image_bgr) 的检测器
+        :param params: 毫米平面参数；None 使用默认值
+        :param thresholds: HSV 阈值；None 用于仅测几何，不运行判色
+        :param color_cfg: 有效像素和命中率门槛；None 使用 ColorConfig 默认值
+        """
         self.detector = detector
         self.params = params or PlaneParams()
         self.params.validate()
         self.rectifier = ColorRectifier()
+        self.thresholds = thresholds
+        self.color_cfg = color_cfg or ColorConfig()
+        self.color_cfg.validate()
 
     def __call__(self, job):
         """解码、校正、检测及逐框测量，返回拥有原图对的独立结果字典。"""
@@ -46,7 +57,10 @@ class SidePipeline:
         validate_images(color, depth, ci, di)
         image, valid = self.rectifier.apply(color, ci, di)
         t1 = time.monotonic()
-        detections = self.detector.detect(image)
+        # 框和颜色都从同一张校正图取得；复用 2D 的 top 上下/左右判色口径。
+        detections = (self.detector.detect(image) if self.thresholds is None else
+                      process_frame(Frame(image, source='rgbd'), self.detector,
+                                    self.thresholds, self.color_cfg).detections)
         t2 = time.monotonic()
         h, w = depth.shape
         k = Intrinsics.from_camera_info(di['k'], w, h)
@@ -54,7 +68,9 @@ class SidePipeline:
         for detection in detections:
             box = tuple(detection.bbox_xyxy)
             row = {'detection': {'bbox_xyxy': list(box), 'class_id': int(detection.class_id),
-                                 'class_name': str(detection.class_name), 'score': float(detection.score)},
+                                 'class_name': str(detection.class_name), 'score': float(detection.score),
+                                 'color': detection.color, 'color_ratio': float(detection.color_ratio),
+                                 'valid_pixels': int(detection.valid_pixels)},
                    'status': 'INVALID_BOX', 'reason': '', 'measurement': None,
                    'centroid_px': None, 'masks': []}
             try:
@@ -135,7 +151,7 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
             caption = 'STALE | ' + caption
         cv2.putText(depth_image, caption, (8, 17), cv2.FONT_HERSHEY_SIMPLEX,
                     0.48, (255, 255, 255), 1, cv2.LINE_AA)
-    sizes = [96 + 24 * len((row['measurement'] or {}).get('candidates', []))
+    sizes = [120 + 24 * len((row['measurement'] or {}).get('candidates', []))
              for row in observations]
     height = max(image.shape[0], 270+(0 if stale else sum(sizes)))
     panel = np.full((height, 510, 3), 28, np.uint8)
@@ -147,7 +163,7 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
     _text(panel, f"Process FPS(avg): {stats.get('process_fps', 0):.1f} | ReceiveAge: {age:.0f} ms", 98)
     t = result['timing_ms']
     _text(panel, f"PairDt: {result['pair']['dt_ms']:+.3f} ms", 122)
-    _text(panel, f"Inference: {t['inference']:.1f} | Geometry: {t['geometry']:.1f} ms", 146)
+    _text(panel, f"Detect+color: {t['inference']:.1f} | Geometry: {t['geometry']:.1f} ms", 146)
     _text(panel, f"SyncDrop: {stats.get('sync_dropped', 0)} ProcessDrop: {stats.get('processing_dropped', 0)}", 170)
     _text(panel, f"Stale: {stats.get('stale_count', 0)} Errors: {stats.get('errors', 0)}", 194)
     _text(panel, 'Q/Esc: quit | M: mask | D: depth | S: snapshot', 218)
@@ -155,7 +171,9 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
     if not stale:
         y = 270
         for index, row in enumerate(observations):
-            _text(panel, f"{index}: {row['detection']['class_name']} {row['detection']['score']:.2f} | {row['status']}", y)
+            d = row['detection']
+            _text(panel, f"{index}: {d['class_name']} {d['score']:.2f} | {row['status']}", y)
+            _text(panel, f"ClassID={d['class_id']} Color={d.get('color') or 'unknown'}", y+72)
             m = row['measurement']
             if row['centroid_px'] is not None:
                 c = m['candidates'][m['selected_index']]
@@ -171,7 +189,7 @@ def render_result(result, now, stats, overlay=True, max_age_ms=500, depth_visibl
                 for plane, candidate in enumerate(m['candidates']):
                     label = 'SELECTED' if plane == m['selected_index'] else 'OTHER'
                     color = _SELECTED_COLOR if plane == m['selected_index'] else _PLANE_COLORS[plane % len(_PLANE_COLORS)]
-                    _text(panel, f"P{plane} {label} support={candidate['inlier_ratio']:.1%} core={candidate['core_coverage']:.1%}", y+72+24*plane, color)
+                    _text(panel, f"P{plane} {label} support={candidate['inlier_ratio']:.1%} core={candidate['core_coverage']:.1%}", y+96+24*plane, color)
             y += sizes[index]
     depth_width = depth_image.shape[1] if depth_image is not None else 0
     canvas = np.zeros((height, image.shape[1]+depth_width+panel.shape[1], 3), np.uint8)

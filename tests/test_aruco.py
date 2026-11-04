@@ -13,7 +13,7 @@
 环境要求
     需要 OpenCV >= 4.7 的新版 aruco API。容器（cv2 4.14）里全跑；
     宿主 apt 版 cv2 4.5.4 没有这个 API，会自动**跳过**并打一句提示，不算失败。
-    跑法：docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    跑法：docker compose -f .devcontainer/docker-compose.yml run --rm vision \
               python tests/test_aruco.py
 """
 
@@ -56,7 +56,7 @@ def _require_aruco() -> None:
         raise unittest.SkipTest(
             f"cv2 {cv2.__version__} 没有新版 aruco API（需 >= 4.7）。"
             "在容器里跑：docker compose -f .devcontainer/docker-compose.yml run --rm "
-            "up70-vision python tests/test_aruco.py")
+            "vision python tests/test_aruco.py")
     if not ASSETS.is_dir():
         raise unittest.SkipTest(
             f"测试图组不存在：{ASSETS}。先生成：python lab/gen_aruco.py")

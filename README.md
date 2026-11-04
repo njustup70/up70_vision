@@ -6,41 +6,51 @@
 
 ## RGB-D 融合：运行入口
 
-当前已验证运行环境是本机 ROS 2 Jazzy、Orbbec ROS wrapper/SDK 2.9.3 和 OpenCV ≥4.10。先从搭档处取得 `yolov8n_mix4.onnx` 与同名 `.names.json` 放入 `knowledge/models/`：两者不随 Git 分发，模型为 CPU 推理，类别是 `block`、`top`。设备准备、依赖、配置和限制见 [联调说明](knowledge/docs/整机联调说明.md)。
+共用 Docker 环境基于 **ROS 2 Humble**，默认支持 Gemini 336L；需要海康时通过 `WITH_MVS=1` 加装 SDK。
+完整设备、窗口和构建说明见 [共用相机容器](.devcontainer/README.md)。
 
-从仓库根目录运行，确保 ROS、Orbbec 驱动和带项目依赖的 Python 环境已就绪：
+先从搭档处取得 `yolov8n_mix4.onnx` 与同名 `.names.json` 放入 `knowledge/models/`，
+两者不随 Git 分发。模型为 CPU 推理，类别是 `block`、`top`。
+
+从仓库根目录构建并进入 Gemini 容器：
 
 ```bash
-source /opt/ros/jazzy/setup.bash
-source ~/.venvs/up70-rgbd/bin/activate  # 示例；使用自己的 ROS 兼容 Python 环境
-cd ros2_ws
-python -m colcon build --packages-select vision_depth --symlink-install
-source install/setup.bash
-cd ..
-export ROS_DOMAIN_ID=97  # 示例；同一联调组保持一致
-ros2 launch vision_depth rgbd_side_viewer.launch.py rviz:=true
+docker compose -f .devcontainer/docker-compose.yml build
+docker compose -f .devcontainer/docker-compose.yml run --rm vision
 ```
 
-相机启动后，`/rgbd_side/candidates` 发布候选重心、类别和法向姿态，`/rgbd_side/markers` 供 RViz 显示。话题单位、时间戳、有效期与四元数含义见 [接口契约](vision/docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
+容器默认进入终端，不自动启动相机；Humble 和项目 ROS 环境已加载。确认设备与窗口就绪后运行：
+
+```bash
+python -m vision doctor
+ros2 launch vision_depth rgbd_side_viewer.launch.py rviz:=true
+# 无显示环境：ros2 launch vision_depth rgbd_side_viewer.launch.py headless:=true
+```
+
+本机 Jazzy 启动方式继续保留在 [深度 README](vision/depth/README.md#环境与启动)；
+Humble 软件及回放通过的范围、真机与跨机待验证项见容器说明和深度进度。
+
+相机启动后，`/rgbd_side/candidates`（`vision_interfaces/msg/RgbdCandidateArray`）发布候选重心、类别编号、颜色编号和法向姿态，`/rgbd_side/markers` 供 RViz 显示。颜色复用 2D YOLO 的 HSV 判色；旧订阅端需构建新接口并更新字段路径。话题单位、编号表、时间戳、有效期与四元数含义见 [接口契约](vision/docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
 
 **当前 launch 强制使用 Fast DDS 仅共享内存配置，只适用于同机通信。** 其他机器无法直接发现或订阅该配置下的节点；跨机部署方案尚未确定。只想使用已有相机或回放时，传 `start_camera:=false`，并提供匹配的对齐彩深图和 CameraInfo。
 
 ---
 
-## 2D 与通用工具：容器快速开始
+## 海康：同一容器按需加装 MVS
+
+先把一个 MVS Linux x86-64 deb 放入 `.devcontainer/pkgs/`，再构建同一镜像：
 
 ```bash
-# 只需一次：构建镜像（约 2~3 分钟）
-docker compose -f .devcontainer/docker-compose.yml build
-
-# 三条自检，依次应看到「全部通过」「PASS」「✅ 运行成功」
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision doctor
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision demo
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision run
+WITH_MVS=1 docker compose -f .devcontainer/docker-compose.yml build
+docker compose -f .devcontainer/docker-compose.yml run --rm vision
 ```
 
-`./demo.sh` 把这三步串起来，跑完 `output/demo/` 里有叠加图 + JSON + CSV。
-源码是 bind mount，改代码立即生效；只有改 `pyproject.toml` 才需要重新 build。
+进入后使用下方 2D 命令。纯软件检查可运行 `python -m vision doctor`、
+`python -m vision demo` 和 `python -m vision run --set input.source=synthetic`。
+默认构建不安装 MVS；启用后缺少或存在多个 deb 均明确报错。
+
+Python 源码通过挂载即时生效。修改依赖、SDK、Dockerfile 或 `ros2_ws/src/` 后需重新构建；
+需要保留海康能力时重建继续指定 `WITH_MVS=1`。ROS 安装空间不会随源码挂载自动更新。
 
 ---
 
@@ -84,7 +94,7 @@ python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 参数都在 `configs/default.yaml`（判色阈值在 `configs/color_thresholds.yaml`），
 `--set 点分路径=值` 临时覆盖，只能改已存在的字段，写错启动即报错。
 
-上面的 2D 通用容器不包含 ROS 2，不能直接运行 RGB-D 融合入口。
+同一容器中，海康使用上述 `input.source=camera` 入口；Gemini 真机通过 ROS launch 启动。
 
 ![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](knowledge/images/live_pose_demo.jpg)
 
@@ -118,9 +128,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 
 1. **相机不是 UVC**：海康 MV-CU013-A0UC 走 USB3 Vision，宿主机没有 `/dev/video*`，`cv2.VideoCapture`
    打不开且不提示原因。三步缺一不可：udev 规则给权限（`idVendor=2bdf`）、把 MVS 的 deb 放进
-   `.devcontainer/pkgs/` 后**重新 build**、compose 透传 `/dev/bus/usb`。
+   `.devcontainer/pkgs/` 后**使用 `WITH_MVS=1` 重新 build**、compose 透传 `/dev/bus/usb`。
 2. **相机是独占资源**：MVS 客户端、调参窗口、本仓库互斥，打不开先关占用者。
-3. **容器里开窗口**要三件事：`xhost +local:root`、`-e DISPLAY=$DISPLAY`、挂 `/tmp/.X11-unix`；
+3. **容器里开窗口**要三件事：宿主执行 `xhost +si:localuser:root`、设置 DISPLAY、挂 `/tmp/.X11-unix`（Compose 已包含后两项）；
    旧镜像会报 `xcb` 加载失败——镜像需含 `libsm6 libice6`，旧的重新 build。
 4. **别装 `opencv-contrib-python` / `-headless`**：三者顶层模块都叫 `cv2`，互相覆盖且不报错。
 5. **尺寸别混**：棋盘格 `--square-mm 23`（标称 15、实量 23）、ArUco 码 `pose.marker_size_mm`（实测黑框外沿，
@@ -135,7 +145,7 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
    `knowledge/models/*.onnx`、`configs/camera_calibration*.yaml` 都被 gitignore。
    新 clone 要位姿就先自己标定。2D 模型可按训练记录导出；RGB-D 当前默认使用搭档提供的 640 输入 mix4，
    不要把其他尺寸或预训练权重当成同一模型。
-10. **镜像里没有 pytest**：完整回归应使用安装了 pytest 的隔离副本；避免在原工作区运行会重建 `output/` 的测试。
+10. **回归在隔离副本运行**：共用镜像已有 pytest。避免在原工作区运行会重建 `output/` 的测试。
 11. **`live` 现在支持三种检测器**：ArUco 画四边形+位姿轴；判色/YOLO 画框并显示
     `类别/颜色 置信度`（`top` 按上半块判色，框固定品红，所以红塔顶也会是品红框）。
     落盘目录也分开：ArUco 在 `output/aruco/`，判色/YOLO 在 `output/live_det/`。

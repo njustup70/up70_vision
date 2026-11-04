@@ -1,7 +1,7 @@
 """把 bag 里的图像话题抽成 png，供标定和离线分析用。
 
 跑法（容器内）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/bag_to_images.py bags/calib_ir --topic /camera/ir/image_raw \
         --out data/calib_ir
 

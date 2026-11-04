@@ -40,7 +40,7 @@ data/*
 *.names.json
 
 # 本地投放的安装包：184 MB 的 MVS SDK deb 由各人自行下载，
-# 说明见 .devcontainer/pkgs/README.md；镜像构建时由 Dockerfile 装进容器
+# 说明见 .devcontainer/pkgs/README.md；主 Dockerfile 通过 WITH_MVS=1 按需安装
 .devcontainer/pkgs/*.deb
 
 # 环境文件与密钥

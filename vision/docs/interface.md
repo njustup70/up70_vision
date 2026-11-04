@@ -241,15 +241,51 @@ class FrameSource(ABC):
 
 ## RGB-D 可见平面候选输出（2026-11-02）
 
-实时侧面查看器发布 `/rgbd_side/candidates`（`vision_msgs/Detection3DArray`）和
+实时侧面查看器发布 `/rgbd_side/candidates`（`vision_interfaces/msg/RgbdCandidateArray`，2026-11-04 扩展）和
 `/rgbd_side/markers`（`visualization_msgs/MarkerArray`），QoS 均为可靠、易失、深度 1。
 每个新完成的有效图对发布一次，空数组表示该帧没有有效候选；过期、几何重置或处理错误
 在存在活动候选时额外发布空数组。断流检查采用本地单调时钟，从图对较早的接收时间计算，
 默认 500 ms；撤销沿用上次采集 header。订阅者还必须自行检查时间戳和断流，不能无限使用旧消息。
 
-数组与各 detection 的 header 使用配对深度图的采集时间与光学 frame。`results[0]` 的类别和
+数组字段为 `header` 与 `candidates[]`。每项 `RgbdCandidate` 包含以下字段：
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `detection` | `vision_msgs/msg/Detection3D` | 原有完整候选，位置、法向、类名与置信度语义沿用下文 |
+| `class_id` | `int32` | YOLO 原始类别索引；当前 mix4：`0=block`（350 mm 方块）、`1=top`（200 mm 塔顶），未知为 -1；不是根据深度尺寸重新裁决的类别 |
+| `color_id` | `uint8` | HSV 颜色编号；未知或未映射为 0，不影响该项几何候选的发布 |
+
+颜色编号固定在 `RgbdCandidate.msg` 的 `COLOR_*` 常量中，不随阈值文件键顺序改变：
+
+| 编号 | 颜色 |
+|---|---|
+| 0 | 未知 `unknown` |
+| 1 | 红 `red` |
+| 2 | 蓝 `blue` |
+| 3 | 红蓝横放混色 `mixed` |
+
+颜色表中其他颜色即使被判出，也作为未知（0）发布。
+
+判色复用 `vision.yolo.pipeline.process_frame` 和 `configs/color_thresholds.yaml` 的颜色范围及门槛，
+在 YOLO 使用的同一张校正彩色图、同一框中完成，不从 RViz 的标记色或深度伪彩图取色。
+`block` 使用普通 HSV 判色；`top` 按既有口径：红蓝上下时取上方颜色，左右时为 mixed，
+单色时返回该色，斜放不明确时未知。`top` 也执行有效像素数门槛，`hit_ratio_min` 用于红蓝合计命中率，
+方向计算使用相同有效像素掩码及裁边。颜色仍依赖光照和检测框，未完成真机准确率验收。
+查看器参数 `color_thresholds_file` 默认 `configs/color_thresholds.yaml`，相对仓库根目录；
+快照的 detection 保留 `color`、`color_ratio`、`valid_pixels`，运行摘要保留阈值及其 SHA-256。
+现有 `timing_ms.inference` / 摘要 `inference_ms` 计时包含检测与 HSV 判色，窗口显示为 `Detect+color`。
+
+**订阅迁移：** 此次将原 `vision_msgs/msg/Detection3DArray` 改为自定义类型；同名话题的旧类型
+不能继续订阅。收发两侧都需取得并构建 `vision_interfaces`，重新加载工作空间并重启节点。
+构建查看器用 `python -m colcon build --packages-up-to vision_depth --symlink-install`，
+只构建接口的下游用 `--packages-select vision_interfaces`。原 `msg.detections[i]` 改为
+`msg.candidates[i].detection`；类别编号和颜色编号分别取 `msg.candidates[i].class_id`、
+`msg.candidates[i].color_id`。其他使用 Detection3DArray 的 `/grasp_targets` 和
+`/ground_truth_targets` 不变。此契约变更合入前按团队规范评审。
+
+数组与各 detection 的 header 使用配对深度图的采集时间与光学 frame。`detection.results[0]` 的类别和
 置信度来自 YOLO，位置为选中平面可见内点重心（米）。`id` 为空，没有跨帧身份；
-`results[0].pose.pose.orientation` 将局部 +Z 旋转到单位法向，法向朝相机；绕法向的转角是
+`detection.results[0].pose.pose.orientation` 将局部 +Z 旋转到单位法向，法向朝相机；绕法向的转角是
 构造值，不是物块真实姿态或 yaw。协方差未估计，bbox 中心复用重心、朝向为单位占位且尺寸为零，
 不能解释成零误差、真实包围盒或尺寸。法向缺失、非有限或模长不大于 1e-9 的候选整项不发布。
 接收端按 ROS 四元数 `(x,y,z,w)` 计算法向：

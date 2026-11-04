@@ -4,7 +4,7 @@
 
 **海康 MVS SDK 的 deb 安装包**（`MVS-<版本>_x86_64_<日期>.deb`，约 184 MB）。
 
-Dockerfile 会把这个目录 `COPY` 进镜像并安装它——因为 MVS 是 **deb 包**，不是 pip 包，
+主 `Dockerfile` 在 `WITH_MVS=1` 时通过构建时只读挂载安装 SDK，deb 不写入镜像层——因为 MVS 是 **deb 包**，不是 pip 包，
 写不进 `pyproject.toml` 的 `dependencies`，只能走镜像层。
 
 ## 怎么拿到
@@ -18,21 +18,18 @@ Dockerfile 会把这个目录 `COPY` 进镜像并安装它——因为 MVS 是 *
 
 ## 为什么不在版本库里
 
-184 MB 远超「单文件超过 10 MB 就不进版本库」的约定（见 `assets/README.md`）。
+184 MB 远超「单文件超过 10 MB 就不进版本库」的约定（见 `knowledge/README.md`）。
 所以 `.gitignore` 排除了本目录下的 `*.deb`，每个开发者各自下载一份放进来。
 
-## 不放会怎样
+## 构建要求
 
-镜像照样能 build，只是**没有相机 SDK**：
-`input.source=camera` 会在启动时报错并提示「MVS 未安装」。
-不接相机的开发（合成图、回放、判色调参、单测）完全不受影响。
+默认 `WITH_MVS=0`，不安装 MVS，本目录没有 deb 也能构建 Gemini 环境。
+需要海康时，本目录必须恰好有一个 `.deb`，再运行：
 
-## 体积代价
+```bash
+WITH_MVS=1 docker compose -f .devcontainer/docker-compose.yml build
+```
 
-装了 MVS 的镜像约 **2.36 GB**（不装时约 862 MB）——MVS 装完会把样例、GenICam CLProtocol、
-图形客户端一起带进来。**不接相机的人不要把这个 deb 放进本目录**，就能省下 1.5 GB。
-
-## 注意
-
-容器里只用到 MVS 的**库和 Python 样例**（`/opt/MVS/lib`、`/opt/MVS/Samples`）。
-**udev 权限规则必须在宿主机配**（容器里改不了），见 `README.md` 的环境章节。
+启用后缺少或存在多个安装包均报错，安装失败不会跳过。两台相机使用同一 `vision` 服务。
+SDK 会增大镜像；旧镜像的体积数据不代表本轮结果。容器使用 `/opt/MVS/lib` 和
+`/opt/MVS/Samples`；宿主 udev 权限、USB 和窗口配置见[共用相机容器](../README.md)。

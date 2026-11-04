@@ -42,7 +42,7 @@ python tests/test_aruco.py
 **容器里跑**（标准环境，cv2 4.14）：
 
 ```bash
-docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+docker compose -f .devcontainer/docker-compose.yml run --rm vision \
   python -m vision.tools.aruco.check
 ```
 

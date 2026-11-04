@@ -12,10 +12,15 @@ from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Point
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import Header
-from vision_msgs.msg import Detection3D, Detection3DArray, ObjectHypothesisWithPose
+from vision_msgs.msg import Detection3D, ObjectHypothesisWithPose
+from vision_interfaces.msg import RgbdCandidate, RgbdCandidateArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .geometry import quaternion_from_z_axis
+
+# 编号来自正式消息常量，不从 YAML 的颜色顺序推导；调阈值不会改变下游含义。
+COLOR_IDS = {name: getattr(RgbdCandidate, 'COLOR_' + name.upper())
+             for name in ('red', 'blue', 'mixed')}
 
 
 def _camera_facing_normal(value, point):
@@ -49,7 +54,7 @@ class CandidatePublisher:
         qos = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
                          reliability=ReliabilityPolicy.RELIABLE,
                          durability=DurabilityPolicy.VOLATILE)
-        self.detections = node.create_publisher(Detection3DArray, '/rgbd_side/candidates', qos)
+        self.detections = node.create_publisher(RgbdCandidateArray, '/rgbd_side/candidates', qos)
         self.markers = node.create_publisher(MarkerArray, '/rgbd_side/markers', qos)
         self.max_age = max_age_ms / 1000.0
         self.header = None
@@ -66,7 +71,7 @@ class CandidatePublisher:
         header = Header()
         header.stamp.sec, header.stamp.nanosec = divmod(stamp, 1_000_000_000)
         header.frame_id = result['di']['frame_id']
-        array = Detection3DArray()
+        array = RgbdCandidateArray()
         array.header = header
         marker_array = MarkerArray()
         marker_array.markers.append(self._delete_all(header))
@@ -96,17 +101,22 @@ class CandidatePublisher:
             detection.results.append(hypothesis)
             detection.bbox.center.position.x, detection.bbox.center.position.y, detection.bbox.center.position.z = point
             detection.bbox.center.orientation.w = 1.0
-            array.detections.append(detection)
-            index = len(array.detections) - 1
+            item = RgbdCandidate()
+            item.detection = detection
+            item.class_id = int(row['detection']['class_id'])
+            item.color_id = COLOR_IDS.get(row['detection'].get('color'), RgbdCandidate.COLOR_UNKNOWN)
+            array.candidates.append(item)
+            index = len(array.candidates) - 1
             marker_array.markers.extend(self._candidate_markers(header, index, point, normal,
-                                                                row['detection']['class_name']))
+                                                                row['detection']['class_name'],
+                                                                item.class_id, item.color_id))
         self.detections.publish(array)
         self.markers.publish(marker_array)
         self.header = deepcopy(header)
         self.received = result['received']
-        self.active = bool(array.detections)
+        self.active = bool(array.candidates)
         self.counts['published'] += 1
-        self.counts['candidates'] += len(array.detections)
+        self.counts['candidates'] += len(array.candidates)
 
     def expire(self, now):
         """没有新帧时按单调时钟检查过期；仅撤销一次。"""
@@ -117,7 +127,7 @@ class CandidatePublisher:
         """以最后采集时间发空数组并清除标记；没有活动结果时不重复发。"""
         if not self.active:
             return
-        array = Detection3DArray()
+        array = RgbdCandidateArray()
         array.header = self.header
         markers = MarkerArray()
         markers.markers.append(self._delete_all(self.header))
@@ -134,7 +144,7 @@ class CandidatePublisher:
         marker.action = Marker.DELETEALL
         return marker
 
-    def _candidate_markers(self, header, index, point, normal, class_name):
+    def _candidate_markers(self, header, index, point, normal, class_name, class_id, color_id):
         """创建球、文字和朝相机箭头；生命周期提供异常退出后的回收。"""
         lifetime_ns = max(1, round(self.max_age * 1_000_000_000))
         result = []
@@ -158,7 +168,8 @@ class CandidatePublisher:
                 marker.scale.z = 0.035
                 # RViz 字体的空格可能被渲染成异常宽的间距，用分隔符保证标签紧凑。
                 label = '_'.join(str(class_name).split())
-                marker.text = (f'CANDIDATE|{label}|p=({point[0]:.3f},{point[1]:.3f},{point[2]:.3f})m|'
+                marker.text = (f'CANDIDATE|{label}|class={class_id}|color={color_id}|'
+                               f'p=({point[0]:.3f},{point[1]:.3f},{point[2]:.3f})m|'
                                f'n=({normal[0]:.3f},{normal[1]:.3f},{normal[2]:.3f})')
             else:
                 # points 已处于光学坐标系；pose 保持原点，避免重心被加两次。

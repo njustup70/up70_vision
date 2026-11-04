@@ -254,3 +254,33 @@ def test_top_none_when_nothing_matches():
     thresholds = {"red": [(0, 120, 70, 10, 255, 255)], "blue": [(105, 120, 70, 135, 255, 255)]}
     hsv = np.full((100, 100, 3), (0, 10, 200), np.uint8)      # 低饱和灰
     assert judge_top_color(hsv, (10, 10, 90, 90), thresholds).name is None
+
+
+def test_top_rejects_too_few_valid_pixels_and_sparse_red_noise():
+    """四个红像素或大片其他颜色中的少量红点都不能判成红塔顶。"""
+    from vision.yolo.color_check import judge_top_color
+    thresholds = {'red': [(0, 120, 70, 10, 255, 255)],
+                  'blue': [(105, 65, 30, 135, 255, 255)]}
+    hsv = np.zeros((20, 20, 3), np.uint8)
+    hsv[8:10, 8:10] = (0, 200, 200)
+    verdict = judge_top_color(hsv, (0, 0, 20, 20), thresholds, min_valid_pixels=25)
+    assert verdict.name is None and verdict.reason == 'too_few_valid_pixels'
+    hsv[:] = (60, 200, 200)
+    hsv[8:10, 8:10] = (0, 200, 200)
+    verdict = judge_top_color(hsv, (0, 0, 20, 20), thresholds, hit_ratio_min=.5)
+    assert verdict.name is None and verdict.reason == 'below_hit_ratio_min'
+
+
+def test_top_direction_uses_same_valid_mask_and_border_as_ratios():
+    """暗蓝和裁去的边缘不参与塔顶方向，避免分子和方向使用不同像素。"""
+    from vision.yolo.color_check import judge_top_color
+    thresholds = {'red': [(0, 120, 70, 10, 255, 255)],
+                  'blue': [(105, 65, 30, 135, 255, 255)]}
+    hsv = np.full((100, 100, 3), (0, 200, 200), np.uint8)
+    hsv[50:] = (120, 200, 35)
+    verdict = judge_top_color(hsv, (0, 0, 100, 100), thresholds, min_value=40)
+    assert verdict.name == 'red' and verdict.reason == 'single_colour'
+    hsv[:] = (120, 200, 200)
+    hsv[:3] = (0, 200, 200)
+    verdict = judge_top_color(hsv, (0, 0, 100, 100), thresholds, ignore_border_px=3)
+    assert verdict.name == 'blue' and verdict.reason == 'single_colour'

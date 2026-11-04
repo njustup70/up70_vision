@@ -1,31 +1,30 @@
-# up70-vision 开发环境（CPU）。
-#
-# 用法（在仓库根目录执行）：
-#   docker compose -f .devcontainer/docker-compose.yml build                  # 建镜像，只需一次
-#   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision   # 跑环境自检
-#   docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision python -m vision demo
-#
-# 源码以 bind mount 挂进容器：改宿主机上的代码在容器里立即生效，不用重建镜像。
-# 只有改了 pyproject.toml（增删依赖）才需要重新 build。
+# 从仓库根运行；默认进入终端，不自动启动相机。
+name: up70-vision
 
 services:
-  up70-vision:
+  vision:
+    image: up70-vision:humble
     build:
-      # context 必须是仓库根：Dockerfile 里是 COPY . .，得能拿到 pyproject.toml 与 src/。
-      # 本文件位于 .devcontainer/ 下，所以上一级（..）正好是仓库根。
       context: ..
-      # dockerfile 这个路径是相对 context 解析的，不是相对本文件，所以要写全 .devcontainer/Dockerfile
       dockerfile: .devcontainer/Dockerfile
-    image: up70-vision:dev
+      args:
+        WITH_MVS: ${WITH_MVS:-0}
     working_dir: /opt/vision
+    stdin_open: true
+    tty: true
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      QT_X11_NO_MITSHM: '1'
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-97}
     volumes:
-      # 宿主仓库根 -> 容器内固定路径，与 Dockerfile 的 WORKDIR 一致
       - ..:/opt/vision
-    # 真相机透传：这颗海康相机走 USB3 Vision（GenICam），数据走 libusb 的
-    # /dev/bus/usb/...，**不是 UVC**，宿主机上根本没有 /dev/video* 可传。
-    # 权限在宿主机用 udev 规则给（见 README.md），容器里改不了。
-    # 不接相机时留着这一行也无害：它只是把 USB 总线暴露进来。
-    devices:
-      - "/dev/bus/usb:/dev/bus/usb"
-    # 默认命令：环境自检（统一入口，等价于原来的 python scripts/check_env.py）
-    command: python -m vision doctor
+      # USB 总线支持热插拔；访问权限仍由宿主机 udev 决定。
+      - /dev/bus/usb:/dev/bus/usb
+      # 无 DISPLAY 时不启用窗口；无头任务沿用各命令的 headless 参数。
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    # 现有 launch 使用仅共享内存 DDS；这里只支持同机通信。
+    network_mode: host
+    ipc: host
+    command: bash

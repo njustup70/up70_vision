@@ -14,7 +14,7 @@ input:
   # synthetic：读取用 OpenCV 合成的色块图，不需要任何素材文件
   # replay：回放一个图片目录或视频文件（路径在 input.replay.path）
   # camera：真相机（海康 MV-CU013-A0UC，走厂商 MVS SDK）。
-  #   需要镜像里装了 MVS —— deb 放 .devcontainer/pkgs/，见该目录的 README。
+  #   需要镜像里装了 MVS —— deb 放 .devcontainer/pkgs/，以 WITH_MVS=1 构建，见该目录的 README。
   source: synthetic
 
   synthetic:

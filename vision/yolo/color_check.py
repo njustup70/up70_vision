@@ -173,7 +173,8 @@ TOP_MIXED_MIN_RATIO = 0.20
 TOP_AXIS_MIN_SEP = 0.12
 
 
-def _top_orientation(hsv, bbox, thresholds, min_sep: float):
+def _top_orientation(hsv, bbox, thresholds, min_sep: float,
+                     min_saturation=40, min_value=40, ignore_border_px=0):
     """判断塔顶是"竖放"还是"横放"。
 
     - 竖放：红蓝上下排列（红在上 = red，蓝在上 = blue）；
@@ -188,11 +189,14 @@ def _top_orientation(hsv, bbox, thresholds, min_sep: float):
         return "none", None
     height, width = hsv.shape[:2]
     x1, y1, x2, y2 = clip_bbox(bbox, width, height)
+    border = int(ignore_border_px)
+    x1, y1, x2, y2 = x1+border, y1+border, x2-border, y2-border
     if x2 - x1 < 8 or y2 - y1 < 8:
         return "none", None
     roi = hsv[y1:y2, x1:x2]
-    red_mask = mask_for_segments(roi, red_segments) > 0
-    blue_mask = mask_for_segments(roi, blue_segments) > 0
+    valid = valid_pixel_mask(roi, min_saturation, min_value) > 0
+    red_mask = (mask_for_segments(roi, red_segments) > 0) & valid
+    blue_mask = (mask_for_segments(roi, blue_segments) > 0) & valid
     red_px = int(np.count_nonzero(red_mask))
     blue_px = int(np.count_nonzero(blue_mask))
     if red_px + blue_px < 4:
@@ -230,14 +234,21 @@ def judge_top_color(hsv, bbox, thresholds, upper_fraction: float = 0.5,
     :param upper_fraction: 保留参数（兼容旧调用），当前不参与判定
     :param mixed_min: 保留参数（兼容旧调用），当前不参与判定
     :param axis_min_sep: 行/列中位数差至少占框高/框宽的比例
-    :param kwargs: 透传给 `color_ratios`（min_saturation / min_value / ignore_border_px）
+    :param kwargs: 有效像素、裁边和判定门槛；hit_ratio_min 用于红蓝合计占比，
+                   不要求上方颜色占多数，min_valid_pixels 不足时返回 None
     :return: `ColorVerdict`；`name` 可能是 `"red"` / `"blue"` / `"mixed"` / `None`
     """
-    orientation, payload = _top_orientation(hsv, bbox, thresholds, axis_min_sep)
     ratio_kwargs = {key: kwargs[key] for key in
                     ("min_saturation", "min_value", "ignore_border_px")
                     if key in kwargs}
     ratios, n_valid = color_ratios(hsv, bbox, thresholds, **ratio_kwargs)
+    if n_valid < int(kwargs.get('min_valid_pixels', DEFAULT_MIN_VALID_PIXELS)):
+        return ColorVerdict(None, 0.0, int(n_valid), ratios, reason='too_few_valid_pixels')
+    # 先确认框内确实有足够红蓝，再判断谁在上面；少量红噪点不能代表整个塔顶。
+    combined = min(1.0, ratios.get('red', 0.0) + ratios.get('blue', 0.0))
+    if combined < float(kwargs.get('hit_ratio_min', 0.50)):
+        return ColorVerdict(None, combined, int(n_valid), ratios, reason='below_hit_ratio_min')
+    orientation, payload = _top_orientation(hsv, bbox, thresholds, axis_min_sep, **ratio_kwargs)
     if orientation == "none":
         return ColorVerdict(None, 0.0, int(n_valid), ratios, reason="no_colour")
     if orientation == "single":

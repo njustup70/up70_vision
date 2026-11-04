@@ -1,7 +1,6 @@
 """OpenCV 冒烟测试：确认这台机器上的 OpenCV 真的能跑。
 
 跑法
-    ./demo.sh                                # 推荐：构建 + 自检 + 冒烟一条命令跑完
     python -m vision demo                   # 只跑冒烟测试
 
 做什么

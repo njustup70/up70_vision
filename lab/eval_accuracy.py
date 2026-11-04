@@ -1,7 +1,7 @@
 """M3 误差评估：批量跑合成场景，和真值配对后统计位置误差。
 
 跑法（容器内）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/eval_accuracy.py data/syn/single_01 data/syn/multi_01
 
     # 只看统计不看每目标明细

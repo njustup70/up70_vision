@@ -1,7 +1,7 @@
 """S4 合成深度图生成器：光线投射 + 实测噪声 + 无效值。
 
 跑法（容器内）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/gen_synthetic_depth.py --out data/syn/single_01
 
     # 换参数：相机高 500mm、倾角 20°、物块 60x40x50

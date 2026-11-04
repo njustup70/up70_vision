@@ -88,7 +88,7 @@ def _reader():
         raise BagError(
             "读 bag 需要 rosbags（pyproject 的 [lab] 可选依赖）。"
             "容器内：docker compose -f .devcontainer/docker-compose.yml run --rm "
-            "up70-vision python -m lab.rgbd_check inspect <bag>") from exc
+            "vision python -m lab.rgbd_check inspect <bag>") from exc
     return AnyReader
 
 

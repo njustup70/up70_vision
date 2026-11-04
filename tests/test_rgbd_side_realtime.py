@@ -151,6 +151,34 @@ def test_pipeline_multibox_projection_and_one_failure():
     assert detector.seen.shape == (120, 160, 3)
 
 
+def test_pipeline_reuses_yolo_color_for_same_rectified_boxes():
+    """同帧蓝色方块、横放塔顶分别保留模型类别和 blue/mixed 判色。"""
+    from vision.config.loader import load_thresholds, read_thresholds_settings
+    from vision.yolo.pipeline import ColorConfig
+    class Detector:
+        """返回两个不同类别的框。"""
+        def detect(self, image):
+            """推理一次，颜色留给共用 HSV 管线。"""
+            return [Detection((10, 10, 70, 110), 'block', 0, .9),
+                    Detection((90, 10, 150, 110), 'top', 1, .8)]
+    job = make_job()
+    image = np.zeros((120, 160, 3), np.uint8)
+    image[10:110, 10:70] = (255, 0, 0)
+    image[10:110, 90:120] = (0, 0, 255)
+    image[10:110, 120:150] = (255, 0, 0)
+    job['pair'].color.payload.data = image.tobytes()
+    path = str(ROOT/'configs/color_thresholds.yaml')
+    pipeline = SidePipeline(Detector(), thresholds=load_thresholds(path),
+                            color_cfg=ColorConfig(**read_thresholds_settings(path)))
+    rows = pipeline(job)['observations']
+    assert [r['status'] for r in rows] == ['CANDIDATE', 'CANDIDATE']
+    assert [(r['detection']['class_id'], r['detection']['color']) for r in rows] == [(0, 'blue'), (1, 'mixed')]
+    assert all(r['detection']['valid_pixels'] >= 25 for r in rows)
+    # 下一帧全灰时撤掉颜色；不能把前一帧的颜色带到同一位置的新候选上。
+    job['pair'].color.payload.data = np.full_like(image, 100).tobytes()
+    assert all(r['detection']['color'] is None for r in pipeline(job)['observations'])
+
+
 def test_ambiguous_no_detection_and_calibration_failure():
     """多平面不输出中心；无框不沿用任何候选；不匹配内参使整对无效。"""
     depth = np.full((120, 160), 500, np.uint16)

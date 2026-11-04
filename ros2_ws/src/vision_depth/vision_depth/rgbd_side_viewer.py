@@ -20,7 +20,9 @@ from .sensor_qos import sensor_qos
 from sensor_msgs.msg import CameraInfo, Image
 
 from vision.depth.surface import PlaneParams
+from vision.config.loader import load_thresholds, read_thresholds_settings
 from vision.yolo import YoloDetector
+from vision.yolo.pipeline import ColorConfig
 from .side_pipeline import SidePipeline, info_dict, render_result, save_snapshot
 from .side_sync import LatestWorker, RgbdSynchronizer
 from .side_publish import CandidatePublisher
@@ -69,6 +71,7 @@ class RgbdSideViewer(Node):
                     'color_info_topic': '/camera/color/camera_info', 'depth_info_topic': '/camera/depth/camera_info',
                     'weights': 'knowledge/models/yolov8n_mix4.onnx', 'imgsz': 640, 'conf': 0.45,
                     'iou': 0.45, 'max_detections': 32, 'target_classes': [-1], 'class_names': [''],
+                    'color_thresholds_file': 'configs/color_thresholds.yaml',
                     'aligned_depth': True, 'depth_unit': 'mm', 'sync_tolerance_ms': 10.0,
                     'sync_wait_ms': 50.0, 'queue_capacity': 10, 'max_age_ms': 500.0,
                     'leaf_mm': 4.0, 'threshold_mm': 6.0, 'iterations': 200, 'seed': 0,
@@ -102,13 +105,20 @@ class RgbdSideViewer(Node):
             names = []
         detector, self.model = checked_detector(c['weights'], c['imgsz'], c['conf'], c['iou'],
                                                  classes, names, c['max_detections'])
+        color_path = Path(c['color_thresholds_file']).expanduser().resolve()
+        thresholds = load_thresholds(str(color_path))
+        color_cfg = ColorConfig(**read_thresholds_settings(str(color_path)))
+        color_cfg.validate()
+        self.color_config = {'path': str(color_path),
+                             'sha256': hashlib.sha256(color_path.read_bytes()).hexdigest(),
+                             'settings': vars(color_cfg), 'thresholds': thresholds}
         self.sync = RgbdSynchronizer(round(c['sync_tolerance_ms']*1e6), c['sync_wait_ms']/1000,
                                     c['queue_capacity'])
         self.infos = {}
         self.stream_ok = {'color': False, 'depth': False}
         self.problems = {}
         self.arrivals = {'color': deque(maxlen=120), 'depth': deque(maxlen=120)}
-        self.worker = LatestWorker(SidePipeline(detector, params))
+        self.worker = LatestWorker(SidePipeline(detector, params, thresholds, color_cfg))
         self.last_result = None
         self.publisher = CandidatePublisher(self, c['max_age_ms'])
         self.epoch_seen = self.sync.epoch
@@ -219,6 +229,7 @@ class RgbdSideViewer(Node):
         now = time.monotonic()
         counts, durations = self.worker.stats()
         summary = {'runtime_s': now-self.started, 'model': self.model, 'config': self.config,
+                   'color_config': self.color_config,
                    'worker_stopped': not self.worker.thread.is_alive(),
                    'sync_counts': dict(self.sync.counts), 'worker_counts': counts,
                    'status_counts': dict(self.counts), 'publish_counts': dict(self.publisher.counts), 'stats': self.stats(now),
