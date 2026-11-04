@@ -106,9 +106,9 @@ python -m lab.rgbd_check inspect|analyze|annotate ...
 
 ### 环境与启动
 
-比赛目标的 Humble 容器与设备入口见 [Humble 容器说明](../../.devcontainer/README-humble.md)；下列是历史 Jazzy 环境示例，不代表 Humble 真机已通过。
+比赛目标的 Humble 容器与设备入口见 [共用相机容器](../../.devcontainer/README.md)；下列是历史 Jazzy 环境示例，不代表 Humble 真机已通过。
 
-使用能导入 ROS 2 Jazzy、项目 `vision` 包、NumPy 和 OpenCV >=4.10 的同一个 Python。系统 OpenCV 4.6 不满足项目要求；本轮隔离验证采用 OpenCV 4.11。现有 2D Docker 镜像没有 ROS，不直接用它运行此查看器。
+使用能导入 ROS 2 Jazzy、项目 `vision` 包、NumPy 和 OpenCV >=4.10 的同一个 Python。系统 OpenCV 4.6 不满足项目要求；本轮隔离验证采用 OpenCV 4.11。共用 Docker 镜像已包含 Humble，可直接运行此查看器；海康 SDK 按需加装。
 
 首次准备环境示例（在仓库根执行，虚拟环境在用户目录）：
 
@@ -118,7 +118,7 @@ source /opt/ros/jazzy/setup.bash
 source ~/.venvs/up70-rgbd/bin/activate
 python -m pip install -e .
 cd ros2_ws
-python -m colcon build --packages-select vision_depth --symlink-install
+python -m colcon build --packages-up-to vision_depth --symlink-install
 source install/setup.bash
 cd ..
 ros2 launch vision_depth rgbd_side_viewer.launch.py \
@@ -163,6 +163,12 @@ RViz 默认 Fixed Frame 是 `camera_color_optical_frame`；不同输入须改成
 配对深度采集时间，未做 TF 转换；ID 为空，四元数局部 +Z 为朝相机单位法向，绕法向的转角是构造值；协方差和零尺寸 bbox 不表示真实物体属性。
 过期或无有效候选会发送空数组和清除标记；订阅者也要处理断流。完整字段和 QoS 见
 [接口契约](../docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。候选不代表顶面、抓取点或精度验收通过。
+
+2026-11-04 起候选类型为 `vision_interfaces/msg/RgbdCandidateArray`，每个 `candidates[]` 元素包含
+原 `Detection3D`（`detection`）、模型 `class_id` 和 HSV `color_id`；RViz 文字也显示两个编号。
+旧订阅端需构建新接口包，原 `detections[i]` 改读 `candidates[i].detection`。
+默认判色范围和门槛与 2D YOLO 共用 `configs/color_thresholds.yaml`，可用查看器参数
+`color_thresholds_file` 指定另一文件；颜色编号与未知值语义见接口契约。
 
 ### 同步、时效与失败状态
 

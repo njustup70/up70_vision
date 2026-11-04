@@ -37,9 +37,11 @@ class Node:
         return pub
 
 
-def observation(xyz, name='block', status='CANDIDATE', normal=(0, 0, -1)):
+def observation(xyz, name='block', status='CANDIDATE', normal=(0, 0, -1), color=None, class_id=None):
     """创建一个选面结果。"""
-    return {'status': status, 'detection': {'class_name': name, 'score': 0.75},
+    return {'status': status, 'detection': {'class_name': name, 'score': 0.75,
+                                           'class_id': (1 if name == 'top' else 0) if class_id is None else class_id,
+                                           'color': color},
             'measurement': {'selected_index': 0, 'candidates': [{'centroid_mm': xyz, 'normal': normal}]}}
 
 
@@ -69,11 +71,14 @@ def test_multibox_fields_and_markers():
     """多框分别发布，单位、header、类别与标记来自同一结果。"""
     node = Node()
     publisher = CandidatePublisher(node, 500)
-    publisher.publish(result([observation([100, -20, 500]), observation([-40, 50, 700], 'top')]), 10.1)
+    publisher.publish(result([observation([100, -20, 500], color='blue'),
+                              observation([-40, 50, 700], 'top', color='mixed')]), 10.1)
     array = publisher.detections.messages[-1]
     assert (array.header.stamp.sec, array.header.stamp.nanosec, array.header.frame_id) == (12, 345678901, 'camera_color_optical_frame')
-    assert len(array.detections) == 2
-    for det, point, name in zip(array.detections, [(0.1, -0.02, 0.5), (-0.04, 0.05, 0.7)], ['block', 'top']):
+    assert len(array.candidates) == 2
+    assert [(c.class_id, c.color_id) for c in array.candidates] == [(0, 2), (1, 3)]
+    for item, point, name in zip(array.candidates, [(0.1, -0.02, 0.5), (-0.04, 0.05, 0.7)], ['block', 'top']):
+        det = item.detection
         pose = det.results[0].pose.pose
         assert (pose.position.x, pose.position.y, pose.position.z) == point
         assert det.header == array.header and det.id == ''
@@ -85,10 +90,11 @@ def test_multibox_fields_and_markers():
     markers = publisher.markers.messages[-1].markers
     assert len(markers) == 7 and markers[0].action == markers[0].DELETEALL
     assert markers[1].pose.position.z == .5 and markers[1].lifetime.nanosec == 500_000_000
-    assert 'CANDIDATE|top|p=' in markers[5].text
+    assert 'CANDIDATE|top|class=1|color=3|p=' in markers[5].text
     assert 'n=(0.000,0.000,-1.000)' in markers[5].text
     assert not any(char.isspace() for char in markers[5].text)
-    for index, det in enumerate(array.detections):
+    for index, item in enumerate(array.candidates):
+        det = item.detection
         arrow = markers[3+3*index]
         start, end = arrow.points
         pos = det.results[0].pose.pose.position
@@ -103,9 +109,63 @@ def test_rviz_label_compacts_whitespace_in_class_name():
     """类别名包含空白时，标签仍使用紧凑分隔符且话题类别不变。"""
     publisher = CandidatePublisher(Node(), 500)
     publisher.publish(result([observation([1, 2, 300], name='box  top')]), 10)
-    assert publisher.detections.messages[-1].detections[0].results[0].hypothesis.class_id == 'box  top'
+    assert publisher.detections.messages[-1].candidates[0].detection.results[0].hypothesis.class_id == 'box  top'
     label = publisher.markers.messages[-1].markers[2].text
     assert '|box_top|' in label and not any(char.isspace() for char in label)
+
+
+@pytest.mark.parametrize('color,color_id', [('red', 1), ('blue', 2), ('green', 0),
+                                         ('yellow', 0), ('cyan', 0), ('magenta', 0),
+                                         ('mixed', 3), (None, 0), ('unmapped', 0)])
+def test_color_numbers_and_model_class_survive_serialization(color, color_id):
+    """固定颜色编号与模型原始索引经过真实 ROS 序列化仍保持对应。"""
+    from rclpy.serialization import serialize_message, deserialize_message
+    from vision_interfaces.msg import RgbdCandidateArray
+    publisher = CandidatePublisher(Node(), 500)
+    publisher.publish(result([observation([1, 2, 300], color=color, class_id=42)]), 10)
+    message = publisher.detections.messages[-1]
+    copy = deserialize_message(serialize_message(message), RgbdCandidateArray)
+    assert copy == message
+    assert copy.candidates[0].class_id == 42
+    assert copy.candidates[0].color_id == color_id
+    assert copy.candidates[0].detection.results[0].hypothesis.class_id == 'block'
+
+
+def test_extended_candidates_ros_subscription_and_expiry():
+    """真实 ROS 订阅能收到同一候选的类别、颜色、位置，以及过期空数组。"""
+    import time
+    import rclpy
+    from vision_interfaces.msg import RgbdCandidateArray
+    context = rclpy.context.Context()
+    rclpy.init(context=context)
+    node = rclpy.create_node('test_candidate_attributes', context=context)
+    executor = rclpy.executors.SingleThreadedExecutor(context=context)
+    executor.add_node(node)
+    received = []
+    subscription = node.create_subscription(RgbdCandidateArray, '/rgbd_side/candidates', received.append, 1)
+    publisher = CandidatePublisher(node, 500)
+    try:
+        deadline = time.monotonic()+5
+        while publisher.detections.get_subscription_count() < 1 and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=.02)
+        assert publisher.detections.get_subscription_count() >= 1
+        publisher.publish(result([observation([100, 200, 500], color='red')]), 10)
+        while not received and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=.02)
+        assert len(received) == 1
+        item = received[0].candidates[0]
+        assert (item.class_id, item.color_id) == (0, 1)
+        assert item.detection.results[0].pose.pose.position.z == .5
+        publisher.expire(10.501)
+        while len(received) < 2 and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=.02)
+        assert len(received) == 2 and not received[-1].candidates
+        assert received[-1].header == received[0].header
+    finally:
+        executor.shutdown()
+        node.destroy_subscription(subscription)
+        node.destroy_node()
+        context.shutdown()
 
 
 @pytest.mark.parametrize('normal', [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
@@ -115,7 +175,7 @@ def test_normal_quaternion_direction(normal):
     publisher = CandidatePublisher(Node(), 500)
     point = (100, 200, 300)
     publisher.publish(result([observation(point, normal=normal)]), 10)
-    actual = rotated_z(publisher.detections.messages[-1].detections[0].results[0].pose.pose.orientation)
+    actual = rotated_z(publisher.detections.messages[-1].candidates[0].detection.results[0].pose.pose.orientation)
     length = math.hypot(*normal)
     expected = [n / length for n in normal]
     if sum(n*p for n, p in zip(expected, point)) > 0:
@@ -130,8 +190,8 @@ def test_invalid_normal_drops_only_its_candidate(normal):
     publisher = CandidatePublisher(Node(), 500)
     publisher.publish(result([observation([1, 2, 300], normal=normal),
                               observation([1, 2, 400], name='top')]), 10)
-    assert len(publisher.detections.messages[-1].detections) == 1
-    assert publisher.detections.messages[-1].detections[0].results[0].hypothesis.class_id == 'top'
+    assert len(publisher.detections.messages[-1].candidates) == 1
+    assert publisher.detections.messages[-1].candidates[0].detection.results[0].hypothesis.class_id == 'top'
     assert len(publisher.markers.messages[-1].markers) == 4
     assert publisher.counts['invalid_normal'] == 1
 
@@ -143,7 +203,7 @@ def test_missing_normal_replaces_previous_candidate_with_empty_result():
     missing = observation([1, 2, 300])
     del missing['measurement']['candidates'][0]['normal']
     publisher.publish(result([missing], 10.1), 10.1)
-    assert not publisher.detections.messages[-1].detections
+    assert not publisher.detections.messages[-1].candidates
     assert [m.action for m in publisher.markers.messages[-1].markers] == [3]
     assert not publisher.active and publisher.counts['invalid_normal'] == 1
 
@@ -155,14 +215,14 @@ def test_empty_invalid_expiry_and_recovery():
     publisher.expire(10.5)
     assert len(publisher.detections.messages) == 1
     publisher.expire(10.501)
-    assert not publisher.detections.messages[-1].detections
+    assert not publisher.detections.messages[-1].candidates
     assert publisher.detections.messages[-1].header.stamp.sec == 12
     assert publisher.markers.messages[-1].markers[0].action == 3
     publisher.expire(11.0)
     assert len(publisher.detections.messages) == 2
     publisher.publish(result([observation([math.nan, 2, 3]), observation([1, 2, -1]),
                               observation([1, 2, 3], status='AMBIGUOUS')], 11), 11)
-    assert not publisher.detections.messages[-1].detections
+    assert not publisher.detections.messages[-1].candidates
     publisher.publish(result([observation([1, 2, 3])], 12), 12.6)
     assert len(publisher.detections.messages) == 3
     publisher.publish(result([observation([1, 2, 300])], 13), 13)

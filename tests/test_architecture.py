@@ -37,7 +37,7 @@ except ModuleNotFoundError:
 FEATURE_PACKAGES = ("vision.aruco", "vision.yolo", "vision.depth")
 
 #: ROS 侧模块的前缀。视功能包一旦 import 它们就再也装不进纯 pip 环境。
-ROS_ROOTS = ("rclpy", "sensor_msgs", "vision_msgs", "geometry_msgs",
+ROS_ROOTS = ("rclpy", "sensor_msgs", "vision_msgs", "vision_interfaces", "geometry_msgs",
              "tf2_ros", "std_msgs", "ament_index_python", "launch")
 
 #: 架构层：功能包不许反向依赖

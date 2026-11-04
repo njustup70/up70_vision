@@ -2,13 +2,35 @@
 
 > 只覆盖深度相机这条线。2D（ArUco / YOLO / 判色 / 海康相机）见 `knowledge/docs/progress.md`。
 >
-> 最后更新：2026-11-02
+> 最后更新：2026-11-04
 >
 > 侧面原型最初在 `feat/单箱侧面RGBD测量` 开发，已通过 #26 进入 main；当前状态以本文件的新记录为准。
 
 ## 一、一句话现状
 
-**2026-11-02 Humble 容器软件核查：** 新增项目本地 Ubuntu 22.04/ROS 2 Humble 基础、海康 MVS 和 Gemini 容器入口；原通用镜像保留。隔离副本 Humble 全套 283 passed、1 skipped，ROS 构建通过；MVS 包与 `orbbec_camera` 2.9.3 已安装，Gemini 驱动 launch 的全部现有透传参数名可查到。两种相机均未启动、真机状态未验证。`raw_023` 的 Jazzy 元数据及 QoS 不能直接由 Humble 解析；只在临时目录重建索引并使用明确 QoS 覆盖后，414 对、141 个处理结果、282 个候选、后台错误 0，断流后收到空数组和清除标记。抽一个图对与独立重算一致；与 Jazzy 回放共有时间戳的 52 帧、104 个候选比较，坐标一致、四元数最大分量差约 2.5e-15。QoS 原深度为 unknown，回放不证明完整 QoS 等价。日志位于本机临时目录 `/tmp/up70-humble-replay/`。这不是空间、精度、真机稳定性或跨机验收；环境和适用条件见 [Humble 容器说明](../../../.devcontainer/README-humble.md)。
+**2026-11-04 候选类别编号与颜色编号：** `/rgbd_side/candidates` 扩展为
+`vision_interfaces/msg/RgbdCandidateArray`。每个 `candidates[]` 元素保留原 `Detection3D`
+（`detection`），并增加模型原始 `class_id`（当前 mix4：0=block、1=top）和 `color_id`。
+YOLO 侧原来已有类别编号与颜色名称，但没有数字颜色表；本轮为 ROS 明确编号：
+0=未知、1=红、2=蓝、3=红蓝横放混色；2026-11-04 按用户要求调整编号，其他颜色映射为未知。
+同一张校正彩色图、同一个检测框复用 `vision.yolo.pipeline.process_frame`，HSV 范围与门槛
+共用 `configs/color_thresholds.yaml`。`top` 同时落实有效像素、红蓝合计命中率门槛及方向计算的
+有效掩码/裁边，避免少量噪点被发布为确定颜色。几何候选的坐标、法向、header、QoS、过滤和撤销语义沿用；
+未知颜色为 0，仍可发布几何候选。RViz 标签增加类别/颜色编号，快照保留颜色名称及命中率，
+运行摘要记录阈值及 SHA-256；现有 inference 计时现在包含 HSV 判色。
+这是消息类型与字段路径的契约变更，收发两侧需构建新接口包并更新订阅，合入前按团队规范评审；
+迁移路径和编号常量见 [接口契约](../../docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
+
+验证：Jazzy 本机及现有 Humble Gemini 镜像内分别构建两个 ROS 包通过，各执行颜色、YOLO、实时、发布、
+架构及离线侧面六文件测试 **119 passed**，包含真实 ROS 订阅及序列化；容器以只读源码挂载，产物在临时目录。
+Jazzy 独立 domain 148、真实 mix4、原始 `raw_023` 回放：423 对、173 次处理、174 条订阅消息（含撤销）、
+346 个候选、后台错误 0；抽同一深度时间戳两候选，与离线重新检测/判色/拟合的类别、颜色编号一致，
+位置差小于 1e-9 m、法向差小于 1e-6，末尾收到空数组与 DELETEALL。
+样例两项均为 class_id=0、color_id=1；没有新增人工颜色真值标注，不能据此宣称颜色准确率通过。
+证据在 `output/realtime_side/attributes_validation_20261104_1793779219650388920/report.json`、
+`received.json` 及同目录日志。未启动相机，不改变空间、绝对精度与连续稳定性 UNVERIFIED 状态；未提交或推送。
+
+**2026-11-02 Humble 容器软件核查：** 新增项目本地 Ubuntu 22.04/ROS 2 Humble 基础、海康 MVS 和 Gemini 容器入口；原通用镜像保留。隔离副本 Humble 全套 283 passed、1 skipped，ROS 构建通过；MVS 包与 `orbbec_camera` 2.9.3 已安装，Gemini 驱动 launch 的全部现有透传参数名可查到。两种相机均未启动、真机状态未验证。`raw_023` 的 Jazzy 元数据及 QoS 不能直接由 Humble 解析；只在临时目录重建索引并使用明确 QoS 覆盖后，414 对、141 个处理结果、282 个候选、后台错误 0，断流后收到空数组和清除标记。抽一个图对与独立重算一致；与 Jazzy 回放共有时间戳的 52 帧、104 个候选比较，坐标一致、四元数最大分量差约 2.5e-15。QoS 原深度为 unknown，回放不证明完整 QoS 等价。日志位于本机临时目录 `/tmp/up70-humble-replay/`。这不是空间、精度、真机稳定性或跨机验收；环境和适用条件见 [共用相机容器](../../../.devcontainer/README.md)。
 
 **2026-11-02 整机联调入口整理：** 从 main `f1c6920` 新建 `feat/集成前整理`，仓库首页前置 RGB-D 融合入口，新增 [整机联调说明](../../../knowledge/docs/整机联调说明.md) 和 [整理记录](../../../knowledge/docs/仓库整理记录-20261102.md)，保留 2D、纯深度、离线工具与实验元数据。整理没有修改话题契约、算法参数或既有验收结论；同机 SHM、未验收的空间/精度/稳定性及跨机待联调状态均保留。
 
