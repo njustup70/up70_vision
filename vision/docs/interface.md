@@ -230,6 +230,7 @@ class FrameSource(ABC):
 | 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`aruco/stub.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
 | 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`aruco/pose.py` + `tests/test_pose.py` |
 | 2026-10-18 | 3.3 的签名补 `ambiguity_ratio` / `ambiguity_deg`；2.3 的 `yaw_deg` 区间笔误 `(180, 180]` 改为 `(−180, 180]` | 复核意见 P2-1（字段原本是死的）与 P3-4（笔误） |
+| 2026-11-04 | 文末新增「2D 检测输出：请求-响应接口」：`POST /detect` 协议、字段语义、六条不变量、错误面与变更规则 | 主逻辑在另一台电脑、另一人维护，需要跨机交付形态；**字段本身未改动**，仍以 `Detection.to_dict()` 为真源 |
 
 ## 深度抓取输出：光学坐标系（2026-10-27）
 
@@ -299,3 +300,83 @@ class FrameSource(ABC):
 ROS 包内 `vision_depth.image_decode.image_array` 读取 `16UC1`/`mono16` 毫米深度和 `bgr8`/`rgb8` 彩色，处理行填充与深度字节序，拒绝非法尺寸、行跨度和数据不足。纯深度节点解码失败仍记录并跳帧；查看器对不支持的编码仍返回空值，对损坏数据抛错；融合链仍按原错误处理。旧 `fuse_node.image_to_depth_array`、`side_pipeline.image_array` 和查看器转换函数保留。相机 QoS 共享 `vision_depth.sensor_qos.sensor_qos`，各订阅与发布队列深度不变。
 
 离线报告公共读取入口为 `lab.rgbd_check.report_reader.load_report`，原 `lab.manual_rgbd_fusion.load_report` 兼容；字段、校验及输出不变。没有变更公开话题或消息字段。
+
+## 2D 检测输出：请求-响应接口（2026-11-04）
+
+面向「主逻辑在另一台电脑、由另一人维护」的交付形态。进程内调用已实现并实测；
+HTTP 形态的**协议在此冻结，服务端尚未提交**（`POST /detect` 目前无实现）。
+本节按《视觉组协作规范》第 2 条送审，对方确认前按草案处理。
+字段的真源是 `Detection.to_dict()`（[types.py](../types.py)），本文不另立字段。
+
+### A. 两种调用形态
+
+| 形态 | 入口 | 状态 |
+|---|---|---|
+| 进程内 | `vision.api.detect(image_bgr, "yolo", config=...)` → `list[Detection]` | ✅ 已实现 |
+| HTTP | `POST /detect`，JSON 进、JSON 出 | ⬜ 协议已定，服务端待实现 |
+
+进程内形态每次调用都会重建检测器并重新读取 ONNX（本机实测 **103 ms/帧**，复用实例为 **38 ms**）。
+逐帧调用必须自己持有一个检测器实例，构造方式见[联调说明](../../knowledge/docs/YOLO2D与主逻辑联调说明.md) 3.1 节。
+
+### B. 请求
+
+```json
+{"api": 1, "frame_id": 12345,
+ "image": {"encoding": "png|jpg|raw-bgr", "width": 1280, "height": 1024, "data": "<base64>"}}
+```
+
+- `frame_id`：调用方自增整数，**必须原样回显**。它是双方唯一的关联键——两台机器时钟不同步，不用时间戳关联。
+- `encoding`：`raw-bgr` 为 `HxWx3 uint8` 原始字节；`png`/`jpg` 由 OpenCV 解码。三种编码的语义都是 **BGR**。
+- 分辨率不限：内部 letterbox 到 `imgsz` 再还原，bbox 返回的是**所发图**的像素。
+
+### C. 响应
+
+```json
+{"api": 1, "frame_id": 12345, "image_wh": [1280, 1024],
+ "model": "yolov8n_mix4@sha256:f5f43f20445efac80da541806424240aadc6b1c2ab13042d4660e31ca3814794",
+ "config": "conf=0.45;iou=0.45;imgsz=640;classes=all",
+ "infer_ms": 38.2, "detections": [], "error": null}
+```
+
+`detections[]` 每项即 `Detection.to_dict()`：
+
+| 字段 | 类型 | 语义 | 不是什么 |
+|---|---|---|---|
+| `bbox_xyxy` | `[int,int,int,int]` | 原图像素、**半开上界**、已裁到图内；宽 = `x2-x1` | 不是物体几何边界，不是顶面或侧面 |
+| `class_name` | `"block"` / `"top"` | 模型类名，来自同名 `.names.json`（0=block、1=top） | 不是判色结论；单色 `top` 可能被模型判成 `block` |
+| `class_id` | `0` / `1` | 模型类别索引 | — |
+| `score` | `float` | YOLO 置信度，保留 4 位小数 | 不是正确率、抓取成功率或深度质量 |
+| `color` | `"red"` / `"blue"` / `"mixed"` / `null` | HSV 判色结论；`mixed` = 红蓝左右横放 | `null` **不是「没有颜色」**，是不能下结论 |
+| `color_ratio` | `float` | 命中率 = 命中像素 / 有效像素 | 不是面积占比 |
+| `valid_pixels` | `int` | 判色分母（S/V 达标的像素数） | 不是框内总像素 |
+| `center` | `[float,float]` | bbox 中心，保留 2 位小数 | 不是四角平均，不是 3D 位置 |
+
+### D. 六条不变量
+
+1. **同一张图 + 同一 `model` 哈希 → 逐字段相同**（容差：bbox ±1 px、`score` ±0.02；`class_name` / `color` 完全一致）。这是跨机验收的唯一依据。
+2. `detections` **按 `score` 降序**，最多 32 条；无目标为 `[]`，不是 `null`。
+3. `frame_id` 原样回显；`infer_ms` 只作诊断，不参与判定。
+4. **不提供时效语义**：结果只对产生它的那一帧有效，过时帧由调用方丢弃。本接口不发「空数组撤销」，也不做断流检测。
+5. 不修改调用方传入的图像数组（`process_frame` 只做 `cvtColor`）。
+6. 图像不是 `HxWx3` 时报错，**不返回空列表**——两者含义不同。
+
+### E. 错误
+
+| HTTP | 场景 | 进程内对应 |
+|---|---|---|
+| 400 | 编码不支持 / 尺寸与声明不符 / 非 3 通道 | `ValueError` |
+| 413 | 超过 `max_frame_bytes`（默认 8 MB） | — |
+| 503 | 模型未加载或加载失败 | `FileNotFoundError` / `RuntimeError` |
+| 504 | 单帧超时（默认 200 ms），调用方丢帧、**不重试** | — |
+
+错误放进 `error` 字段或 HTTP 状态，**不混进 `detections`**。
+
+### F. 明确不提供
+
+距离、绝对尺寸、深度、坐标变换/手眼标定、跨帧跟踪与 ID、多帧平滑与投票、类别终判，以及任何 ROS 接口（2D 侧保持纯库 + CLI，见 [progress.md](../../knowledge/docs/progress.md) 第七节）。单色 `top` 与 `block` 在 2D 上不可分，最终类别由主逻辑按深度尺寸裁决（[YOLO2D数据泄漏与尺寸歧义.md](../../knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md) 3.5 节）。
+
+### G. 变更规则
+
+- 字段只增不改。删字段、改含义、改坐标口径一律升 `api` 版本号，并按协作规范第 2 条先征得对方同意。
+- 换模型必须同时换 `.names.json`、更新响应里的 `model` 哈希，且类名顺序变化视为**改契约**。
+- 已知未实现项（本节登记，不当作已满足）：`Detection` 上没有帧号/时间戳、没有 `ambiguous` 标记、3.4 判定表未落地。补齐前按 F 节「类别终判归主逻辑」执行。
