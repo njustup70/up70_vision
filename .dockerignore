@@ -39,3 +39,16 @@ bags
 ros2_ws/build
 ros2_ws/install
 ros2_ws/log
+
+# 例外：比赛机部署时镜像必须自带模型（没有挂载时，模型缺失会让 YOLO 直接
+# FileNotFoundError；`docker save` 出来的包也不含宿主目录）。
+#
+# 只放行**默认模型 + 480 降级版**，不是整个目录：knowledge/models 下还有
+# 5 个历史权重（v3 / v3_aug / v3_aug2 …），全放进来会白占 98 MB，镜像里
+# 又永远不会用到。换默认模型时同步改这里（并重建镜像）。
+#
+# 注意：`!` 例外必须写在被排除规则之后，顺序写反不生效。
+!knowledge/models/yolov8n_mix4.onnx
+!knowledge/models/yolov8n_mix4.names.json
+!knowledge/models/yolov8n_mix4_480.onnx
+!knowledge/models/yolov8n_mix4_480.names.json
