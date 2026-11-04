@@ -60,6 +60,7 @@ PASSTHROUGH_ARGS = (
     "align_mode", "align_target_stream", "time_domain",
     "enable_point_cloud", "enable_colored_point_cloud",
     "enable_noise_removal_filter", "enable_spatial_filter", "enable_temporal_filter",
+    "enable_hole_filling_filter",
     "enable_decimation_filter", "enable_threshold_filter",
     "enable_hardware_noise_removal_filter", "enable_disp_outliers_filter",
 )
@@ -69,6 +70,7 @@ BOOL_ARGS = (
     "enable_color", "enable_depth_scale", "enable_frame_sync", "depth_registration",
     "enable_point_cloud", "enable_colored_point_cloud",
     "enable_noise_removal_filter", "enable_spatial_filter", "enable_temporal_filter",
+    "enable_hole_filling_filter",
     "enable_decimation_filter", "enable_threshold_filter",
     "enable_hardware_noise_removal_filter", "enable_disp_outliers_filter",
 )
@@ -102,6 +104,7 @@ ARG_DESCRIPTIONS = {
     "enable_noise_removal_filter": "驱动降噪滤波，默认开；开了就要在报告里注明深度被处理过",
     "enable_spatial_filter": "空间滤波，默认关",
     "enable_temporal_filter": "时间滤波，默认关",
+    "enable_hole_filling_filter": "补洞滤波，默认关；会填出非实测像素，报告须注明",
     "enable_decimation_filter": "降采样滤波，默认关",
     "enable_threshold_filter": "阈值滤波，默认关",
     "enable_hardware_noise_removal_filter": "硬件降噪，默认关",
@@ -161,6 +164,7 @@ def _defaults(cfg: dict) -> dict:
         "enable_noise_removal_filter": bool(post.get("noise_removal", True)),
         "enable_spatial_filter": bool(post.get("spatial", False)),
         "enable_temporal_filter": bool(post.get("temporal", False)),
+        "enable_hole_filling_filter": bool(post.get("hole_filling", False)),
         "enable_decimation_filter": bool(post.get("decimation", False)),
         "enable_threshold_filter": bool(post.get("threshold", False)),
         "enable_hardware_noise_removal_filter": bool(post.get("hardware_noise_removal", False)),
@@ -268,6 +272,7 @@ def _resolve(context):
         f"后处理：noise_removal={resolved['enable_noise_removal_filter']} "
         f"spatial={resolved['enable_spatial_filter']} "
         f"temporal={resolved['enable_temporal_filter']} "
+        f"hole_filling={resolved['enable_hole_filling_filter']} "
         f"decimation={resolved['enable_decimation_filter']} "
         f"threshold={resolved['enable_threshold_filter']}",
     ]

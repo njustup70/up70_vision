@@ -58,10 +58,15 @@ point_cloud:
 # 「这段深度有没有被滤波/插值过」——计划书步骤 C 第 5 条要求分清
 # 原始测量与补出来的像素。noise_removal 是驱动默认开着的，关掉会改变基线，
 # 所以本阶段保留开启，并在报告里注明。
+#
+# 本轮按要求开启 spatial / temporal / hole_filling，用于观察它们对深度图的
+# 实际影响。这三项都会改写深度像素（时域滤波还会引入帧间拖影），因此这段数据
+# 只能记为「后处理后的深度」，不能当作原始测量基线；做精度验收要另跑一版全关。
 postprocess:
   noise_removal: true
-  spatial: false
-  temporal: false
+  spatial: true
+  temporal: true
+  hole_filling: true
   decimation: false
   threshold: false
   hardware_noise_removal: false
