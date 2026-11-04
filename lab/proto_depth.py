@@ -3,7 +3,7 @@
 此原型与现行算法的参数和结果不等价；以下命令仅用于复现历史对照。
 
 跑法（容器内，用 S4/S5 的合成数据）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/proto_depth.py data/syn/single_01
 
     # 换成真实 bag 抽出来的深度图，指定内参

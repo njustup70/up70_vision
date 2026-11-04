@@ -30,9 +30,8 @@ __pycache__
 # 维护者的个人设计笔记，不进版本库，也不进镜像
 docs/removed_and_design_notes.md
 
-# 录制的 bag：一段 35 秒的深度 bag 就有 930MB。Dockerfile 里是 `COPY . .`，
-#   不排除的话每次 build 都要把这堆数据传进 docker daemon 再写进镜像层，
-#   表现为构建「长时间没动静」。镜像里也不该有采集数据。
+# 录制的 bag：一段 35 秒的深度 bag 就有 930MB，不作为镜像构建输入。
+# 主 Dockerfile 只复制运行代码、配置、文档和测试；采集数据在运行时挂载。
 bags
 
 # colcon 产物：宿主机上 colcon build 生成的，和镜像无关。

@@ -13,7 +13,7 @@
 
 依赖谁 / 被谁用
     目标模块在 `_dispatch()` 里才 import，所以 `python -m vision --help`
-    连 cv2 都不会加载。上层是人和 `demo.sh`（旧的 `scripts/*.py` 薄壳已于 2026-10-22 删除）。
+    连 cv2 都不会加载。上层是终端与容器命令（旧的 `scripts/*.py` 薄壳已于 2026-10-22 删除）。
 
 对外约定
     · `python -m vision`                 打印指示牌后退出，退出码 0
@@ -30,7 +30,7 @@
     · `tools/mvs_color_measure.main()` 原来不吃 argv（直接读 `sys.argv`），
       会让 `mvs-color` 这三个字被当成非法参数——已补 `argv=None` 形参
       （见该文件的 `main()`）。
-    · `doctor` 与 `demo.sh` 的目标脚本是自包含的（不 import 本包），
+    · `doctor` 与 `demo` 的目标脚本是自包含的（不 import 本包），
       所以它们在登记表里是 `NO_ARGV`：多给参数说明用错了，直接报错而不是静默忽略。
 """
 

@@ -50,7 +50,7 @@ OPENBLAS_NUM_THREADS=1 python -m lab.side_rgbd_measure output/rgbd/<report> \
 ```bash
 docker compose -f .devcontainer/docker-compose.yml run --rm \
   --user "$(id -u):$(id -g)" \
-  -e OPENBLAS_NUM_THREADS=1 -e PYTHONDONTWRITEBYTECODE=1 up70-vision \
+  -e OPENBLAS_NUM_THREADS=1 -e PYTHONDONTWRITEBYTECODE=1 vision \
   python -B -m lab.side_rgbd_measure output/rgbd/raw_036 \
   --weights knowledge/models/yolov8n_mix2.onnx \
   --imgsz 640 --conf 0.45 \

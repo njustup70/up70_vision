@@ -1,7 +1,7 @@
 """从真实 bag 跑抓取检测，并用直尺/水平仪量到的真值核对结果（M2 入口）。
 
 跑法（容器内）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/bag_detect.py bags/raw_002 \
             --truth-height-mm 150 --truth-size-mm 150 148 150 --truth-tilt-deg 42
 

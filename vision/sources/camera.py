@@ -246,7 +246,7 @@ def _load_mvs():
             f"找不到 MVS 的 Python 封装：{import_dir}\n"
             f"  说明：input.source=camera 需要厂商 MVS SDK（这颗相机走 USB3 Vision，"
             f"不是 UVC，OpenCV / Aravis 都取不到帧）。\n"
-            f"  处理：把 MVS 的 deb 放到 .devcontainer/pkgs/ 后重新 build 镜像"
+            f"  处理：把一个 MVS deb 放到 .devcontainer/pkgs/ 后，使用 WITH_MVS=1 重新 build 镜像"
             f"（见 .devcontainer/pkgs/README.md）；宿主机跑则直接装 MVS 到 {sdk_path}。")
     if import_dir not in sys.path:
         sys.path.insert(0, import_dir)

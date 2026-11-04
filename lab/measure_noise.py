@@ -1,7 +1,7 @@
 """A4 深度噪声实测：读 bag，出噪声表，与计划书 2.4 的估算值对账。
 
 跑法（容器内，仓库根即容器里的 /opt/vision）
-    docker compose -f .devcontainer/docker-compose.yml run --rm up70-vision \
+    docker compose -f .devcontainer/docker-compose.yml run --rm vision \
         python lab/measure_noise.py bags/noise_050 bags/noise_100 bags/noise_200
 
     # 板子没铺满、ROI 里混进了背景时，缩小 ROI 重算

@@ -1,89 +1,61 @@
-# up70-vision 开发/运行环境镜像。
-#
-# 为什么底座是 ubuntu:22.04：战队标准发行版就是 22.04；且未来 ROS 2 Humble
-# 官方只支持 22.04，其自带 Python 3.10。现在把底座定下来，到 ROS 2 阶段只需
-# 在同一底座上加层，不用整体换镜像。
-#
-# 本镜像只放「当前阶段真正用得到」的东西：Python 3.10 + numpy + OpenCV + PyYAML。
-# 没有 CUDA、没有 PyTorch、没有 ROS 2——等真需要时再加，避免现在就背一个十几 GB 的镜像。
+# 共用视觉环境：Ubuntu 22.04 / Humble，默认 Gemini，WITH_MVS=1 加装海康 SDK。
+FROM ros:humble-ros-base@sha256:1813d3c85d7f96ff7d3012d865204583255740182db5d0065f8f8cd029a83138
 
-FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
 
-# 关掉交互式提示（典型如 tzdata 问时区），否则 build 会卡在等待输入
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip python3-colcon-common-extensions python3-rosdep build-essential cmake \
+    libgl1 libglib2.0-0 libsm6 libice6 libusb-1.0-0 \
+    ros-humble-vision-msgs ros-humble-tf2-ros ros-humble-rviz2 ros-humble-rosidl-default-generators \
+    ros-humble-rosbag2-storage-mcap 'ros-humble-orbbec-camera=2.9.3-*' \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# pip 源可用 build-arg 覆盖。海外或队外同事这样建：
-#   docker compose -f .devcontainer/docker-compose.yml build --build-arg PIP_INDEX_URL=https://pypi.org/simple
-ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_INDEX_URL=https://pypi.org/simple
+# NumPy 1.x 与 Humble 的系统 ROS Python 扩展保持兼容；所有入口均使用系统 Python 3.10。
+RUN python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" 'pip==24.0' \
+    && python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" \
+       'numpy==1.26.4' 'opencv-python==4.11.0.86'
 
-# ---- 1. 系统层 ----
-# libgl1 / libglib2.0-0：opencv-python 的非 headless wheel 需要 libGL.so.1。
-#   缺了它 import cv2 直接报 ImportError，这是 Ubuntu 上最常见的坑，所以在镜像里装好。
-# ca-certificates：https 下载所必需。
-# --no-install-recommends：不拉推荐包，镜像能小几十 MB。
-# rm -rf /var/lib/apt/lists/*：不留 apt 索引，同样为了瘦身。
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      python3 \
-      python3-pip \
-      libgl1 \
-      libglib2.0-0 \
-      ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/vision
+COPY pyproject.toml README.md requirements.txt ./
+COPY vision/ vision/
+COPY lab/ lab/
+COPY configs/ configs/
+COPY knowledge/ knowledge/
+COPY ros2_ws/src/ ros2_ws/src/
+RUN python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" -e '.[lab]' pytest \
+    && . /opt/ros/humble/setup.sh \
+    && colcon --log-base /tmp/up70-colcon-log build \
+       --base-paths /opt/vision/ros2_ws/src \
+       --build-base /tmp/up70-colcon-build --install-base /opt/up70-ros/install \
+    && rm -rf /tmp/up70-colcon-build /tmp/up70-colcon-log
 
-# ---- 1.5 相机 SDK 层（可选）----
-# 海康 MVS：只有「相机接入」阶段用得到。它是 deb 包而不是 pip 包（写不进
-# pyproject.toml 的 dependencies），所以单独占一层。
-#   libusb-1.0-0：libMvCameraControl.so 直接依赖里只有 glibc/libstdc++，
-#     libusb 是**运行时 dlopen** 的，缺了它相机根本打不开（基础镜像里没有）。
-#   deb 放 .devcontainer/pkgs/：184 MB，已被 .gitignore 排除，每个开发者各自下载一份。
-#   没放 deb 也能 build 成功，只是 input.source=camera 会报「MVS 未安装」；
-#   不接相机的开发（合成图 / 回放 / 判色调参 / 单测）完全不受影响。
-# 放在 COPY . . 之前：这一层很少变，放前面可以让改代码时不重建它。
-COPY .devcontainer/pkgs/ /tmp/mvs-pkgs/
-RUN if ls /tmp/mvs-pkgs/*.deb > /dev/null 2>&1; then \
-      apt-get update \
-      && apt-get install -y --no-install-recommends libusb-1.0-0 \
-      && apt-get install -y --no-install-recommends /tmp/mvs-pkgs/*.deb \
-      && rm -rf /var/lib/apt/lists/*; \
-    else \
-      echo "[MVS] .devcontainer/pkgs/ 下没有 deb —— 跳过相机 SDK，input.source=camera 将不可用"; \
-    fi \
- && rm -rf /tmp/mvs-pkgs
+COPY tests/ tests/
+COPY .devcontainer/gemini-entrypoint.sh /usr/local/bin/up70-gemini-entrypoint
+ENTRYPOINT ["/usr/local/bin/up70-gemini-entrypoint"]
+# SDK 只在本层安装；构建时只读挂载 deb，不把安装包写入镜像层。
+# 参数放在公共依赖与 ROS 构建之后，切换相机能力时可复用前面的构建缓存。
+ARG WITH_MVS=0
+RUN --mount=type=bind,source=.devcontainer/pkgs,target=/mnt/mvs-pkgs,readonly \
+    set -eu; \
+    case "$WITH_MVS" in \
+      0) echo '[MVS] disabled (WITH_MVS=0)' ;; \
+      1) set -- /mnt/mvs-pkgs/*.deb; \
+         if [ ! -f "$1" ] || [ "$#" -ne 1 ]; then \
+           echo 'WITH_MVS=1 需要在 .devcontainer/pkgs/ 放入且仅放一个 MVS deb' >&2; exit 1; \
+         fi; \
+         dpkg -i "$1" ;; \
+      *) echo 'WITH_MVS must be 0 or 1' >&2; exit 1 ;; \
+    esac
 
-# MVS 的运行时环境变量。MVS 的安装脚本会写进 ~/.bashrc，但非交互式 shell 不读它，
-# 所以显式写进镜像 ENV（vision/sources/camera.py 里也做了 setdefault 兜底）。
+# 无 SDK 时这些路径不触发加载；真正打开海康相机时由 MvImport 使用。
 ENV MVCAM_SDK_PATH=/opt/MVS \
     MVCAM_COMMON_RUNENV=/opt/MVS/lib \
     MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \
     ALLUSERSPROFILE=/opt/MVS/MVFG \
     LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32
 
-# ---- 2. 应用与依赖层 ----
-# 镜像内源码在 /opt/up70_vision；compose/devcontainer 使用挂载路径 /opt/vision，
-# 挂载时改宿主机代码立即生效。依赖变化仍需重建镜像。
-# -e 可编辑安装：import vision 拿到的是挂载进来的源码，不是构建时那份拷贝。
-# --no-cache-dir：不把 pip 下载缓存留在镜像层里。
-WORKDIR /opt/up70_vision
-COPY . .
-RUN pip3 install --no-cache-dir --upgrade pip -i "$PIP_INDEX_URL" \
- && pip3 install --no-cache-dir -e ".[lab]" -i "$PIP_INDEX_URL"
-
-# ---- 3. 运行时约定 ----
-# 仓库文档里的命令统一写 python，补一个软链接，免得在容器里要记 python3
-RUN ln -sf /usr/bin/python3 /usr/local/bin/python
-
-# ---- 4. 图形界面（容器内开窗口用）----
-# cv2.imshow 走 Qt 的 xcb 插件，它 dlopen 这两个 X11 会话库：
-#   缺 libSM.so.6 / libICE.so.6 时，报的是
-#   "Could not load the Qt platform plugin xcb ... even though it was found"
-#   —— 报错不提缺哪个库，很容易误判成"OpenCV 没编 GUI 支持"。
-# 装了这两个包 + 宿主 xhost +local:root + 挂 /tmp/.X11-unix 与 DISPLAY，
-# 就能在容器里 imshow；不装也不影响 --headless（落盘看图）那条路。
-# 放在最后一层：前面的 pip 层缓存不受影响，重建只花几秒。
-RUN apt-get update \
- && apt-get install -y --no-install-recommends libsm6 libice6 \
- && rm -rf /var/lib/apt/lists/*
-
-# 默认跑环境自检：docker run 不带 command 时就知道环境是否正常
-CMD ["python", "-m", "vision", "doctor"]
+# 进入后手动启动相机；运行 doctor 或离线工具时可直接覆盖命令。
+CMD ["bash"]
