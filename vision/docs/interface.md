@@ -230,6 +230,7 @@ class FrameSource(ABC):
 | 2026-10-16 | 2.2 / 3.2 由 ⬜ 改 ✅：ArUco 侧已按本文落地（`aruco.py` 返回 `list[ArucoMarker]`、`aruco/stub.py` 同名同签名） | 实现方在分支 `feat/ArUco检测核心`；**契约条目本身没有改动** |
 | 2026-10-18 | 新增 2.3 `MarkerPose` 与 3.3 位姿接口；原 2.3 顺延为 2.4 | 任务单第 2 条落地，`aruco/pose.py` + `tests/test_pose.py` |
 | 2026-10-18 | 3.3 的签名补 `ambiguity_ratio` / `ambiguity_deg`；2.3 的 `yaw_deg` 区间笔误 `(180, 180]` 改为 `(−180, 180]` | 复核意见 P2-1（字段原本是死的）与 P3-4（笔误） |
+| 2026-11-04 | HTTP 形态由 ⬜ 改 ✅：`lab/serve_2d.py` 落地（单 worker、队列深度 1、200 ms 超时） | 协议与字段未改动，只补了实现 |
 | 2026-11-04 | 文末新增「2D 检测输出：请求-响应接口」：`POST /detect` 协议、字段语义、六条不变量、错误面与变更规则 | 主逻辑在另一台电脑、另一人维护，需要跨机交付形态；**字段本身未改动**，仍以 `Detection.to_dict()` 为真源 |
 
 ## 深度抓取输出：光学坐标系（2026-10-27）
@@ -304,7 +305,9 @@ ROS 包内 `vision_depth.image_decode.image_array` 读取 `16UC1`/`mono16` 毫�
 ## 2D 检测输出：请求-响应接口（2026-11-04）
 
 面向「主逻辑在另一台电脑、由另一人维护」的交付形态。进程内调用已实现并实测；
-HTTP 形态的**协议在此冻结，服务端尚未提交**（`POST /detect` 目前无实现）。
+HTTP 形态已实现：`lab/serve_2d.py`（标准库 `http.server`，常驻检测器、单 worker +
+队列深度 1、默认 200 ms 超时）。协议与错误码如下，启动与调用示例见
+[联调说明](../../knowledge/docs/YOLO2D与主逻辑联调说明.md) 3.3 节。
 本节按《视觉组协作规范》第 2 条送审，对方确认前按草案处理。
 字段的真源是 `Detection.to_dict()`（[types.py](../types.py)），本文不另立字段。
 
@@ -313,7 +316,7 @@ HTTP 形态的**协议在此冻结，服务端尚未提交**（`POST /detect` �
 | 形态 | 入口 | 状态 |
 |---|---|---|
 | 进程内 | `vision.api.detect(image_bgr, "yolo", config=...)` → `list[Detection]` | ✅ 已实现 |
-| HTTP | `POST /detect`，JSON 进、JSON 出 | ⬜ 协议已定，服务端待实现 |
+| HTTP | `POST /detect`，JSON 进、JSON 出 | ✅ 已实现（`lab/serve_2d.py`） |
 
 进程内形态每次调用都会重建检测器并重新读取 ONNX（本机实测 **103 ms/帧**，复用实例为 **38 ms**）。
 逐帧调用必须自己持有一个检测器实例，构造方式见[联调说明](../../knowledge/docs/YOLO2D与主逻辑联调说明.md) 3.1 节。

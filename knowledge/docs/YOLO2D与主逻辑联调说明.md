@@ -11,7 +11,7 @@
 
 | 接口 | 形态 | 状态 | 什么时候用 |
 |---|---|---|---|
-| `POST /detect` | HTTP，JSON 进 JSON 出 | ⬜ 协议已冻结，服务端待实现 | 主逻辑在另一台机器（部署形态） |
+| `POST /detect` | HTTP，JSON 进 JSON 出 | ✅ 已实现（`lab/serve_2d.py`），本机端到端 44 ms | 主逻辑在另一台机器（部署形态） |
 | `vision.api.detect()` | Python 进程内 | ✅ 已实现并实测 | 单帧脚本、双方对拍；逐帧请按 3.1 复用实例 |
 
 四条最容易被理解错的语义（详见契约 C、F 节）：
@@ -138,9 +138,36 @@ python -m vision run \
 `input.replay.kind=auto` 同时接受图片目录与视频；加 `--limit N` 只跑前 N 帧。
 在仓库根目录执行（或先 `pip install -e .`，否则 `python -m vision` 找不到包）。
 
-### 3.3 HTTP（协议已定，服务端未实现）
+### 3.3 HTTP 服务
 
-契约见[接口契约 B–E 节](../../vision/docs/interface.md#2d-检测输出请求-响应接口2026-11-04)。在服务端提交前，跨机只能走 3.1（在能看到仓库的机器上跑），不能当成已可用形态。
+```bash
+# 起服务：默认只绑本机 127.0.0.1:8899。要给别的机器用加 --host 0.0.0.0（无鉴权，见 3.4）
+~/.venvs/up70-2d/bin/python lab/serve_2d.py --port 8899
+
+# 健康检查：模型 sha256、生效配置、预热耗时、队列深度、已服务/已丢弃计数
+curl -s localhost:8899/healthz
+
+# 发一帧（encoding 三选一：jpg / png / raw-bgr）
+python3 - <<'EOF'
+import base64, json, urllib.request
+img = open("data/yolo_real_v4/images/test/g3tilt_frame_0000.jpg", "rb").read()
+body = json.dumps({"api": 1, "frame_id": 42,
+                   "image": {"encoding": "jpg", "data": base64.b64encode(img).decode()}}).encode()
+req = urllib.request.Request("http://127.0.0.1:8899/detect", data=body,
+                             headers={"Content-Type": "application/json"})
+print(json.loads(urllib.request.urlopen(req).read()))
+EOF
+```
+
+本机实测（1280×1024，loopback）：服务端推理中位数 **32.5 ms**，HTTP 端到端 **44.2 ms**
+（含 JPEG 解码、base64 与 JSON），启动预热约 120 ms。
+
+行为约定（与契约 3.4 / D、E 节一致）：
+
+- **队列深度 1**：新帧到达时丢掉还没开始处理的旧帧，`/healthz` 的 `dropped` 计数可查；
+- 等超过 `--timeout`（默认 200 ms）回 **504**，该帧标记取消，worker 取到直接跳过；
+- 错误码：400（图/参数不合法）、413（超过 `--max-frame-bytes`，默认 8 MB）、500（推理异常）、504（超时）；
+- 服务无鉴权，不加 `--host 0.0.0.0` 时只有本机能连。
 
 ### 3.4 部署拓扑与限制
 
@@ -168,7 +195,7 @@ v2 同分布 mix4 的 0.970 **不能当泛化指标**（test 有相邻帧跨 tra
 
 ### 4.2 尚未验证
 
-跨机结果一致性、比赛机延迟、HTTP 服务端本身——三项都还没有证据，不要按已验证对待。
+跨机结果一致性、比赛机延迟——两项还没有证据，不要按已验证对待。HTTP 服务端已在本机实测，但没在对方的机器上跑过。
 
 ### 4.3 主逻辑侧须明确（8 条）
 
