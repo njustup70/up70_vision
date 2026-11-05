@@ -11,9 +11,9 @@
 ## ArUco 海康相机模板
 
 - `aruco_id.yaml`：识别 ID 和像素坐标，直接运行 `python -m vision live --config configs/aruco_id.yaml`。
-- `aruco_pose.yaml`：距离和角度模板，先执行 `cp -n configs/aruco_pose.yaml configs/aruco_pose.local.yaml`，再把副本里的 `calibration.file` 改为匹配相机、镜头和分辨率的内参文件名，把 `pose.marker_size_mm` 改为码黑框外沿实测毫米数，然后运行 `python -m vision live --config configs/aruco_pose.local.yaml`。模板中的 0 是无效边长，未填写时会报错，内参缺失也会报错。
+- `aruco_pose.yaml`：距离和角度配置。在文件中填写 `calibration.file`（匹配相机、镜头和分辨率的内参文件名）及 `pose.marker_size_mm`（码黑框外沿实测毫米数），然后运行 `python -m vision live --config configs/aruco_pose.yaml`。默认边长 0 会阻止启动，内参缺失也会报错。
 
-曝光 20000 微秒、增益 10 dB 只是起点，应按现场调整。需要长期保存本机设置时可将任一模板复制为 `.local.yaml` 后编辑；本地副本被 Git 忽略，不覆盖模板。内参文件相对配置文件所在目录解析。模板只列出常用字段，其他设置使用程序默认值；`--set` 只能覆盖模板中已写出的字段。
+两份配置均随仓库分发，可直接编辑使用。曝光 20000 微秒、增益 10 dB 只是起点，应按现场调整。内参文件相对配置文件所在目录解析。配置只列出常用字段，其他设置使用程序默认值；`--set` 只能覆盖文件中已写出的字段。
 
 ---
 
