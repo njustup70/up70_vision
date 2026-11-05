@@ -1,0 +1,21 @@
+# 海康相机 ArUco 识别模板：仅识别 ID 和像素坐标，不解算位姿。
+# 如需长期调整，复制为 aruco_id.local.yaml；.local.yaml 不进 Git。
+input:
+  source: camera
+  camera:
+    index: 0
+    exposure_us: 20000.0  # 微秒；起点，按现场光照调整
+    gain_db: 10.0
+    timeout_ms: 1000
+    max_frames: 0
+
+detector:
+  name: aruco
+  aruco:
+    dictionary: DICT_4X4_50
+    corner_refine: subpix
+    min_perimeter_rate: 0.03
+    max_detections: 0
+
+pose:
+  enabled: false
