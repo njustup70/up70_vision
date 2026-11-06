@@ -1,0 +1,27 @@
+# 海康相机 ArUco 位姿配置。直接在本文件填写匹配相机和分辨率的
+# 内参文件、当前码黑框的实测边长，然后用 --config 指定本文件运行。
+# 0 是刻意设置的无效值，未填写时程序会报错，避免使用猜测尺寸测距。
+input:
+  source: camera
+  camera:
+    index: 0
+    exposure_us: 20000.0  # 微秒；起点，按现场光照调整
+    gain_db: 10.0
+    timeout_ms: 1000
+    max_frames: 0
+
+detector:
+  name: aruco
+  aruco:
+    dictionary: DICT_4X4_50
+    corner_refine: subpix
+    min_perimeter_rate: 0.03
+    max_detections: 0
+
+calibration:
+  file: 请填写实际标定文件.yaml  # 相对本配置所在目录
+  required: true
+
+pose:
+  enabled: true
+  marker_size_mm: 0.0  # 改为码黑框外沿的实测边长，单位毫米
