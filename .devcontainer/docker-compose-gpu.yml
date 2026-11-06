@@ -1,0 +1,24 @@
+# GPU 运行时覆盖：与 docker-compose.yml 叠加使用。
+#
+# 用法（从仓库根）：
+#   WITH_CUDA=1 docker compose -f .devcontainer/docker-compose.yml \
+#                -f .devcontainer/docker-compose-gpu.yml build vision
+#   docker compose -f .devcontainer/docker-compose.yml \
+#                -f .devcontainer/docker-compose-gpu.yml run --rm vision
+#
+# 前提（宿主机一次性）：
+#   1) 装好 NVIDIA 驱动，`nvidia-smi` 能跑；
+#   2) 装 nvidia-container-toolkit 并配置 docker：
+#        sudo apt install -y nvidia-container-toolkit
+#        sudo nvidia-ctk runtime configure --runtime=docker
+#        sudo systemctl restart docker
+#   3) `docker run --rm --gpus all ubuntu:22.04 nvidia-smi` 能看到卡。
+#
+# 为什么单独放一个文件：没有 NVIDIA 卡的机器（大多数队员）不该因为
+# `gpus: all` 起不来容器；默认 compose 保持纯 CPU 可用。
+services:
+  vision:
+    gpus: all
+    environment:
+      # 只给计算和监控所需的能力，不把图形相关的库塞进容器
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility

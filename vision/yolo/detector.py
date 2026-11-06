@@ -310,12 +310,21 @@ def _preload_cuda_libs() -> list[str]:
     """
     import ctypes
     import glob
+    import site
 
-    pattern = os.path.join(
-        sys.prefix, "lib",
-        f"python{sys.version_info.major}.{sys.version_info.minor}",
-        "site-packages", "nvidia", "*", "lib", "*.so*")
-    pending = sorted(glob.glob(pattern))
+    py = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    roots = {
+        os.path.join(sys.prefix, "lib", py, "site-packages"),      # venv
+        os.path.join(sys.prefix, "local", "lib", py, "dist-packages"),  # 系统 python + pip
+        os.path.join("/usr/local/lib", py, "dist-packages"),       # 容器内 pip 默认落点
+        os.path.join("/usr/lib", py, "site-packages"),
+    }
+    try:
+        roots.update(site.getsitepackages())
+    except AttributeError:                       # 精简过的 Python 可能没有
+        pass
+    pending = sorted({path for root in roots
+                      for path in glob.glob(os.path.join(root, "nvidia", "*", "lib", "*.so*"))})
     loaded: list[str] = []
     # 依赖顺序不确定，多轮加载：每轮把能加载的装进去，加载不了的留到下一轮
     for _ in range(3):

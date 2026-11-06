@@ -211,8 +211,9 @@ python lab/serve_2d.py --device cuda                             # HTTP 服务
 - 缺 `onnxruntime-gpu`、没有 CUDA provider、或 onnxruntime 静默回退到 CPU —— 三种情况**都直接报错**，
   不会出现"以为在跑 GPU 其实在跑 CPU"；
 - **比赛机默认仍用 cpu**：有没有独显未知，默认值不能在没卡的机器上直接崩，现场用 `--set` 显式开；
-- 容器镜像 `up70-vision:humble` 没有 CUDA（ROS base），容器内用 GPU 需换 CUDA 基础镜像 +
-  `nvidia-container-toolkit`，本次未做。
+- 容器：默认镜像不含 CUDA（ROS base）。需要时按[共用相机容器](../../.devcontainer/README.md#gpu-推理可选)
+  的 GPU 小节用 `WITH_CUDA=1` 构建，并叠加 `.devcontainer/docker-compose-gpu.yml`（`gpus: all`）；
+  容器内实测推理 37.5 → 5.7 ms，结果同样在容差内。
 
 ## 4. 验收边界与待对接
 
