@@ -48,6 +48,8 @@ ros2_ws/log
 # 又永远不会用到。换默认模型时同步改这里（并重建镜像）。
 #
 # 注意：`!` 例外必须写在被排除规则之后，顺序写反不生效。
+# 影响面：这条例外对**共享镜像** `up70-vision:humble` 同样生效——构建机上若有这两组模型，
+# 镜像会多约 26 MB；构建机上没有则镜像照常构建，只是运行到 YOLO 会报 FileNotFoundError。
 !knowledge/models/yolov8n_mix4.onnx
 !knowledge/models/yolov8n_mix4.names.json
 !knowledge/models/yolov8n_mix4_480.onnx

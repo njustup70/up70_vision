@@ -296,6 +296,10 @@ class FrameSource(ABC):
 标记有有限生命周期。它们只是未验证候选，不是物体几何中心或抓取指令；空间对齐及绝对精度
 尚未验收。此新话题契约进入团队集成前按协作规范评审。
 
+颜色语义与 2D 请求-响应接口共用一套定义：`color_id` 与「2D 检测输出」一节的 `color`
+按 `0↔null、1↔red、2↔blue、3↔mixed` 对应，阈值唯一来源是
+`configs/color_thresholds.yaml`；两边任一侧加色或改语义必须同步。
+
 ### ROS 图像解码与离线报告读取（2026-11-02）
 
 ROS 包内 `vision_depth.image_decode.image_array` 读取 `16UC1`/`mono16` 毫米深度和 `bgr8`/`rgb8` 彩色，处理行填充与深度字节序，拒绝非法尺寸、行跨度和数据不足。纯深度节点解码失败仍记录并跳帧；查看器对不支持的编码仍返回空值，对损坏数据抛错；融合链仍按原错误处理。旧 `fuse_node.image_to_depth_array`、`side_pipeline.image_array` 和查看器转换函数保留。相机 QoS 共享 `vision_depth.sensor_qos.sensor_qos`，各订阅与发布队列深度不变。
@@ -353,6 +357,18 @@ HTTP 形态已实现：`lab/serve_2d.py`（标准库 `http.server`，常驻检�
 | `color_ratio` | `float` | 命中率 = 命中像素 / 有效像素 | 不是面积占比 |
 | `valid_pixels` | `int` | 判色分母（S/V 达标的像素数） | 不是框内总像素 |
 | `center` | `[float,float]` | bbox 中心，保留 2 位小数 | 不是四角平均，不是 3D 位置 |
+
+> **颜色只有一套定义**：判色规则与阈值的唯一来源是 `configs/color_thresholds.yaml`
+> （HSV 门槛在该文件头的 `color:` 段），2D 与深度侧都从这里取。
+> 本节 `color` 与 `/rgbd_side/candidates` 的 `color_id` 一一对应，任何一边加色或改语义，
+> 必须同时对边：
+>
+> | 本节 `color` | 深度 `color_id` |
+> |---|---|
+> | `null`（判不出） | `0` COLOR_UNKNOWN |
+> | `red` | `1` COLOR_RED |
+> | `blue` | `2` COLOR_BLUE |
+> | `mixed`（红蓝横放） | `3` COLOR_MIXED |
 
 ### D. 六条不变量
 

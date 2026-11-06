@@ -57,17 +57,14 @@ python3 -m vision doctor                                # 期望「全部通过�
 ROS 的 `PYTHONPATH` 排在 venv 之前，`pytest` 会被 ROS 的 `launch` 包带崩（报 `No module named 'lark'`），
 这不是本项目的问题，但表现完全一样。
 
-### 2.3 模型（成对 + 哈希）
+### 2.3 模型
 
-`.onnx` 与 `.names.json` 都不随 Git 分发（`.gitignore` 排除），必须成对拿到：
+`.onnx` 与同名 `.names.json` **必须成对**，且都不随 Git 分发。模型清单、用途与 SHA-256 的
+唯一来源是[模型权重说明](../models/README.md)——本机 2D 默认用 `yolov8n_mix4.onnx`（640 输入，
+`0=block`、`1=top`），2D 当前最好的是 `yolov8n_v4.onnx`（v3 test mAP50 0.905）。
 
-```
-knowledge/models/yolov8n_mix4.onnx        12.7 MB   sha256 f5f43f20445efac80da541806424240aadc6b1c2ab13042d4660e31ca3814794
-knowledge/models/yolov8n_mix4.names.json  类名表     sha256 81b473df621397bd67d4e2fe880dd0234d43cd42cc84443f4ddc873caee3621c
-```
-
-这组哈希与[整机联调说明](整机联调说明.md)第 2 节记录的是同一份文件（2026-11-04 已核对一致）。
-**换模型就换记录**：写明来源与 hash，否则双方结果不一致时无法对账。
+换模型 = 改 `detector.yolo.weights` + 更新 `models/README.md` 的 hash + 双方重跑 3.2 对拍；
+响应里的 `model@sha256` 就是要对的东西，对不上先查版本，别先怀疑算法。
 
 ### 2.4 环境准备方式（与深度侧一致）
 
