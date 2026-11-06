@@ -1,18 +1,7 @@
-"""核心数据结构：Frame、Detection、ArucoMarker，以及 IoU 等纯函数。
+"""RGB-D 检测共用的 BGR 图像、像素框和几何函数。
 
-这一层是整个包的地基，必须能被单独验证——没有相机、没有文件、不开窗口，
-给它 numpy 数组就能算出结果。
-
-两个"检出物"结构（别混用，契约见 vision/docs/interface.md 第 2 节）
-    · `Detection`    判色族的产出：轴对齐 `bbox_xyxy`，中心 = bbox 中心，带颜色字段
-    · `ArucoMarker`  ArUco 码：四角点 `corners_px`，中心 = 四角算术平均，没有颜色
-
-约定（README「团队约定」）
-    1. 图像一律 BGR 顺序，变量名带颜色空间后缀（image_bgr）
-    2. 检测框用绝对像素坐标，右/下边界是**半开上界**：bbox=(x1,y1,x2,y2) 覆盖
-       x1..x2-1、y1..y2-1，因此宽 = x2-x1，高 = y2-y1
+框为绝对像素坐标，右下边界采用半开上界。
 """
-
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -26,7 +15,7 @@ class Frame:
 
     :param image_bgr: HxWx3 uint8 BGR 数组
     :param index: 帧序号，从 0 开始
-    :param source: 来源标识（"synthetic" / "replay:xx.mp4" / "camera:mvs"）
+    :param source: 来源标识，例如 "rgbd"
     :param stamp: 采集时间戳（秒）；合成/回放没有真实时间戳时为 0.0
     :param ground_truth: 仅合成源提供，格式 ((color_name, (x1,y1,x2,y2)), ...)
     """
@@ -134,17 +123,3 @@ def clip_bbox(bbox: BBox, width: int, height: int) -> BBox:
     x2 = max(0, min(int(x2), width))
     y2 = max(0, min(int(y2), height))
     return (x1, y1, x2, y2)
-
-
-def bbox_from_xywh(x: int, y: int, w: int, h: int) -> BBox:
-    """(x, y, w, h) -> (x1, y1, x2, y2)，半开上界。"""
-    return (int(x), int(y), int(x + w), int(y + h))
-
-
-def is_marker(det) -> bool:
-    """判断一个检出物是不是 ArUco 码（门面与 CLI 都用它分流两种产出）。
-
-    用鸭子类型（有 `marker_id` 就是码）而不是 isinstance：
-    根级 `types.py` 是叶子，不能 import 功能包；而 `ArucoMarker` 住在 `aruco/types.py`。
-    """
-    return hasattr(det, "marker_id")

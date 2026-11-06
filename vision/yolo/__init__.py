@@ -1,7 +1,5 @@
-"""YOLO 功能包：检测、候选框、判色、逐帧编排、绘制（D6 判色并入）。"""
-
-from .color_check import judge_color
+"""RGB-D 工作流的 YOLO 检测与 HSV 判色。"""
 from .detector import YoloDetector
-from .pipeline import process_frames
+from .pipeline import ColorConfig, process_frame
 
-__all__ = ["YoloDetector", "judge_color", "process_frames"]
+__all__ = ["YoloDetector", "ColorConfig", "process_frame"]

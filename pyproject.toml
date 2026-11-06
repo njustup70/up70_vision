@@ -1,12 +1,3 @@
-# up70-vision 包元数据与依赖声明。
-#
-# 这是依赖的唯一真源：改依赖改这里，然后同步更新 requirements.txt（给只熟悉
-# pip install -r 的队友用）。两者不同步时，以本文件为准。
-#
-# 为什么用 PEP 621 而不是纯 requirements.txt：
-#   1. 能声明 requires-python，pip 会在版本不符时直接拒绝安装，而不是装到一半报错
-#   2. pip install -e . 之后，任何目录下都能 import vision，不需要折腾 PYTHONPATH
-
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -14,38 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "up70-vision"
 version = "0.0.1"
-description = "UP70 战队视觉仓库：颜色识别与场上目标感知（2D 基础任务）"
+description = "UP70 RGB-D runtime for driverLogic_2027"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    # numpy：所有图像数据的容器类型。上界 <3 是因为 numpy 3.x 尚未发布稳定版，
-    #   且 opencv-python 4.12 目前只保证适配到 numpy 2.x。
-    "numpy>=1.26,<3",
-    # opencv-python：图像读写、颜色空间转换、形态学、轮廓提取。
-    #   钉 4.x 是因为 YOLO 生态（ultralytics / onnxruntime）目前仍以 OpenCV 4 为基准；
-    #   严禁再装 opencv-python-headless 或 opencv-contrib-python，
-    #   三个包的顶层模块名都是 cv2，同时安装会互相覆盖（本机踩过这个坑）。
-    "opencv-python>=4.10,<5",
-    # PyYAML：读写 configs/*.yaml。选它而不是 Hydra 是因为队友能直接看懂 YAML 内容，
-    #   而 Hydra 会切换工作目录、与相对路径和未来的 ROS 2 节点冲突。
-    "PyYAML>=6.0",
-]
-
-[project.optional-dependencies]
-# lab 工具依赖：只有 lab/ 下的离线分析脚本用得到，vision/ 包本身不 import，
-#   所以不进主 dependencies。Dockerfile 里按 `-e ".[lab]"` 安装，容器内开箱可用。
-lab = [
-    # rosbags：纯 Python 读 rosbag2 的 mcap / sqlite3，不需要装 ROS。
-    #   选它而不是 rosbag2_py，是因为 lab/ 的脚本一旦依赖 ROS 运行时，
-    #   「跑一次统计」就变成「先 source 一遍环境才能跑」，离线复算会很别扭。
-    #   上界 <1 是因为 1.x 尚未发布，0.x 的 API 已经够用且稳定。
-    "rosbags>=0.9,<1",
-    "matplotlib>=3.6,<4",
-]
+dependencies = ["numpy==1.26.4", "opencv-python==4.11.0.86", "PyYAML>=6.0"]
 
 [tool.setuptools.packages.find]
-# 包 `vision/` 放在仓库根（不再用 src 布局）：`pip install -e .` 装的是仓库根这份，
-# import 的一定是装好的包；`lab/` 不在 include 里，它靠 import vision 复用算法，
-# 自己不作为包分发。
 where = ["."]
-include = ["vision*"]
+include = ["vision", "vision.*"]

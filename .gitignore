@@ -1,76 +1,13 @@
-# Python 编译与缓存产物
 __pycache__/
-*.py[cod]
-*$py.class
-
-# 打包产物
-build/
-dist/
+*.pyc
 *.egg-info/
-.eggs/
-
-# 虚拟环境
-.venv/
-venv/
-env/
-
-# 工具缓存
 .pytest_cache/
-.ruff_cache/
-.mypy_cache/
-
-# 运行产物：目录本身要保留（放了 .gitkeep），里面的内容不入库
-output/*
-!output/.gitkeep
-
-# MVS SDK 的运行时日志：跑相机时会在当前目录自动生成，内容不入库
-MvSdkLog/
-
-# 数据集与回放素材：体积大，不进版本库，只保留说明文件
-#   注意 data 下的子目录结构靠各人的本地约定，仓库里只有 README 描述规则
-data/*
-!data/README.md
-
-# 模型权重：大文件不进版本库
-*.pt
-*.onnx
-*.engine
-*.trt
-# 导出 YOLO 时顺带写的类名表：和权重成对，权重不进来它也没意义
-*.names.json
-
-# 本地投放的安装包：184 MB 的 MVS SDK deb 由各人自行下载，
-# 说明见 .devcontainer/pkgs/README.md；主 Dockerfile 通过 WITH_MVS=1 按需安装
-.devcontainer/pkgs/*.deb
-
-# 环境文件与密钥
-.env
-*.local.yaml
-
-# AI 协作内部目录：会话数据与项目记忆，不进版本库
-/AGENTS.md
-.workbuddy/
+models/*.onnx
+models/*.names.json
+output/
+build*/
+install*/
+log*/
 .ai-memory/
-.codebuddy/
-
-# 文档构建产物：knowledge/docs/ 里的教程 html 由 `python lab/gen_html.py` 生成，
-# 只在本地看或对外发布时用，不进版本库（否则 md 与 html 会变成两个版本）
-knowledge/docs/*.html
-
-# 编辑器
-.idea/
-.vscode/*
-!.vscode/settings.json.example
-
-# 相机标定结果：每台相机/每个场地一份，由 lab/calibrate_camera.py 生成
-configs/camera_calibration*.yaml
-
-# 录制的 bag：体积大（深度 848x480@30fps 约 27 MB/s，35 秒就是 930 MB），不进版本库；
-#   每个 bag 目录里必须有一份 meta.yaml（计划书要求 bag 与 meta 同存），meta 是文本、要入库。
-#   注意这里写成 bags/*/* 而不是 bags/*：写成 bags/* 会连 raw_001/ 目录本身一起忽略，
-#   而 Git 里父目录一旦被忽略，就没法用 ! 把里面的 meta.yaml 捞回来。
-bags/*/*
-!bags/*/meta.yaml
-
-# ultralytics 的训练产物（权重、曲线、val 预测图），几百 MB 起
-runs/
+/AGENTS.md
+.vscode/

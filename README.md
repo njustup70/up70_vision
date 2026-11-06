@@ -1,179 +1,149 @@
-# UP70 视觉
+# RGB-D 主逻辑集成交付
 
-本仓库提供 **YOLO + RGB-D 可见平面候选**作为当前整机联调入口，同时保留海康相机的 ArUco、YOLO、HSV 判色与离线验证工具。
+本分支只保留 RGB-D 识别运行必需的代码、配置和只读接入文件，面向 `driverLogic` 仓库的 **`driverLogic_2027`** 分支（参考 `e5b2a2c`）。不需要再运行导出工具。
 
-当前融合流程为：Orbbec Gemini 336L 彩深图 → 时间配对和网格校正 → YOLO 检测框 → 框内平面拟合 → ROS 2 候选话题和 RViz。输出是**可见平面内点重心及朝相机的法向候选**，还不是机械臂基座坐标或已验证抓取点。空间对齐、绝对定位精度和连续稳定性尚未完成验收；详见 [整机联调说明](knowledge/docs/整机联调说明.md)。
+这是专用交付分支；完整视觉工程保留在原 main，勿将此分支的目录裁剪整体合回完整工程。
 
-## RGB-D 融合：运行入口
+## 目录
 
-共用 Docker 环境基于 **ROS 2 Humble**，默认支持 Gemini 336L；需要海康时通过 `WITH_MVS=1` 加装 SDK。
-完整设备、窗口和构建说明见 [共用相机容器](.devcontainer/README.md)。
+| 目录 | 内容 |
+|---|---|
+| `vision/` | YOLO、HSV 判色、彩深校正、平面拟合及公共类型 |
+| `ros_packages/` | 识别 ROS 包和消息接口包 |
+| `configs/` | HSV 阈值 |
+| `mainlogic/` | 主逻辑只读适配器和测试入口 |
+| `models/` | 模型放置位置和校验和；模型文件单独交付 |
 
-先从搭档处取得 `yolov8n_mix4.onnx` 与同名 `.names.json` 放入 `knowledge/models/`，
-两者不随 Git 分发。模型为 CPU 推理，类别是 `block`、`top`。
+`pyproject.toml` 和 `requirements.txt` 用于安装 Python 包。根目录的 `COLCON_IGNORE` 防止主工作空间重复发现交付目录内的 ROS 包。
 
-从仓库根目录构建并进入 Gemini 容器：
+## 1. 放入主逻辑仓库
 
-```bash
-docker compose -f .devcontainer/docker-compose.yml build
-docker compose -f .devcontainer/docker-compose.yml run --rm vision
-```
-
-容器默认进入终端，不自动启动相机；Humble 和项目 ROS 环境已加载。确认设备与窗口就绪后运行：
-
-```bash
-python -m vision doctor
-ros2 launch vision_depth rgbd_side_viewer.launch.py rviz:=true
-# 无显示环境：ros2 launch vision_depth rgbd_side_viewer.launch.py headless:=true
-```
-
-本机 Jazzy 启动方式继续保留在 [深度 README](vision/depth/README.md#环境与启动)；
-Humble 软件及回放通过的范围、真机与跨机待验证项见容器说明和深度进度。
-
-相机启动后，`/rgbd_side/candidates`（`vision_interfaces/msg/RgbdCandidateArray`）发布候选重心、类别编号、颜色编号和法向姿态，`/rgbd_side/markers` 供 RViz 显示。颜色复用 2D YOLO 的 HSV 判色；旧订阅端需构建新接口并更新字段路径。话题单位、编号表、时间戳、有效期与四元数含义见 [接口契约](vision/docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
-
-launch 默认使用 Fast DDS 仅共享内存配置，适用于同机通信。接入已有主容器时可传 `transport:=inherit`，相机和查看器均保留父环境的 RMW、domain 和传输配置；该选项本身不安装中间件或启动路由。只想使用已有相机或回放时，传 `start_camera:=false`，并提供匹配的对齐彩深图和 CameraInfo。
-
-迁入主逻辑 `driverLogic_2027` 的交付模块、导出命令与只读测试入口见 [RGB-D 集成交接手册](integration/driverlogic/README.md)。原消息类型、单位和候选语义不变；跨机通信仍需另行验证。
-
----
-
-## 海康：同一容器按需加装 MVS
-
-先把一个 MVS Linux x86-64 deb 放入 `.devcontainer/pkgs/`，再构建同一镜像：
+下载**此分支**的 ZIP，解压为主工作空间的 `third_party/up70_rgbd/`。下面操作在主逻辑现有的 **Humble / Python 3.10 / Zenoh 容器**内执行：
 
 ```bash
-WITH_MVS=1 docker compose -f .devcontainer/docker-compose.yml build
-docker compose -f .devcontainer/docker-compose.yml run --rm vision
+export LOGIC_ROOT="$HOME/ros2_ws"
+export RGBD_ROOT="$LOGIC_ROOT/third_party/up70_rgbd"
 ```
 
-进入后使用下方 2D 命令。纯软件检查可运行 `python -m vision doctor`、
-`python -m vision demo` 和 `python -m vision run --set input.source=synthetic`。
-默认构建不安装 MVS；启用后缺少或存在多个 deb 均明确报错。
-
-Python 源码通过挂载即时生效。修改依赖、SDK、Dockerfile 或 `ros2_ws/src/` 后需重新构建；
-需要保留海康能力时重建继续指定 `WITH_MVS=1`。ROS 安装空间不会随源码挂载自动更新。
-
----
-
-## 2D 命令与离线工具
-
-**只有 6 条主入口**：`python -m vision [run|live|doctor|demo|hsv-tuner|clean]`
-（不带参数会打印这张表）。其余一次性工具在 `lab/`，直接 `python lab/xxx.py`。
+确认 `$RGBD_ROOT` 下直接就是本 README 和 `vision/`，而不是又套了一层目录。首次接入时执行整段；同名文件已存在则先核对，不覆盖：
 
 ```bash
-# 实时 ArUco（窗口；无显示器加 --headless --save-every 30 --limit 300）
-python -m vision live --set detector.name=aruco --set input.source=camera --set input.camera.exposure_us=40000
-
-# 加位姿：画面多三根坐标轴；窗口 HUD 第 4 行直接显示 d/tilt/yaw（终端也同步打）
-python -m vision live --set detector.name=aruco --set input.source=camera \
-  --set pose.enabled=true --set pose.marker_size_mm=84
-
-# 实时 YOLO（2 类：block/top）+ HSV 判色；窗口卡就加 --max-fps 4~6
-python -m vision live --set detector.name=yolo \
-  --set detector.yolo.weights=knowledge/models/yolov8n_mix4.onnx \
-  --set input.source=camera --set input.camera.exposure_us=20000 --max-fps 5
-
-# 批处理（读完再汇总）：判色 18 块 / ArUco / YOLO
-python -m vision run --set input.source=synthetic
-python -m vision run --set detector.name=yolo --set input.source=replay --set input.replay.path=<图片目录>
-
-# 造合成的 YOLO 训练集（350 mm 方块 / 200 mm 半红半蓝塔顶，自动标注）
-python lab/gen_yolo_dataset.py --out data/yolo_synth --num 300
-
-# 补实拍数据：开窗口给人摆位，每 1 秒存一张（远景/遮挡/空场景负样本都用它）
-python lab/capture_dataset.py --tag g6_far --exposure-us 20000 --interval 1.0
-python lab/capture_dataset.py --tag neg --exposure-us 10000 --frames 30   # 拍 30 张自动停
-
-# 常用自检：ArUco 图组 9/9、位姿逐图、相机标定
-python lab/check_aruco.py
-python -m lab.pose_check --dir <图组目录>          # 或 --sweep 做七组精度扫描
-python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
+(
+  set -eu
+  test -f "$LOGIC_ROOT/src/MainLogic/link/ros_bridge_node.py"
+  test ! -e "$LOGIC_ROOT/src/vision_depth"
+  test ! -e "$LOGIC_ROOT/src/vision_interfaces"
+  test ! -e "$LOGIC_ROOT/src/MainLogic/adapters/rgbd.py"
+  test ! -e "$LOGIC_ROOT/src/MainLogic/MAIN/rgbd_readonly.py"
+  cp -a "$RGBD_ROOT/ros_packages/vision_depth" "$LOGIC_ROOT/src/"
+  cp -a "$RGBD_ROOT/ros_packages/vision_interfaces" "$LOGIC_ROOT/src/"
+  mkdir -p "$LOGIC_ROOT/src/MainLogic/adapters"
+  cp "$RGBD_ROOT/mainlogic/MainLogic/adapters/rgbd.py" "$LOGIC_ROOT/src/MainLogic/adapters/"
+  cp -n "$RGBD_ROOT/mainlogic/MainLogic/adapters/__init__.py" "$LOGIC_ROOT/src/MainLogic/adapters/"
+  cp "$RGBD_ROOT/mainlogic/MainLogic/MAIN/rgbd_readonly.py" "$LOGIC_ROOT/src/MainLogic/MAIN/"
+)
 ```
 
-在别的代码里用一次检测：`from vision.api import detect; detect(img, "aruco")`。
+随后维护主工作空间 `src/` 中的 ROS 和主逻辑接入文件；Python 算法仍在 `third_party/up70_rgbd/vision/`。
 
-参数都在 `configs/default.yaml`（判色阈值在 `configs/color_thresholds.yaml`），
-`--set 点分路径=值` 临时覆盖，只能改已存在的字段，写错启动即报错。
+## 2. 模型与依赖
 
-同一容器中，海康使用上述 `input.source=camera` 入口；Gemini 真机通过 ROS launch 启动。
+把配套的 `yolov8n_mix4.onnx` 和 `yolov8n_mix4.names.json` 放到 `$RGBD_ROOT/models/`。模型不随 Git 下载，不可只复制其中一个。核对文件：
 
-![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](knowledge/images/live_pose_demo.jpg)
-
----
-
-## 目录结构
-
-```
-vision/        运行时代码（要 import / 要测 / 有架构约束）
-├── __main__.py  进程入口：python -m vision <子命令>
-├── api.py       库门面：detect(image_bgr, detector)
-├── types.py     唯一共用件：Frame / Detection / 几何
-├── cli/         命令适配层：parsers / run / live / output
-├── config/      YAML 加载、字段校验、--set 覆盖
-├── sources/     输入源：camera / replay / synthetic（+ read_image_bgr）
-├── aruco/       功能包：detector / pose / calibration / draw / types / stub
-├── yolo/        功能包：detector / candidates / color_check / pipeline / draw
-└── depth/       深度相机算法（纯 Python，可 pytest；ROS 外壳在 ros2_ws/）
-
-ros2_ws/       ROS 2 工作空间（包含 RGB-D 融合与纯深度适配）
-lab/           一次性工具：check_aruco / pose_check / calibrate / gen_*（零架构约束，可互相 import）
-configs/       场地参数；knowledge/ docs·calibration·models·images；tests/ 回归测试与夹具
+```bash
+cd "$RGBD_ROOT/models"
+sha256sum -c SHA256SUMS
 ```
 
-依赖方向是硬约束：**功能包互不 import，功能包不碰 cli/config，`vision/` 不 import `lab/`**
-（`tests/test_architecture.py` 会检查）。`lab/` 可以 import `vision/`，反之不行。
+加载主容器原环境，保留原有 Zenoh 路由和 domain。检查结果应为 Humble、Python 3.10、`rmw_zenoh_cpp`；所有终端须一致：
 
----
+```bash
+source /opt/ros/humble/setup.bash
+printenv ROS_DISTRO RMW_IMPLEMENTATION ROS_DOMAIN_ID
+python3 --version
+ros2 pkg prefix rmw_zenoh_cpp
+```
 
-## 一定会踩的坑
+补齐依赖；root 用户去掉 `sudo`。安装内容也要记入主工程的镜像构建流程：
 
-1. **相机不是 UVC**：海康 MV-CU013-A0UC 走 USB3 Vision，宿主机没有 `/dev/video*`，`cv2.VideoCapture`
-   打不开且不提示原因。三步缺一不可：udev 规则给权限（`idVendor=2bdf`）、把 MVS 的 deb 放进
-   `.devcontainer/pkgs/` 后**使用 `WITH_MVS=1` 重新 build**、compose 透传 `/dev/bus/usb`。
-2. **相机是独占资源**：MVS 客户端、调参窗口、本仓库互斥，打不开先关占用者。
-3. **容器里开窗口**要三件事：宿主执行 `xhost +si:localuser:root`、设置 DISPLAY、挂 `/tmp/.X11-unix`（Compose 已包含后两项）；
-   旧镜像会报 `xcb` 加载失败——镜像需含 `libsm6 libice6`，旧的重新 build。
-4. **别装 `opencv-contrib-python` / `-headless`**：三者顶层模块都叫 `cv2`，互相覆盖且不报错。
-5. **尺寸别混**：棋盘格 `--square-mm 23`（标称 15、实量 23）、ArUco 码 `pose.marker_size_mm`（实测黑框外沿，
-   我们那批是 84 mm）。填错**不会让重投影误差变大**，只会让距离按比例错——用手机屏幕显示码时，
-   填的是**屏幕上量到的实际尺寸**，不是文件里的设计值。
-6. **位姿正视附近 `tilt` 不可信**（0° 附近可散到 10°+，倾斜 15° 以上才准）。
-7. **曝光必须按场景调**：同一台相机在不同光照下要 3 ms ~ 40 ms 之间换（差 13 倍）。过曝会让白格并成一片、
-   角点外扩，`d` 系统性偏大（实测偏 5%）；先用 3/10/20/40 ms 各拍一张，白格灰度 <250 再开跑。
-8. **码必须贴平**：纸一弯（手捏着拍）平面假设就失效，重投影 RMS 会从 0.4 跳到 2.2 px，位姿被硬校验拒绝。
-   用硬板/手机屏幕，四边都贴住。
-9. **生成物不进版本库**：`output/`（运行产物）、`data/`（数据集）、`runs/`（训练产物）、
-   `knowledge/models/*.onnx`、`configs/camera_calibration*.yaml` 都被 gitignore。
-   新 clone 要位姿就先自己标定。2D 模型可按训练记录导出；RGB-D 当前默认使用搭档提供的 640 输入 mix4，
-   不要把其他尺寸或预训练权重当成同一模型。
-10. **回归在隔离副本运行**：共用镜像已有 pytest。避免在原工作区运行会重建 `output/` 的测试。
-11. **`live` 现在支持三种检测器**：ArUco 画四边形+位姿轴；判色/YOLO 画框并显示
-    `类别/颜色 置信度`（`top` 按上半块判色，框固定品红，所以红塔顶也会是品红框）。
-    落盘目录也分开：ArUco 在 `output/aruco/`，判色/YOLO 在 `output/live_det/`。
-12. **窗口卡退先降 `--max-fps`**：YOLO 在 CPU 上单帧约 40 ms（640 输入），相机 20 fps 追着跑会把 CPU
-    吃满、窗口事件循环抢不到时间片，表现就是"未响应/点一下就没"。`--max-fps 4~6` 对 ArUco 与
-    判色/YOLO 两条实时循环都生效；还想更快就导 480 的 ONNX（见坑 9），CPU 能空出一半。
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-colcon-common-extensions \
+  ros-humble-vision-msgs ros-humble-rosidl-default-generators ros-humble-rviz2 \
+  'ros-humble-orbbec-camera=2.9.3-*'
+python3 -m pip install -r "$RGBD_ROOT/requirements.txt"
+python3 -m pip install --no-deps -e "$RGBD_ROOT"
+```
 
----
+主框架自己的依赖沿用原环境。不要并装多个 pip OpenCV 变体；已有其他版本时先统一。已有 Orbbec 源码工作空间不得遮住目标驱动版本 2.9.3。
 
-## 已知限制
+## 3. 编译与启动
 
-- 2D 位姿历史样本的位移差分误差 ≤0.2%（200/400 mm）；30°、50° 软纸样本平面度存疑。仍只有单码相对位姿，绝对距离比较受测量基准影响；具体条件见真机记录。
-- ROS 2 融合外壳复用 YOLO 与深度算法；独立 2D 库本身不依赖 ROS。当前未发布已验证的机械臂抓取指令。
-- YOLO 是**真图训练的 2 类模型**（`block`/`top`）。v2 同分布指标 P 0.971 / R 0.939 / mAP@0.5 0.970，
-  但 test 里有相邻帧跨 train（max 0.971），**不能当泛化指标**。
-  **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 增广 0.885 → v4（加新场次 62 张）0.905**
-  （test = g3tilt + g4stack，52 图/173 框；v4 P 0.937 / R 0.825）。
-  剩余问题：斜视召回偏低、叠放合并 15。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
-  详见 `knowledge/docs/YOLO训练与评测记录.md`、`knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md`。
-- 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
+```bash
+cd "$LOGIC_ROOT"
+python3 -m colcon --log-base log-rgbd build --base-paths src \
+  --packages-up-to vision_depth --build-base build-rgbd --install-base install-rgbd
+source install-rgbd/setup.bash
+export PYTHONPATH="$LOGIC_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+```
 
----
+终端 A：关闭其他占用 Gemini 的程序，然后启动识别；USB 设备权限由宿主机配置。
 
-## 文档去哪看
+```bash
+cd "$RGBD_ROOT"
+ros2 launch vision_depth rgbd_side_viewer.launch.py transport:=inherit headless:=true
+```
 
-- **文档索引**（该先读哪篇、哪篇是存档）：[`knowledge/docs/README.md`](knowledge/docs/README.md)
-- **契约**（`Frame` / `Detection` / `ArucoMarker` / `MarkerPose` 的唯一来源）：[`vision/docs/interface.md`](vision/docs/interface.md)
-- **写代码前**：[`knowledge/docs/视觉组协作规范.md`](knowledge/docs/视觉组协作规范.md) 与 [`代码注释规范`](knowledge/docs/代码注释规范.md)
-- **位姿真机数据与坑**：[`knowledge/docs/位姿估计真机测试计划.md`](knowledge/docs/位姿估计真机测试计划.md)（8.1–8.5 实测记录 + 15 条真机坑）
+该命令启动一份 Gemini 驱动，使用同步、D2C、毫米深度配置。不要同时启动主工程旧的 `orbbec_setup.launch.py`。已有驱动只有在提供匹配的对齐彩深和两路 CameraInfo 时，才能加 `start_camera:=false`。
+
+终端 B：进入同一个主逻辑容器，重新设置 `LOGIC_ROOT`、`RGBD_ROOT`，source 同一套 ROS/主环境和 `install-rgbd/setup.bash`，设置上面的 `PYTHONPATH` 后执行：
+
+```bash
+ros2 topic info /rgbd_side/candidates --verbose
+python3 -m MainLogic.Main --main-module rgbd_readonly --main-func async_main
+```
+
+应看到 `RGBD status=...`；有有效目标时打印类别、颜色、米制位置及法向。**不要用默认 R2n_Main 验收视觉，它会启动串口并发底盘测试速度。** 只读入口不启动串口或运动。结束时先停只读入口，再停视觉 launch。
+
+## 4. 接入业务
+
+在现有入口的 `async_main()` 中，使用已经初始化的桥接节点：
+
+```python
+import asyncio
+from MainLogic.adapters.rgbd import RgbdAdapter
+from MainLogic.link.ros_bridge_node import RosBridgeNodeInstance
+
+adapter = RgbdAdapter(RosBridgeNodeInstance)
+try:
+    while True:
+        snapshot = adapter.snapshot()
+        for item in snapshot.candidates:
+            print(item.class_id, item.color_id, item.position_m, item.normal)
+        await asyncio.sleep(0.02)
+finally:
+    adapter.close()
+```
+
+每个主节点建立一个适配器供业务共享，不重复初始化 ROS 或 spin。由业务决定使用哪个候选。
+
+- `position_m`：相机光学系可见面重心，单位米，X 向右、Y 向下、Z 向前。
+- `normal`：朝相机的单位法向；不是完整物体姿态。
+- `class_id`：0=block、1=top；`color_id`：0=未知、1=红、2=蓝、3=红蓝混色。
+- `score`：YOLO 置信度；`stamp_ns/frame_id` 保留采集时间和坐标系。
+
+空数组立即清空；超过默认 0.5 秒本地接收有效期，再次读取返回空候选。每次决策前重新读取，旧快照不会自行改变；`age_s` 仅为本地接收后年龄，不是总链路延迟。没有跨帧 ID，不自动选择抓取点或转换基座坐标。
+
+ROS 话题为 `/rgbd_side/candidates`，类型 `vision_interfaces/msg/RgbdCandidateArray`，可靠、易失、深度 1。原始位置和四元数位于 `candidates[i].detection.results[0].pose.pose`；适配器已将四元数的局部 +Z 换算为法向。机械臂使用前仍需手眼标定/TF，不能只改 frame 名字。
+
+## 5. 核对与配置
+
+联调确认：收到有效候选；空数组立即撤销；停掉视觉后读取结果超时清空；重启后恢复；接收过程不触发串口或运动。
+
+配置只需看：主工作空间 `src/vision_depth/config/` 下两份 RGB-D YAML，以及 `$RGBD_ROOT/configs/color_thresholds.yaml`。ROS 配置修改后重新编译并重启，HSV 配置修改后重启识别。默认滤波开启，深度含后处理结果。
+
+收不到消息先检查 RMW、domain、路由和 source 路径，并确认传了 `transport:=inherit`；默认模式仍是 Fast DDS/SHM。没有候选再检查模型、有效深度和图像/CameraInfo 是否匹配。
+
+软件接入通过不等于真机空间、绝对精度或连续稳定性验收。负责人 Zenoh 容器中的实际联调仍须现场完成。
+
+本精简版软件检查：Humble 中干净安装、两个 ROS 包构建及 **95 项 RGB-D/判色/适配器检查通过**；1 项旧 mix2 模型检查因未交付该模型而跳过。运行依赖检查确认不包含 ArUco。未新增真机或 Zenoh 现场验收。

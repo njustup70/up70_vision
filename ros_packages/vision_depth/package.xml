@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>vision_depth</name>
+  <version>0.0.1</version>
+  <description>RGB-D 可见平面候选识别与发布</description>
+  <maintainer email="up70@example.com">up70</maintainer>
+  <license>Proprietary</license>
+
+  <!-- 只声明 ROS 依赖。pip 依赖（vision 包）写在 pyproject.toml，两者不混 -->
+  <depend>rclpy</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>orbbec_camera</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <depend>builtin_interfaces</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>vision_msgs</depend>
+  <exec_depend>vision_interfaces</exec_depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
