@@ -59,13 +59,17 @@ Python 源码通过挂载即时生效。修改依赖、SDK、Dockerfile 或 `ros
 **只有 6 条主入口**：`python -m vision [run|live|doctor|demo|hsv-tuner|clean]`
 （不带参数会打印这张表）。其余一次性工具在 `lab/`，直接 `python lab/xxx.py`。
 
+位姿需要与相机及图像分辨率匹配的标定文件，默认读取 `configs/camera_calibration.yaml`；
+码边长和棋盘格边长也要按当前实物测量。下面的 84 mm 和 23 mm 仅是历史样本的尺寸。
+位姿示例设置了 `calibration.required=true`，内参不可用时会报错退出；默认配置则会警告并只做检测。
+
 ```bash
 # 实时 ArUco（窗口；无显示器加 --headless --save-every 30 --limit 300）
 python -m vision live --set detector.name=aruco --set input.source=camera --set input.camera.exposure_us=40000
 
 # 加位姿：画面多三根坐标轴；窗口 HUD 第 4 行直接显示 d/tilt/yaw（终端也同步打）
 python -m vision live --set detector.name=aruco --set input.source=camera \
-  --set pose.enabled=true --set pose.marker_size_mm=84
+  --set pose.enabled=true --set pose.marker_size_mm=84 --set calibration.required=true
 
 # 实时 YOLO（2 类：block/top）+ HSV 判色；窗口卡就加 --max-fps 4~6
 python -m vision live --set detector.name=yolo \
@@ -74,7 +78,8 @@ python -m vision live --set detector.name=yolo \
 
 # 批处理（读完再汇总）：判色 18 块 / ArUco / YOLO
 python -m vision run --set input.source=synthetic
-python -m vision run --set detector.name=yolo --set input.source=replay --set input.replay.path=<图片目录>
+# 将 data/my_images 换成实际图片目录
+python -m vision run --set detector.name=yolo --set input.source=replay --set input.replay.path=data/my_images
 
 # 造合成的 YOLO 训练集（350 mm 方块 / 200 mm 半红半蓝塔顶，自动标注）
 python lab/gen_yolo_dataset.py --out data/yolo_synth --num 300
@@ -85,9 +90,13 @@ python lab/capture_dataset.py --tag neg --exposure-us 10000 --frames 30   # 拍 
 
 # 常用自检：ArUco 图组 9/9、位姿逐图、相机标定
 python lab/check_aruco.py
-python -m lab.pose_check --dir <图组目录>          # 或 --sweep 做七组精度扫描
-python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
+python -m lab.pose_check --dir data/my_pose_images  # 换成实际图组目录；或用 --sweep
+python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23 --no-overwrite
 ```
+
+标定命令默认输出到 `configs/camera_calibration.yaml`；`--no-overwrite` 会在该文件已存在时拒绝覆盖。
+要保留旧结果并生成新文件，可用 `--out` 指定其他路径，再调整 `calibration.file` 指向该文件；
+`calibration.file` 的相对路径以配置文件所在目录为基准。
 
 在别的代码里用一次检测：`from vision.api import detect; detect(img, "aruco")`。
 
@@ -159,8 +168,9 @@ configs/       场地参数；knowledge/ docs·calibration·models·images；tes
 - ROS 2 融合外壳复用 YOLO 与深度算法；独立 2D 库本身不依赖 ROS。当前未发布已验证的机械臂抓取指令。
 - YOLO 是**真图训练的 2 类模型**（`block`/`top`）。v2 同分布指标 P 0.971 / R 0.939 / mAP@0.5 0.970，
   但 test 里有相邻帧跨 train（max 0.971），**不能当泛化指标**。
-  **v3 无泄漏划分上：基线 mAP50 0.850 → 90° 增广 0.885 → v4（加新场次 62 张）0.905**
-  （test = g3tilt + g4stack，52 图/173 框；v4 P 0.937 / R 0.825）。
+  v3 按场次划分的测试集为 g3tilt + g4stack（52 图/173 框）；修订测试标签后，90° 增广的
+  v3_aug2 mAP50 为 0.891，v4（训练集增加新场次 62 张）为 0.905（P 0.937 / R 0.825）。
+  这些指标属于对应的 v3_aug2 和 v4 模型，不能套用于首页默认的 mix4；测试集也不能代表所有现场场景。
   剩余问题：斜视召回偏低、叠放合并 15。颜色仍由 HSV 判，距离不归 2D（交给深度相机）。
   详见 `knowledge/docs/YOLO训练与评测记录.md`、`knowledge/docs/YOLO2D数据泄漏与尺寸歧义.md`。
 - 判色阈值依赖光照，换场地要重调（`hsv-tuner` 就是干这个的）。
