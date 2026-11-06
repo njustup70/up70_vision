@@ -96,8 +96,6 @@ python lab/calibrate_camera.py --capture 15 --board 9x6 --square-mm 23
 
 同一容器中，海康使用上述 `input.source=camera` 入口；Gemini 真机通过 ROS launch 启动。
 
-![真机位姿：四角、三根坐标轴与 HUD 里的 d/tilt/yaw](knowledge/images/live_pose_demo.jpg)
-
 ---
 
 ## 目录结构
