@@ -1,0 +1,19 @@
+# up70-vision 2D 运行时依赖锁定（锁死 == 版本）
+#
+# 为什么需要它：`pyproject.toml` 里是范围（opencv-python>=4.10,<5），不同机器
+# 解析出 4.11 / 4.14 / 5.0 都不奇怪；本仓库已经同时存在这四种环境。OpenCV 换
+# 小版本会改 JPEG 解码与 resize 的像素，bbox 与 score 会漂，`color` 在阈值边缘
+# 会翻转——这类差异不报错，只让两边的对拍对不上。
+#
+# 锁定基线（本机实测 1280x1024 稳态 38~39 ms/帧的那套）：
+#   Python 3.10.12 / OpenCV 4.11.0.86 / NumPy 1.26.4 / PyYAML 6.0.2
+#
+# 两个用途：
+#   1) 比赛机离线部署：pip install --no-index --find-links wheels -r requirements.lock
+#   2) 镜像构建：Dockerfile 用 `-c requirements.lock` 约束，镜像与验证环境一致
+#
+# 改这里的任何一行 = 重新验证：跑 lab/build_delivery.py 生成的新包，重做对拍
+# （bbox ±1 px、score ±0.02，class_name / color 必须完全一致）。
+numpy==1.26.4
+opencv-python==4.11.0.86
+PyYAML==6.0.2

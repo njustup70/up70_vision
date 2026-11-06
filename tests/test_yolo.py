@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 try:
     from vision.config.schema import ConfigError, from_dict
@@ -299,3 +300,39 @@ def _run_standalone() -> int:
 
 if __name__ == "__main__":
     sys.exit(_run_standalone())
+
+
+# ---------------------------------------------------------------- 设备选择（GPU 后端）
+def test_device_accepts_gpu_alias():
+    """gpu 视作 cuda；构造不加载文件，所以没驱动也不会在这里炸。"""
+    det = YoloDetector(weights="dummy.onnx", device="gpu")
+    assert det.device == "cuda"
+
+
+def test_device_rejects_unknown_value():
+    with pytest.raises(ValueError, match="cpu / cuda"):
+        YoloDetector(weights="dummy.onnx", device="tpu")
+
+
+def test_cuda_without_backend_raises_actionable_error(tmp_path):
+    """没装 onnxruntime-gpu 时，device=cuda 要给出可操作的报错而不是静默跑 CPU。"""
+    ort = pytest.importorskip("onnxruntime", reason="本机没装 onnxruntime-gpu")
+    if "CUDAExecutionProvider" in ort.get_available_providers():
+        pytest.skip("本机 CUDA 可用，这条用例只验证缺失时的报错")
+    weights = tmp_path / "dummy.onnx"
+    weights.write_bytes(b"")
+    det = YoloDetector(weights=str(weights), device="cuda")
+    with pytest.raises(RuntimeError, match="onnxruntime|CUDA"):
+        det._ensure_loaded()
+
+
+def test_config_accepts_cuda_device():
+    cfg = from_dict({"detector": {"name": "yolo",
+                                  "yolo": {"weights": "w.onnx", "device": "cuda"}}})
+    assert cfg.detector.params["device"] == "cuda"
+
+
+def test_config_rejects_unknown_device():
+    with pytest.raises(ConfigError):
+        from_dict({"detector": {"name": "yolo",
+                                "yolo": {"weights": "w.onnx", "device": "tpu"}}})

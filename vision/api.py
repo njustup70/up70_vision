@@ -39,12 +39,15 @@
 
 import os
 
+from .logging import get_logger
 from .config.loader import (DEFAULT_THRESHOLDS, load_config, load_thresholds,
                            resolve_thresholds_path)
 from .config.schema import DETECTOR_DEFAULT_PARAMS, ConfigError, from_dict
 from .cli.run import build_detector
 from .yolo.pipeline import ColorConfig, process_frame
 from .types import Frame
+
+log = get_logger("api")
 
 
 def _resolve_thresholds(cfg, config_path):
@@ -64,13 +67,19 @@ def _resolve_thresholds(cfg, config_path):
             # 没给配置：按仓库约定从当前目录找（与 CLI 的默认查找顺序一致）
             path = os.path.join("configs", DEFAULT_THRESHOLDS)
             if not os.path.isfile(path):
+                # 以前这里是静默 return {}：结果是"有框没颜色"，调用方很容易
+                # 以为模型不认颜色。部署漏带 configs/ 时就是这个症状，所以必须出声。
+                log.warning("找不到判色阈值表 %s：本次只出框、不判色（color 会全是 None）。"
+                            "要判色就显式传 config=\"configs/default.yaml\"，"
+                            "或把 configs/ 一起部署。", path)
                 return {}
         else:
             path = resolve_thresholds_path(cfg, config_path)
         return load_thresholds(path)
-    except ConfigError:
+    except ConfigError as exc:
         # 文件写坏了也按"没有阈值表"处理：判色族的 color 会是 None，
         # 调用方从返回值上立刻能看出来，不会静默拿到错颜色
+        log.warning("判色阈值表不可用（%s）：本次只出框、不判色（color 会全是 None）", exc)
         return {}
 
 

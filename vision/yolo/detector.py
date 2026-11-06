@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 from typing import Iterable, Sequence
 
 import cv2
@@ -212,7 +213,9 @@ class YoloDetector:
         :param class_names: 类名表（按类别索引排列）；给了就用它，
                             否则尝试从 ONNX 元数据读，再没有就退化成索引字符串。
                             容器里没装 onnx 包时，这条是拿到可读类名的唯一办法
-        :param device: 目前只支持 "cpu"（cv2.dnn 在这台机器上没有 CUDA 后端）
+        :param device: "cpu" 用 `cv2.dnn`；"cuda"（别名 "gpu"）用 onnxruntime-gpu 的
+            CUDAExecutionProvider。cuda 需要 NVIDIA 驱动 + onnxruntime-gpu，缺了直接报错，
+            不静默回退——回退会让"以为在用 GPU"变成一句没人看的日志。
         """
         super().__init__()
         if not weights:
@@ -225,8 +228,11 @@ class YoloDetector:
             raise ValueError(f"imgsz 必须是 32 的正整数倍，收到 {imgsz}")
         if int(max_detections) <= 0:
             raise ValueError(f"max_detections 必须为正，收到 {max_detections}")
-        if str(device).lower() != "cpu":
-            raise ValueError(f"目前只支持 device='cpu'（cv2.dnn 无 CUDA 后端），收到 {device!r}")
+        device_key = str(device).strip().lower()
+        if device_key == "gpu":
+            device_key = "cuda"
+        if device_key not in ("cpu", "cuda"):
+            raise ValueError(f"device 只能是 cpu / cuda，收到 {device!r}")
 
         self.weights = os.fspath(weights)
         self.conf = float(conf)
@@ -235,20 +241,42 @@ class YoloDetector:
         self.max_detections = int(max_detections)
         self.classes = [int(c) for c in (classes or [])]
         self.class_names = [str(n) for n in (class_names or [])]
-        self._net = None                   # 惰性加载：构造时不碰文件，detect 时才读
+        self.device = device_key
+        self._net = None                   # cpu 路径：cv2.dnn；惰性加载，构造时不碰文件
+        self._session = None               # cuda 路径：onnxruntime InferenceSession
+        self._input_name = ""
+        self._loaded = False
         self._names: dict[int, str] = {}
 
     # ---------------------------------------------------------------- 加载
     def _ensure_loaded(self) -> None:
-        """首次推理前把 ONNX 载入（测试里可以先塞一个假网络绕开这一步）。"""
-        if self._net is not None:
+        """首次推理前把 ONNX 载入（测试里可以先塞一个假网络/假 session 绕开这一步）。"""
+        # _net/_session 非空也要直接返回：测试会塞假网络/假 session 绕开权重文件
+        if self._loaded or self._net is not None or self._session is not None:
             return
         if not os.path.isfile(self.weights):
             raise FileNotFoundError(
                 f"YOLO 权重不存在：{self.weights}；"
                 f"先导出一次（需要 ultralytics）：python lab/export_yolo.py --weights yolov8n.pt")
-        self._net = cv2.dnn.readNetFromONNX(self.weights)
+        if self.device == "cuda":
+            self._session, self._input_name = _create_cuda_session(self.weights)
+        else:
+            self._net = cv2.dnn.readNetFromONNX(self.weights)
         self._names = _read_class_names(self.weights)
+        self._loaded = True
+
+    def _forward(self, canvas: np.ndarray) -> np.ndarray:
+        """letterbox 画布 -> 模型原始输出。
+
+        两条后端共用同一个 blob（BGR→RGB、/255、NCHW）和同一个解码函数，
+        所以 CPU 与 GPU 的结果可以直接逐字段对比，差别只在浮点误差。
+        """
+        blob = cv2.dnn.blobFromImage(canvas, 1.0 / 255.0, (self.imgsz, self.imgsz),
+                                     swapRB=True, crop=False)
+        if self.device == "cuda":
+            return self._session.run(None, {self._input_name: blob})[0]
+        self._net.setInput(blob)
+        return self._net.forward()
 
     # ---------------------------------------------------------------- 推理
     def detect(self, image_bgr: np.ndarray) -> list:
@@ -263,16 +291,86 @@ class YoloDetector:
         self._ensure_loaded()
 
         canvas, scale, pad_x, pad_y = letterbox(image_bgr, self.imgsz)
-        blob = cv2.dnn.blobFromImage(canvas, 1.0 / 255.0, (self.imgsz, self.imgsz),
-                                     swapRB=True, crop=False)
-        self._net.setInput(blob)
-        raw = self._net.forward()
+        raw = self._forward(canvas)
         height, width = image_bgr.shape[:2]
         names = ({i: n for i, n in enumerate(self.class_names)}
                  if self.class_names else self._names)
         return decode_predictions(raw, self.conf, self.iou, scale, pad_x, pad_y,
                                   (width, height), names=names,
                                   classes=self.classes, max_detections=self.max_detections)
+
+
+def _preload_cuda_libs() -> list[str]:
+    """把 pip 装的 CUDA 运行库（`nvidia-*-cu12`）预加载进进程。
+
+    为什么需要：pip 把库放在 `site-packages/nvidia/*/lib`，既不在系统库路径里，
+    也不在 onnxruntime 的搜索路径里。`LD_LIBRARY_PATH` 在进程启动后改无效，
+    所以这里用 `RTLD_GLOBAL` 逐个 dlopen，让 provider 的未定义符号能在全局作用域里解析。
+    没有 pip 版 CUDA 时静默返回空列表，交给后面的报错去说明缺什么。
+    """
+    import ctypes
+    import glob
+    import site
+
+    py = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    roots = {
+        os.path.join(sys.prefix, "lib", py, "site-packages"),      # venv
+        os.path.join(sys.prefix, "local", "lib", py, "dist-packages"),  # 系统 python + pip
+        os.path.join("/usr/local/lib", py, "dist-packages"),       # 容器内 pip 默认落点
+        os.path.join("/usr/lib", py, "site-packages"),
+    }
+    try:
+        roots.update(site.getsitepackages())
+    except AttributeError:                       # 精简过的 Python 可能没有
+        pass
+    pending = sorted({path for root in roots
+                      for path in glob.glob(os.path.join(root, "nvidia", "*", "lib", "*.so*"))})
+    loaded: list[str] = []
+    # 依赖顺序不确定，多轮加载：每轮把能加载的装进去，加载不了的留到下一轮
+    for _ in range(3):
+        if not pending:
+            break
+        nxt = []
+        for path in pending:
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+                loaded.append(path)
+            except OSError:
+                nxt.append(path)
+        if len(nxt) == len(pending):
+            break                               # 没有进展，别再空转
+        pending = nxt
+    return loaded
+
+
+def _create_cuda_session(weights: str):
+    """建 onnxruntime 的 CUDA 会话；任何一步不满足就抛可操作的错。
+
+    校验三条（顺序即排查顺序）：
+        1. 装了 onnxruntime-gpu —— 没有它 `import onnxruntime` 是 CPU 版或不存在；
+        2. 有 CUDAExecutionProvider —— CPU 版只有 CPUExecutionProvider；
+        3. 真的选上了 CUDA —— 驱动/CUDA 版本不对时 onnxruntime 会静默回退到 CPU，
+           不检查就会"以为在用 GPU"。这里强制确认，回退即报错。
+    """
+    _preload_cuda_libs()                    # pip 版 CUDA 运行库不在默认搜索路径里
+    try:
+        import onnxruntime as ort
+    except ImportError as exc:                                   # noqa: TRY003
+        raise RuntimeError(
+            "device='cuda' 需要 onnxruntime-gpu：pip install onnxruntime-gpu，"
+            "并确认 NVIDIA 驱动可用（nvidia-smi 能跑）") from exc
+    available = list(ort.get_available_providers())
+    if "CUDAExecutionProvider" not in available:
+        raise RuntimeError(
+            f"onnxruntime 没有 CUDA provider（当前可用：{available}）。"
+            "常见原因：装的是 onnxruntime 而不是 onnxruntime-gpu；或 CUDA/cuDNN 版本不匹配")
+    session = ort.InferenceSession(weights, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    using = list(session.get_providers())
+    if not using or using[0] != "CUDAExecutionProvider":
+        raise RuntimeError(
+            f"onnxruntime 没有真正用上 CUDA（实际 {using}），多半是驱动或 CUDA 版本不匹配；"
+            "停止继续，避免误以为在跑 GPU")
+    return session, session.get_inputs()[0].name
 
 
 def _read_class_names(onnx_path: str) -> dict[int, str]:

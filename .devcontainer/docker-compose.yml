@@ -9,6 +9,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
       args:
         WITH_MVS: ${WITH_MVS:-0}
+        WITH_CUDA: ${WITH_CUDA:-0}
     working_dir: /opt/vision
     stdin_open: true
     tty: true

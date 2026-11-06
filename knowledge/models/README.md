@@ -14,15 +14,22 @@
 | `yolov8n_v3_aug2.onnx` | 2D 回退 | 90° 增广版，mAP50 0.891 |
 | `yolov8n_mix2.onnx` | 历史对照 | 只在复现旧结果时用 |
 
-v4 文件 hash（本机）：
+本机文件的 SHA-256（**这份清单是 hash 的唯一来源**，换版本时在这里更新；
+`knowledge/docs/整机联调说明.md` 与 2D 联调说明都引用这里，不各自复述）：
 
 ```text
+f5f43f20445efac80da541806424240aadc6b1c2ab13042d4660e31ca3814794  yolov8n_mix4.onnx
+81b473df621397bd67d4e2fe880dd0234d43cd42cc84443f4ddc873caee3621c  yolov8n_mix4.names.json
 fc3e423d32d307e91d626a079874302b499c6d15066cee62a81df3a1855a5410  yolov8n_v4.onnx
 81b473df621397bd67d4e2fe880dd0234d43cd42cc84443f4ddc873caee3621c  yolov8n_v4.names.json
 ```
 
+> 两个 `.names.json` 内容相同（都是 `0=block`、`1=top`），所以 hash 一样；但文件仍要成对拷贝。
+
 `vision/yolo/detector.py` 只吃 ONNX；即使 RGB-D 由深度侧启动，也是复用同一个 `YoloDetector`。
 换模型时要同时改 `detector.yolo.weights` 或 `ros2_ws/src/vision_depth/config/rgbd_side_viewer.yaml` 的 `weights`。类别名称和置信度不能证明单箱框、颜色或物理面的正确性。
+
+> **镜像相关（2026-11-04）**：`.dockerignore` 已为默认模型与 480 降级版开了例外，`COPY knowledge/` 会把**构建机上有的**这两组权重带进镜像；构建机上没有模型时镜像照常构建成功，只是运行到 YOLO 会报 `FileNotFoundError`。所以部署时不要假设镜像自带模型，用 `-v <models>:/opt/vision/knowledge/models:ro` 挂载最稳。环境准备方式见 [YOLO 2D 与主逻辑联调说明](../docs/YOLO2D与主逻辑联调说明.md) 第 2 节。
 
 ## 需要什么
 
