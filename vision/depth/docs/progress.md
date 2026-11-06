@@ -2,11 +2,27 @@
 
 > 只覆盖深度相机这条线。2D（ArUco / YOLO / 判色 / 海康相机）见 `knowledge/docs/progress.md`。
 >
-> 最后更新：2026-11-04
+> 最后更新：2026-11-06
 >
 > 侧面原型最初在 `feat/单箱侧面RGBD测量` 开发，已通过 #26 进入 main；当前状态以本文件的新记录为准。
 
 ## 一、一句话现状
+
+**2026-11-06 driverLogic_2027 集成交付：** 从 main `0d2e065` 建立
+`codex/rgbd-driverlogic-handoff`，接收端参考 `driverLogic_2027@e5b2a2c`。
+新增运行模块导出工具（版本、文件哈希、可选单独模型、拒绝覆盖）、线程安全的不可变只读快照适配器，
+以及复用 `MainLogic.link.ros_bridge_node` 的 `rgbd_readonly` 入口；不启动串口或默认底盘速度测试。
+相机与查看器 launch 新增 `transport:=inherit`，保留父容器中间件；默认仍为 Fast DDS/SHM。
+ROS 消息和几何语义不变，新增 Python 接入界面见接口契约；迁移步骤见
+[交接手册](../../../integration/driverlogic/README.md)。
+
+验证：只读挂载源码，在隔离 Humble 容器副本整库 **319 passed、2 skipped**（缺 mix2 和独立 COCO
+权重，本次 mix4 真实模型用例通过）；干净交接包校验和、Python 安装及两个 ROS 包构建通过。
+真实 ROS 序列化/订阅验证类别、颜色、米制位置、法向、空数组、过期、恢复和关闭；
+实际目标分支临时副本通过原 `MainLogic.Main` 加载只读入口，收到合成候选、撤销与过期，无串口节点。
+该目标入口核查在测试容器中补装 SciPy 1.14.1；不修改主逻辑远端或其默认入口。
+通信实测为 Humble/Fast DDS；本机无目标 Zenoh 容器，继承逻辑回归通过不等于 Zenoh 实际联调通过。
+未启动相机，不改变空间、绝对精度和连续稳定性 UNVERIFIED 状态。
 
 **2026-11-04 候选类别编号与颜色编号：** `/rgbd_side/candidates` 扩展为
 `vision_interfaces/msg/RgbdCandidateArray`。每个 `candidates[]` 元素保留原 `Detection3D`

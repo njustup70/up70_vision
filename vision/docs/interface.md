@@ -294,6 +294,22 @@ class FrameSource(ABC):
 标记有有限生命周期。它们只是未验证候选，不是物体几何中心或抓取指令；空间对齐及绝对精度
 尚未验收。此新话题契约进入团队集成前按协作规范评审。
 
+### 主逻辑只读适配器（2026-11-06）
+
+迁入 `driverLogic_2027` 的模块位于 `integration/driverlogic/MainLogic/adapters/rgbd.py`，
+使用 `RgbdAdapter(node, topic='/rgbd_side/candidates', max_age_s=0.5)` 挂到已经初始化且由
+主框架 spin 的节点。构造时创建可靠、易失、深度 1 的订阅；不初始化 ROS 上下文，不执行动作。
+`snapshot()` 返回不可变 `RgbdSnapshot(stamp_ns, frame_id, candidates, age_s, status)`；
+每项候选含 `class_id/color_id/class_name/score/position_m/normal`，位置米，法向光学系单位向量。
+锁保护 ROS 回调与业务线程；ROS 消息不会以可变引用暴露给业务。
+
+空数组立即替换为无候选。自上次本地接收起超过 `max_age_s`，再次读取返回 `stale` 和空候选；
+`age_s` 不等于采集后总年龄，`stamp_ns` 与 frame 仍保留原采集语义。其他状态为
+`waiting/active/empty/invalid/closed`，只有 active 有候选；坏候选被跳过并计数，损坏 header
+撤销整帧，`close()` 撤销缓存并移除订阅。调用方每次决策前重新读取，不无限持有旧快照。
+该新增 Python 接入界面不改变上述 ROS 消息和话题契约。部署和只读入口见
+[交接手册](../../integration/driverlogic/README.md)。
+
 ### ROS 图像解码与离线报告读取（2026-11-02）
 
 ROS 包内 `vision_depth.image_decode.image_array` 读取 `16UC1`/`mono16` 毫米深度和 `bgr8`/`rgb8` 彩色，处理行填充与深度字节序，拒绝非法尺寸、行跨度和数据不足。纯深度节点解码失败仍记录并跳帧；查看器对不支持的编码仍返回空值，对损坏数据抛错；融合链仍按原错误处理。旧 `fuse_node.image_to_depth_array`、`side_pipeline.image_array` 和查看器转换函数保留。相机 QoS 共享 `vision_depth.sensor_qos.sensor_qos`，各订阅与发布队列深度不变。

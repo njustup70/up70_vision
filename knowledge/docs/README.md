@@ -7,6 +7,7 @@
 | [仓库首页](../../README.md) | RGB-D 第一版入口、2D 命令与环境导航 |
 | [共用相机容器](../../.devcontainer/README.md) | 活文档；Humble 共用环境、Gemini 默认支持、MVS 按需安装及 USB、窗口配置 |
 | [视觉与整机联调说明](整机联调说明.md) | 启动、话题、坐标及法向、同机通信限制与待联调项 |
+| [RGB-D → driverLogic_2027 交接](../../integration/driverlogic/README.md) | 活文档；运行模块导出、主容器 Zenoh 继承、只读适配器与迁移验收 |
 | [接口契约](../../vision/docs/interface.md) | 2D 数据结构、ROS 话题和字段的正式口径 |
 | [实时侧面查看器](../../vision/depth/README.md#实时侧面查看器) | 参数、同步、窗口、候选及 RViz |
 | [模型权重说明](../models/README.md) | 默认模型、权重取得和导出 |

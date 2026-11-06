@@ -129,6 +129,8 @@ ros2 launch vision_depth rgbd_side_viewer.launch.py \
 
 launch 默认包含现有 aligned 相机启动：848×480@30、帧同步、SW D2C 到 COLOR、毫米深度、仅 SHM，**不会启动录包器**。已有相机占用时用 `start_camera:=false`，并保证该相机确实发布对齐深度。查看器不能仅凭话题名证明驱动开启了 D2C 或毫米换算。
 
+主容器已有 Zenoh 等通信环境时，使用 `transport:=inherit`，相机子 launch 同样继承，不覆盖父环境的 RMW 或 Fast DDS profile；默认仍为 `transport:=fastdds_shm`。该选项不配置路由，也不保证不同中间件直接互通。`driverLogic_2027` 的运行模块与只读接入见 [交接手册](../../integration/driverlogic/README.md)。
+
 ```bash
 # 已有相机或 bag 回放；只启动查看器。
 ros2 launch vision_depth rgbd_side_viewer.launch.py start_camera:=false

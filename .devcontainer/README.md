@@ -67,7 +67,9 @@ Gemini 的 udev 规则按 Orbbec 2.9.3 驱动说明在宿主安装。两台相�
 Wayland 会话需可用的 XWayland；预置配置和动态库检查不等于实际窗口验收。
 
 服务使用宿主网络和 IPC，默认 `ROS_DOMAIN_ID=97`，可在宿主设置环境变量覆盖。
-现有 launch 强制 Fast DDS 仅共享内存，适用于同机通信，尚未验证跨机部署。
+launch 默认 Fast DDS 仅共享内存，适用于同机通信，尚未验证跨机部署。
+在已有主逻辑容器中可传 `transport:=inherit` 保留父环境，但本镜像未包含 Zenoh；
+该选项不自动安装或启动中间件，主逻辑集成见 [交接手册](../integration/driverlogic/README.md)。
 
 ## 代码更新与软件检查
 

@@ -32,7 +32,9 @@ Humble 软件及回放通过的范围、真机与跨机待验证项见容器说�
 
 相机启动后，`/rgbd_side/candidates`（`vision_interfaces/msg/RgbdCandidateArray`）发布候选重心、类别编号、颜色编号和法向姿态，`/rgbd_side/markers` 供 RViz 显示。颜色复用 2D YOLO 的 HSV 判色；旧订阅端需构建新接口并更新字段路径。话题单位、编号表、时间戳、有效期与四元数含义见 [接口契约](vision/docs/interface.md#rgb-d-可见平面候选输出2026-11-02)。
 
-**当前 launch 强制使用 Fast DDS 仅共享内存配置，只适用于同机通信。** 其他机器无法直接发现或订阅该配置下的节点；跨机部署方案尚未确定。只想使用已有相机或回放时，传 `start_camera:=false`，并提供匹配的对齐彩深图和 CameraInfo。
+launch 默认使用 Fast DDS 仅共享内存配置，适用于同机通信。接入已有主容器时可传 `transport:=inherit`，相机和查看器均保留父环境的 RMW、domain 和传输配置；该选项本身不安装中间件或启动路由。只想使用已有相机或回放时，传 `start_camera:=false`，并提供匹配的对齐彩深图和 CameraInfo。
+
+迁入主逻辑 `driverLogic_2027` 的交付模块、导出命令与只读测试入口见 [RGB-D 集成交接手册](integration/driverlogic/README.md)。原消息类型、单位和候选语义不变；跨机通信仍需另行验证。
 
 ---
 

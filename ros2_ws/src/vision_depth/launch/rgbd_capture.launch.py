@@ -36,9 +36,10 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, LogInfo,
-                            OpaqueFunction, SetEnvironmentVariable)
+                            OpaqueFunction)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from vision_depth.launch_transport import TRANSPORT_CHOICES, transport_actions
 
 #: 模式 -> (帧同步, D2C)。顺序与计划书步骤 B 的三段对照一致，不要改名。
 MODES = {
@@ -282,14 +283,15 @@ def _resolve(context):
         get_package_share_directory("orbbec_camera"), "launch", "gemini_330_series.launch.py")
     dds_profile = os.path.join(get_package_share_directory("vision_depth"),
                                "config", "fastdds_shm_only.xml")
-    lines.append(f"DDS 传输：仅 SHM（{dds_profile}）；采集端由 rgbd_capture 同步设置")
+    transport = LaunchConfiguration('transport').perform(context)
+    environment = transport_actions(transport, dds_profile)
+    lines.append(f"RGB-D transport={transport}; inherit preserves the parent RMW environment")
 
     return [
         LogInfo(msg=line) for line in lines
-    ] + [
-        # 大图走 UDP 会分片，接收端一忙就在 transport 层丢帧（实测 1280x720 时
-        # 13 秒丢了 113 条，配对率掉到 87%）。两端都在本机，只走 SHM 最稳。
-        SetEnvironmentVariable("FASTRTPS_DEFAULT_PROFILES_FILE", dds_profile),
+    ] + environment + [
+        # 默认保留已核查的 SHM；inherit 下由主容器负责中间件和路由，
+        # 不在相机的子入口再覆盖一次父环境。
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(driver_launch),
             launch_arguments=resolved.items(),
@@ -300,6 +302,7 @@ def _resolve(context):
 def generate_launch_description():
     """声明全部参数（默认空串 = 没显式给），把实际展开交给 `_resolve`。"""
     declared = [
+        DeclareLaunchArgument('transport', default_value='fastdds_shm', choices=TRANSPORT_CHOICES),
         DeclareLaunchArgument("mode", default_value=UNSET,
                               description=ARG_DESCRIPTIONS["mode"]),
         DeclareLaunchArgument("config_file", default_value=UNSET,

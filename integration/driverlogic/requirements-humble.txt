@@ -1,0 +1,4 @@
+# 与已核查 Humble 视觉镜像一致；由主容器同一个 Python 3.10 安装。
+numpy==1.26.4
+opencv-python==4.11.0.86
+PyYAML>=6.0
