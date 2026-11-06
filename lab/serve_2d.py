@@ -276,6 +276,8 @@ def main(argv=None) -> int:
     parser.add_argument("--weights", default="", help="覆盖权重路径（相对仓库根）")
     parser.add_argument("--conf", type=float, default=None, help="覆盖置信度下限（默认取配置 0.45）")
     parser.add_argument("--imgsz", type=int, default=None, help="覆盖输入边长（默认取配置 640）")
+    parser.add_argument("--device", default=None, choices=["cpu", "cuda", "gpu"],
+                        help="覆盖推理设备（默认取配置；cuda 需要 onnxruntime-gpu + NVIDIA 驱动）")
     parser.add_argument("--timeout", type=float, default=0.2, help="单帧等待上限，秒（默认 0.2）")
     parser.add_argument("--max-frame-bytes", type=int, default=8 * 1024 * 1024, help="请求体上限（默认 8 MB）")
     args = parser.parse_args(argv)
@@ -288,6 +290,8 @@ def main(argv=None) -> int:
         overrides["conf"] = args.conf
     if args.imgsz is not None:
         overrides["imgsz"] = args.imgsz
+    if args.device:
+        overrides["device"] = args.device
 
     try:
         engine = Engine(args.config, overrides, args.timeout)

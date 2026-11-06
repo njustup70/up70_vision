@@ -173,6 +173,47 @@ EOF
 - 25 fps 的预算是 40 ms，2D 侧**没有余量**；建议主逻辑按 10~15 Hz 调用。
 - 单帧超时建议 200 ms，超时丢帧，**不重试**。
 
+### 3.5 GPU 加速（可选）
+
+默认 `device: cpu`。有 NVIDIA 独显时才需要这一节，步骤如下（本机 RTX 4050 Laptop 实测）：
+
+```bash
+# 1) 驱动（sudo，装完重启；Ubuntu 22.04 需要额外装 nvidia-modprobe 才创建设备节点）
+sudo ubuntu-drivers install nvidia:580
+sudo apt install -y nvidia-modprobe
+# 2) 推理后端 + CUDA 运行库（都装在 venv 里，不动系统）
+~/.venvs/up70-2d/bin/pip install onnxruntime-gpu
+~/.venvs/up70-2d/bin/pip install nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 \
+    nvidia-cudnn-cu12 nvidia-curand-cu12 nvidia-cufft-cu12 nvidia-cuda-nvrtc-cu12
+```
+
+这些 pip 库不在系统搜索路径里，`vision/yolo/detector.py` 会在建 CUDA 会话前**自动预加载**，
+不需要设 `LD_LIBRARY_PATH`。
+
+用法（二选一，都不改默认值）：
+
+```bash
+python -m vision live ... --set detector.yolo.device=cuda        # 实时/批处理
+python lab/serve_2d.py --device cuda                             # HTTP 服务
+```
+
+实测（v4 / 640 / 15 张 test 图，bbox ±1 px、score ±0.02 容差内全部一致）：
+
+| 设备 | 推理中位 | 整帧 | 帧率上限 |
+|---|---|---|---|
+| cpu | 38.7 ms | 40.7 ms | 25 fps |
+| cuda | **5.7 ms** | **6.3 ms** | **160 fps** |
+
+首帧因 CUDA 初始化约 3 s（`/healthz` 的 `warmup_ms` 会显示）。
+
+三条边界：
+
+- 缺 `onnxruntime-gpu`、没有 CUDA provider、或 onnxruntime 静默回退到 CPU —— 三种情况**都直接报错**，
+  不会出现"以为在跑 GPU 其实在跑 CPU"；
+- **比赛机默认仍用 cpu**：有没有独显未知，默认值不能在没卡的机器上直接崩，现场用 `--set` 显式开；
+- 容器镜像 `up70-vision:humble` 没有 CUDA（ROS base），容器内用 GPU 需换 CUDA 基础镜像 +
+  `nvidia-container-toolkit`，本次未做。
+
 ## 4. 验收边界与待对接
 
 ### 4.1 已知限制（写清楚，不当作待调参问题）

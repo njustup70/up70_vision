@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 from typing import Iterable, Sequence
 
 import cv2
@@ -299,6 +300,40 @@ class YoloDetector:
                                   classes=self.classes, max_detections=self.max_detections)
 
 
+def _preload_cuda_libs() -> list[str]:
+    """把 pip 装的 CUDA 运行库（`nvidia-*-cu12`）预加载进进程。
+
+    为什么需要：pip 把库放在 `site-packages/nvidia/*/lib`，既不在系统库路径里，
+    也不在 onnxruntime 的搜索路径里。`LD_LIBRARY_PATH` 在进程启动后改无效，
+    所以这里用 `RTLD_GLOBAL` 逐个 dlopen，让 provider 的未定义符号能在全局作用域里解析。
+    没有 pip 版 CUDA 时静默返回空列表，交给后面的报错去说明缺什么。
+    """
+    import ctypes
+    import glob
+
+    pattern = os.path.join(
+        sys.prefix, "lib",
+        f"python{sys.version_info.major}.{sys.version_info.minor}",
+        "site-packages", "nvidia", "*", "lib", "*.so*")
+    pending = sorted(glob.glob(pattern))
+    loaded: list[str] = []
+    # 依赖顺序不确定，多轮加载：每轮把能加载的装进去，加载不了的留到下一轮
+    for _ in range(3):
+        if not pending:
+            break
+        nxt = []
+        for path in pending:
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+                loaded.append(path)
+            except OSError:
+                nxt.append(path)
+        if len(nxt) == len(pending):
+            break                               # 没有进展，别再空转
+        pending = nxt
+    return loaded
+
+
 def _create_cuda_session(weights: str):
     """建 onnxruntime 的 CUDA 会话；任何一步不满足就抛可操作的错。
 
@@ -308,6 +343,7 @@ def _create_cuda_session(weights: str):
         3. 真的选上了 CUDA —— 驱动/CUDA 版本不对时 onnxruntime 会静默回退到 CPU，
            不检查就会"以为在用 GPU"。这里强制确认，回退即报错。
     """
+    _preload_cuda_libs()                    # pip 版 CUDA 运行库不在默认搜索路径里
     try:
         import onnxruntime as ort
     except ImportError as exc:                                   # noqa: TRY003
