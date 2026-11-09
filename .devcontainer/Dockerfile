@@ -34,6 +34,10 @@ RUN python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" -e '.[lab]' pytest
 
 COPY tests/ tests/
 COPY .devcontainer/gemini-entrypoint.sh /usr/local/bin/up70-gemini-entrypoint
+# 必须显式 chmod：仓库里这个文件是 644，COPY 会原样保留权限，
+# 结果容器一启动就 `exec: permission denied`（2026-11-06 实测）。
+# 不能只靠 git 的可执行位——Windows 检出或解压得到的副本会丢掉它。
+RUN chmod +x /usr/local/bin/up70-gemini-entrypoint
 ENTRYPOINT ["/usr/local/bin/up70-gemini-entrypoint"]
 # SDK 只在本层安装；构建时只读挂载 deb，不把安装包写入镜像层。
 # 参数放在公共依赖与 ROS 构建之后，切换相机能力时可复用前面的构建缓存。
@@ -56,6 +60,20 @@ ENV MVCAM_SDK_PATH=/opt/MVS \
     MVCAM_GENICAM_CLPROTOCOL=/opt/MVS/lib/CLProtocol \
     ALLUSERSPROFILE=/opt/MVS/MVFG \
     LD_LIBRARY_PATH=/opt/MVS/lib/64:/opt/MVS/lib/32
+
+# 可选：GPU 推理层（onnxruntime-gpu + pip 版 CUDA 运行库）。
+# 默认关：打开会多约 1.5 GB，而多数成员机器没有 NVIDIA 卡。
+# 关着也能跑——`device=cuda` 会给出可操作的报错，不会静默退回 CPU。
+# 需要 GPU 时：WITH_CUDA=1 docker compose -f .devcontainer/docker-compose.yml \
+#                -f .devcontainer/docker-compose-gpu.yml build vision
+ARG WITH_CUDA=0
+RUN if [ "$WITH_CUDA" = "1" ]; then \
+      python3 -m pip install --no-cache-dir -i "$PIP_INDEX_URL" \
+        onnxruntime-gpu nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 \
+        nvidia-cudnn-cu12 nvidia-curand-cu12 nvidia-cufft-cu12 nvidia-cuda-nvrtc-cu12; \
+    else \
+      echo '[CUDA] disabled (WITH_CUDA=0)'; \
+    fi
 
 # 进入后手动启动相机；运行 doctor 或离线工具时可直接覆盖命令。
 CMD ["bash"]

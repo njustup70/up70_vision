@@ -163,7 +163,7 @@ class DetectorConfig:
             max_detections  int    >= 1，默认 32
             classes         list[int]  只保留这些类别索引，默认 []（全部）
             class_names     list[str]  类名表，默认 []（此时尝试读 ONNX 元数据）
-            device          str    目前只支持 cpu
+            device          str    cpu / cuda（cuda 需 onnxruntime-gpu + NVIDIA 驱动）
 
         aruco（真 ArUco，实现见 `aruco/detector.py`；这张表放不下，单列）
             dictionary          str    `DICT_` 开头，默认 DICT_4X4_50
@@ -226,6 +226,11 @@ class DetectorConfig:
             weights = p.get("weights", "")
             if not isinstance(weights, str) or not weights.strip():
                 raise ConfigError(f"detector.yolo.weights 必须是非空路径字符串：{weights!r}")
+            # 设备：写错不会"慢一点"，而是运行时才炸（或静默回退到 CPU）
+            device = str(p.get("device", "cpu")).strip().lower()
+            if device not in ("cpu", "cuda", "gpu"):
+                raise ConfigError(
+                    f"detector.yolo.device 只能是 cpu / cuda（gpu 视作 cuda）：{p.get('device')!r}")
             for key in ("classes", "class_names"):
                 value = p.get(key, [])
                 if not isinstance(value, (list, tuple)):

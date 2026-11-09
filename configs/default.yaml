@@ -109,7 +109,8 @@ detector:
     max_detections: 32
     classes: []           # 只保留这些类别索引（如 [0] 只看 person）；空 = 全部
     class_names: []       # 类名表；空 = 尝试读 ONNX 元数据，读不到就显示索引数字
-    device: cpu           # 目前只支持 cpu（cv2.dnn 在这台机器上没有 CUDA 后端）
+    device: cpu           # cpu / cuda（cuda 需 onnxruntime-gpu + NVIDIA 驱动；
+                          # 不可用时直接报错，不会静默回退到 CPU）
 
 output:
   enabled: true

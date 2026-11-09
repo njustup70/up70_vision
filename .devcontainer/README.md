@@ -100,6 +100,41 @@ docker compose -f .devcontainer/docker-compose.yml run --rm vision python -m vis
 `python -m pytest tests/ -q`，部分测试会重建固定输出目录。容器默认 root，写挂载目录可能产生
 root 所有的文件。软件和 bag 回放检查不替代真机、空间对齐、绝对精度、连续稳定性或跨机验收。
 
+## GPU 推理（可选）
+
+默认镜像不含 CUDA（`ros:humble-ros-base` 底座 + 纯 CPU 的 onnxruntime），也不会申请 GPU——
+大多数队员的机器没有 N 卡，不该因为 `gpus: all` 起不来。要启用按下面三步。
+
+宿主机一次性（装好 NVIDIA 驱动之后）：
+
+```bash
+sudo apt install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker run --rm --gpus all ubuntu:22.04 nvidia-smi   # 能看到卡才算通
+```
+
+构建带 CUDA 的镜像（多约 1.5 GB）并带 GPU 运行：
+
+```bash
+WITH_CUDA=1 docker compose -f .devcontainer/docker-compose.yml \
+  -f .devcontainer/docker-compose-gpu.yml build vision
+docker compose -f .devcontainer/docker-compose.yml \
+  -f .devcontainer/docker-compose-gpu.yml run --rm vision \
+  python3 -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+预期输出里含 `CUDAExecutionProvider`。容器内用法与宿主一致：
+
+```bash
+python -m vision live --set detector.yolo.device=cuda ...
+python lab/bench_yolo.py --devices cpu,cuda
+```
+
+`vision/yolo/detector.py` 会自动到 `site-packages/nvidia/*/lib` 预加载 pip 版 CUDA 运行库，
+不需要设 `LD_LIBRARY_PATH`。没加 `--gpus`、或镜像没带 CUDA 时，`device=cuda` **直接报错**，
+不会静默退回 CPU。宿主实测（RTX 4050 Laptop）：推理 38.7 → 5.7 ms、整帧 40.7 → 6.3 ms。
+
 ## Jazzy bag 在 Humble 中回放
 
 Jazzy 录制的 bag 元数据可能是 Humble 无法解析的新格式。不要在原包上运行 reindex。
